@@ -4,6 +4,7 @@ import { Autoplay, Pagination } from 'swiper/modules';
 import 'swiper/css';
 import 'swiper/css/pagination';
 import { Star } from 'lucide-react';
+import { API_ENDPOINTS } from '../../config/api';
 
 interface Testimonial {
   id: number;
@@ -20,7 +21,7 @@ const TestimonialsCarousel: React.FC = () => {
   useEffect(() => {
     const fetchTestimonials = async () => {
       try {
-        const response = await fetch('http://localhost:8004/api/testimonials');
+        const response = await fetch(API_ENDPOINTS.TESTIMONIALS);
         if (!response.ok) {
           throw new Error('Failed to fetch testimonials');
         }

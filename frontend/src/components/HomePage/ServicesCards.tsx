@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { API_ENDPOINTS } from '../../config/api';
 
 interface Service {
   id: number;
@@ -16,7 +17,7 @@ const ServicesCards: React.FC = () => {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const response = await fetch('http://localhost:8004/api/services');
+        const response = await fetch(API_ENDPOINTS.SERVICES);
         if (!response.ok) {
           throw new Error('Failed to fetch services');
         }
