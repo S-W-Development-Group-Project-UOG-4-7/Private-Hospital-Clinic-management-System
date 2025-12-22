@@ -15,44 +15,36 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $data = $request->validate([
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'username' => ['required', 'string', 'max:255', 'unique:users,username'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['nullable', 'string', Rule::in(['admin', 'doctor', 'receptionist', 'pharmacist', 'patient'])],
         ]);
 
-        $roleSlug = $data['role'] ?? 'patient';
-        $role = Role::where('slug', $roleSlug)->first();
-
-        if (! $role) {
-            throw ValidationException::withMessages([
-                'role' => ['Invalid role provided.'],
-            ]);
-        }
+        $roleName = $data['role'] ?? 'patient';
 
         $user = User::create([
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
+            'name' => $data['name'],
             'email' => $data['email'],
-            'username' => $data['username'],
             'password' => Hash::make($data['password']),
-            'role_id' => $role->id,
         ]);
 
+        // Assign role using Spatie Permission
+        $user->assignRole($roleName);
+
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        // Get the user's role name
+        $userRole = $user->roles->first()?->name ?? 'patient';
 
         return response()->json([
             'message' => 'Registration successful.',
             'token' => $token,
             'user' => [
                 'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
+                'name' => $user->name,
                 'email' => $user->email,
-                'username' => $user->username,
-                'role' => $role->slug,
+                'role' => $userRole,
             ],
         ], 201);
     }
@@ -60,13 +52,12 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'login' => ['required', 'string'], // username or email
+            'login' => ['required', 'string'], // email
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('username', $credentials['login'])
-            ->orWhere('email', $credentials['login'])
-            ->first();
+        // Since we only have email now, search by email only
+        $user = User::where('email', $credentials['login'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -77,16 +68,17 @@ class AuthController extends Controller
         $user->tokens()->delete();
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        // Get the user's role name
+        $userRole = $user->roles->first()?->name ?? 'patient';
+
         return response()->json([
             'message' => 'Login successful.',
             'token' => $token,
             'user' => [
                 'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
+                'name' => $user->name,
                 'email' => $user->email,
-                'username' => $user->username,
-                'role' => optional($user->role)->slug,
+                'role' => $userRole,
             ],
         ]);
     }
@@ -104,14 +96,15 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
+        // Get the user's role name
+        $userRole = $user->roles->first()?->name ?? 'patient';
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
+                'name' => $user->name,
                 'email' => $user->email,
-                'username' => $user->username,
-                'role' => optional($user->role)->slug,
+                'role' => $userRole,
             ],
         ]);
     }

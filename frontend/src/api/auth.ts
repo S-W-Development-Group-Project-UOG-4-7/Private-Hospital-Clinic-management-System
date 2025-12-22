@@ -27,11 +27,10 @@ export async function login(login: string, password: string): Promise<AuthRespon
 }
 
 export interface RegisterPayload {
-  first_name: string;
-  last_name: string;
+  name: string;
   email: string;
-  username: string;
   password: string;
+  role?: string;
 }
 
 export async function register(payload: RegisterPayload): Promise<AuthResponse> {

@@ -2,10 +2,8 @@ export type UserRole = 'admin' | 'doctor' | 'receptionist' | 'pharmacist' | 'pat
 
 export interface AuthUser {
   id: number;
-  first_name: string;
-  last_name: string;
+  name: string;
   email: string;
-  username: string;
   role: UserRole;
 }
 

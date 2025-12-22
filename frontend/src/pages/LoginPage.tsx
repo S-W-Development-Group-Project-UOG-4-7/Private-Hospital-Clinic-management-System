@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import Navbar from '../components/common/Navbar';
 import { login } from '../api/auth';
 import type { AuthUser } from '../types/auth';
 
@@ -9,18 +11,70 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  React.useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    console.log('Login form submitted', { loginId, password });
+    
+    if (!loginId || !password) {
+      console.error('Missing login credentials');
+      setError('Please enter both email and password');
+      return;
+    }
+    
     setError('');
     setLoading(true);
 
     try {
+      console.log('Making login API call...');
       const response = await login(loginId, password);
+      console.log('Login response:', response);
+      
+      if (!response.token) {
+        throw new Error('No token received from server');
+      }
+      
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('authUser', JSON.stringify(response.user));
-      navigate('/portal');
+      
+      // Route based on user role
+      const userRole = response.user.role.toLowerCase();
+      console.log('User role:', userRole);
+      
+      let redirectPath = '/portal';
+      switch (userRole) {
+        case 'admin':
+          redirectPath = '/admin';
+          break;
+        case 'doctor':
+          redirectPath = '/doctor';
+          break;
+        case 'patient':
+          redirectPath = '/patient';
+          break;
+        case 'pharmacist':
+          redirectPath = '/pharmacist';
+          break;
+        case 'receptionist':
+          redirectPath = '/receptionist';
+          break;
+        default:
+          redirectPath = '/portal';
+      }
+      
+      console.log('Redirecting to:', redirectPath);
+      navigate(redirectPath);
     } catch (err) {
+      console.error('Login error:', err);
       setError((err as Error).message || 'Unable to login right now.');
     } finally {
       setLoading(false);
@@ -28,65 +82,96 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-8 space-y-8 text-white">
-        <div className="text-center space-y-2">
-          <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Private Hospital & Clinic Management System</p>
-          <h1 className="text-3xl font-bold">Sign in to continue</h1>
-          <p className="text-sm text-gray-300">Access your portal with your credentials</p>
-        </div>
+    <div className="relative min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/images/Hero.png')" }}>
+      <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+      
+      <Navbar isScrolled={isScrolled} />
 
-        {error && (
-          <div className="rounded-lg bg-red-500/10 border border-red-400/40 text-red-200 px-4 py-3 text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <label htmlFor="login" className="text-sm text-gray-200">Username or Email</label>
-            <input
-              id="login"
-              name="login"
-              type="text"
-              required
-              autoComplete="username"
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              className="w-full rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
-              placeholder="Enter your username or email"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm text-gray-200">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-teal-400 text-slate-900 font-semibold py-3 hover:bg-teal-300 transition disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-teal-500/30"
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4">
+        <div className="w-full max-w-md">
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-8"
           >
-            {loading ? 'Signing in...' : 'Login'}
-          </button>
-        </form>
+            <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">Welcome Back</h1>
+            <p className="text-lg text-gray-200">Sign in to access your patient portal</p>
+          </motion.div>
 
-        <div className="text-center text-sm text-gray-200 space-y-2">
-          <p>Not registered yet?</p>
-          <Link to="/register" className="inline-block rounded-lg border border-white/20 px-4 py-2 hover:bg-white/10 transition text-teal-200">
-            Create an account
-          </Link>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-8 space-y-6"
+          >
+            <div className="flex items-center mb-4">
+              <Link 
+                to="/"
+                className="inline-flex items-center text-white hover:text-teal-300 transition mr-4"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back
+              </Link>
+            </div>
+            {error && (
+              <div className="rounded-lg bg-red-500/10 border border-red-400/40 text-red-200 px-4 py-3 text-sm">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="login" className="block text-sm font-medium text-gray-200 mb-2">Email</label>
+                <input
+                  id="login"
+                  name="login"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  value={loginId}
+                  onChange={(e) => setLoginId(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  placeholder="Enter your email"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">Password</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  placeholder="Enter your password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </form>
+          </motion.div>
+
+          <div className="text-center text-gray-200">
+            <p className="mb-2">Don't have an account?</p>
+            <Link 
+              to="/register" 
+              className="inline-block bg-transparent border-2 border-white text-white font-bold py-2 px-6 rounded-full hover:bg-white hover:text-gray-800 transition duration-300"
+            >
+              Sign Up
+            </Link>
+          </div>
         </div>
       </div>
     </div>

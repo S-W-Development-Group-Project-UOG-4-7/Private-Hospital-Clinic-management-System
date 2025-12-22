@@ -63,7 +63,7 @@ const PortalPage: React.FC = () => {
         <div className="space-y-3">
           <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Private Hospital & Clinic Management System</p>
           <h1 className="text-3xl font-bold">{content?.title}</h1>
-          <p className="text-gray-200">Welcome, {user.first_name} ({user.role}).</p>
+          <p className="text-gray-200">Welcome, {user.name} ({user.role}).</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-2">

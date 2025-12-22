@@ -3,6 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ServiceController;
+use App\Http\Controllers\Api\TestimonialController;
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
@@ -33,3 +35,7 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->get('/pharmacy/health', 
 Route::middleware(['auth:sanctum', 'role:patient'])->get('/patient/health', function () {
     return response()->json(['status' => 'ok', 'scope' => 'patient']);
 });
+
+// Public API routes for frontend
+Route::get('services', [ServiceController::class, 'index']);
+Route::get('testimonials', [TestimonialController::class, 'index']);
