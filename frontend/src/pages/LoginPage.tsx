@@ -103,7 +103,7 @@ const LoginPage: React.FC = () => {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-8 space-y-6"
+            className="bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl p-8 space-y-6"
           >
             <div className="flex items-center mb-4">
               <Link 
@@ -117,29 +117,29 @@ const LoginPage: React.FC = () => {
               </Link>
             </div>
             {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-400/40 text-red-200 px-4 py-3 text-sm">
+              <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label htmlFor="login" className="block text-sm font-medium text-gray-200 mb-2">Email</label>
+                <label htmlFor="login" className="block text-sm font-medium text-gray-800 mb-2">Email</label>
                 <input
                   id="login"
                   name="login"
                   type="email"
                   required
-                  autoComplete="username"
+                  autoComplete="email"
                   value={loginId}
                   onChange={(e) => setLoginId(e.target.value)}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
                   placeholder="Enter your email"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">Password</label>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-800 mb-2">Password</label>
                 <input
                   id="password"
                   name="password"
@@ -148,7 +148,7 @@ const LoginPage: React.FC = () => {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
                   placeholder="Enter your password"
                 />
               </div>
@@ -156,9 +156,9 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? 'Logging in...' : 'Login'}
               </button>
             </form>
           </motion.div>

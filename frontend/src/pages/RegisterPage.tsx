@@ -66,7 +66,7 @@ const RegisterPage: React.FC = () => {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-8"
+            className="bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl p-8"
           >
             <div className="flex items-center mb-4">
               <Link 
@@ -80,14 +80,14 @@ const RegisterPage: React.FC = () => {
               </Link>
             </div>
             {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-400/40 text-red-200 px-4 py-3 text-sm mb-6">
+              <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm mb-6">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-200 mb-2">Full Name</label>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-800 mb-2">Full Name</label>
                 <input
                   id="name"
                   name="name"
@@ -95,13 +95,13 @@ const RegisterPage: React.FC = () => {
                   required
                   value={form.name}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
                   placeholder="Enter your full name"
                 />
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-200 mb-2">Email</label>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-800 mb-2">Email</label>
                 <input
                   id="email"
                   name="email"
@@ -109,13 +109,13 @@ const RegisterPage: React.FC = () => {
                   required
                   value={form.email}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
                   placeholder="Enter your email"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">Password</label>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-800 mb-2">Password</label>
                 <input
                   id="password"
                   name="password"
@@ -123,32 +123,33 @@ const RegisterPage: React.FC = () => {
                   required
                   value={form.password}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
                   placeholder="Create a strong password"
                 />
-                <p className="text-xs text-gray-300 mt-2">Minimum 8 characters required</p>
+                <p className="text-xs text-gray-600 mt-2">Minimum 8 characters required</p>
               </div>
 
               <div>
-                <label htmlFor="role" className="block text-sm font-medium text-gray-200 mb-2">Account Type</label>
+                <label htmlFor="role" className="block text-sm font-medium text-gray-800 mb-2">Account Type</label>
                 <select
                   id="role"
                   name="role"
                   value={form.role}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white focus:border-teal-300 focus:ring-2 focus:ring-teal-300/40 outline-none transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
                 >
-                  <option value="patient" className="bg-gray-800">Patient</option>
-                  <option value="doctor" className="bg-gray-800">Doctor</option>
-                  <option value="receptionist" className="bg-gray-800">Receptionist</option>
-                  <option value="pharmacist" className="bg-gray-800">Pharmacist</option>
+                  <option value="patient" className="bg-white">Patient</option>
+                  <option value="doctor" className="bg-white">Doctor</option>
+                  <option value="admin" className="bg-white">Admin</option>
+                  <option value="pharmacist" className="bg-white">Pharmacist</option>
+                  <option value="receptionist" className="bg-white">Receptionist</option>
                 </select>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
               >
                 {loading ? 'Creating Account...' : 'Create Account'}
               </button>
