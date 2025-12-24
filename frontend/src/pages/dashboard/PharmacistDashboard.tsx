@@ -1,8 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { inventoryApi } from '../../api/pharmacy';
+import { Package, ShoppingCart, FileText, Users, AlertTriangle, Calendar } from 'lucide-react';
 
 const PharmacistDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    total_items: 0,
+    low_stock_count: 0,
+    expiring_soon_count: 0,
+    total_value: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const data = await inventoryApi.getStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
@@ -12,20 +36,14 @@ const PharmacistDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Pharmacist Dashboard</h1>
-            <p className="text-gray-600">Manage pharmacy inventory and prescriptions</p>
-          </div>
-          <div className="flex space-x-4">
-            <button
-              onClick={() => navigate('/')}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
-            >
-              Home
-            </button>
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Pharmacy Dashboard</h1>
+              <p className="text-gray-600 text-sm">Private Hospital & Clinic Management System</p>
+            </div>
             <button
               onClick={handleLogout}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition"
@@ -34,82 +52,91 @@ const PharmacistDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Prescriptions Queue */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Prescriptions Queue</h2>
-            <p className="text-gray-600 mb-4">Process and dispense patient prescriptions</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
-              View Queue
-            </button>
+      <div className="container mx-auto px-4 py-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Total Items</p>
+                <p className="text-3xl font-bold text-teal-600">{loading ? '...' : stats.total_items}</p>
+              </div>
+              <Package className="w-12 h-12 text-teal-500" />
+            </div>
           </div>
 
-          {/* Inventory Management */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Inventory Management</h2>
-            <p className="text-gray-600 mb-4">Manage drug stock and place orders</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
-              Manage Inventory
-            </button>
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Low Stock</p>
+                <p className="text-3xl font-bold text-orange-600">{loading ? '...' : stats.low_stock_count}</p>
+              </div>
+              <AlertTriangle className="w-12 h-12 text-orange-500" />
+            </div>
           </div>
 
-          {/* Drug Search */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Drug Information</h2>
-            <p className="text-gray-600 mb-4">Search drug database and interactions</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
-              Search Drugs
-            </button>
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Expiring Soon</p>
+                <p className="text-3xl font-bold text-red-600">{loading ? '...' : stats.expiring_soon_count}</p>
+              </div>
+              <Calendar className="w-12 h-12 text-red-500" />
+            </div>
           </div>
 
-          {/* Order Management */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Order Management</h2>
-            <p className="text-gray-600 mb-4">Track and manage pharmacy orders</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
-              Manage Orders
-            </button>
-          </div>
-
-          {/* Expiry Tracking */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Expiry Tracking</h2>
-            <p className="text-gray-600 mb-4">Monitor soon-to-expire medications</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
-              Check Expiry
-            </button>
-          </div>
-
-          {/* Reports */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Reports</h2>
-            <p className="text-gray-600 mb-4">Generate pharmacy reports and analytics</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
-              Generate Reports
-            </button>
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Total Value</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {loading ? '...' : `$${stats.total_value.toLocaleString()}`}
+                </p>
+              </div>
+              <Package className="w-12 h-12 text-blue-500" />
+            </div>
           </div>
         </div>
 
-        {/* Quick Stats */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-            <h3 className="text-2xl font-bold text-teal-500">15</h3>
-            <p className="text-gray-600">Pending Prescriptions</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-            <h3 className="text-2xl font-bold text-teal-500">8</h3>
-            <p className="text-gray-600">Low Stock Items</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-            <h3 className="text-2xl font-bold text-teal-500">3</h3>
-            <p className="text-gray-600">Expiring Soon</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-            <h3 className="text-2xl font-bold text-teal-500">245</h3>
-            <p className="text-gray-600">Total Drugs</p>
-          </div>
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <button
+            onClick={() => navigate('/pharmacist/prescriptions')}
+            className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <FileText className="w-10 h-10 text-teal-500 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Prescriptions</h3>
+            <p className="text-gray-600 text-sm">Process and dispense patient prescriptions</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/pharmacist/inventory')}
+            className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <Package className="w-10 h-10 text-blue-500 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Inventory</h3>
+            <p className="text-gray-600 text-sm">Manage drug stock and inventory items</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/pharmacist/suppliers')}
+            className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <Users className="w-10 h-10 text-green-500 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Suppliers</h3>
+            <p className="text-gray-600 text-sm">Manage supplier information</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/pharmacist/purchases')}
+            className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <ShoppingCart className="w-10 h-10 text-purple-500 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Purchases</h3>
+            <p className="text-gray-600 text-sm">Manage drug purchases and orders</p>
+          </button>
         </div>
       </div>
     </div>

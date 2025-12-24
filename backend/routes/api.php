@@ -3,8 +3,10 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\ServiceController;
-use App\Http\Controllers\Api\TestimonialController;
+use App\Http\Controllers\Api\PrescriptionController;
+use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\SupplierController;
+use App\Http\Controllers\Api\DrugPurchaseController;
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
@@ -16,26 +18,22 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-Route::middleware(['auth:sanctum', 'role:admin'])->get('/admin/health', function () {
-    return response()->json(['status' => 'ok', 'scope' => 'admin']);
+// Pharmacy & Inventory Management Routes (Pharmacist only)
+Route::middleware(['auth:sanctum', 'role:pharmacist'])->group(function () {
+    // Prescriptions
+    Route::apiResource('prescriptions', PrescriptionController::class);
+    Route::post('prescriptions/{id}/process', [PrescriptionController::class, 'process']);
+    
+    // Inventory
+    Route::apiResource('inventory', InventoryController::class);
+    Route::get('inventory/low-stock/list', [InventoryController::class, 'lowStock']);
+    Route::get('inventory/expiring-soon/list', [InventoryController::class, 'expiringSoon']);
+    Route::get('inventory/stats/overview', [InventoryController::class, 'stats']);
+    
+    // Suppliers
+    Route::apiResource('suppliers', SupplierController::class);
+    
+    // Drug Purchases
+    Route::apiResource('drug-purchases', DrugPurchaseController::class);
+    Route::post('drug-purchases/{id}/receive', [DrugPurchaseController::class, 'receive']);
 });
-
-Route::middleware(['auth:sanctum', 'role:doctor'])->get('/doctor/health', function () {
-    return response()->json(['status' => 'ok', 'scope' => 'doctor']);
-});
-
-Route::middleware(['auth:sanctum', 'role:receptionist'])->get('/reception/health', function () {
-    return response()->json(['status' => 'ok', 'scope' => 'receptionist']);
-});
-
-Route::middleware(['auth:sanctum', 'role:pharmacist'])->get('/pharmacy/health', function () {
-    return response()->json(['status' => 'ok', 'scope' => 'pharmacist']);
-});
-
-Route::middleware(['auth:sanctum', 'role:patient'])->get('/patient/health', function () {
-    return response()->json(['status' => 'ok', 'scope' => 'patient']);
-});
-
-// Public API routes for frontend
-Route::get('services', [ServiceController::class, 'index']);
-Route::get('testimonials', [TestimonialController::class, 'index']);

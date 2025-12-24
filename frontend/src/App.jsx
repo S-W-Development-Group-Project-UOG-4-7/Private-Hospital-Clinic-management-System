@@ -1,29 +1,25 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import PortalPage from './pages/PortalPage';
-import AdminDashboard from './pages/dashboard/AdminDashboard';
-import DoctorDashboard from './pages/dashboard/DoctorDashboard';
-import PatientDashboard from './pages/dashboard/PatientDashboard';
 import PharmacistDashboard from './pages/dashboard/PharmacistDashboard';
-import ReceptionistDashboard from './pages/dashboard/ReceptionistDashboard';
+import PrescriptionProcessingView from './pages/pharmacy/PrescriptionProcessingView';
+import InventoryManagement from './pages/pharmacy/InventoryManagement';
+import SupplierManagement from './pages/pharmacy/SupplierManagement';
+import DrugPurchaseManagement from './pages/pharmacy/DrugPurchaseManagement';
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-      <Route path="/portal" element={<PortalPage />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/doctor" element={<DoctorDashboard />} />
-      <Route path="/patient" element={<PatientDashboard />} />
       <Route path="/pharmacist" element={<PharmacistDashboard />} />
-      <Route path="/receptionist" element={<ReceptionistDashboard />} />
-      <Route path="/home" element={<HomePage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/pharmacist/prescriptions" element={<PrescriptionProcessingView />} />
+      <Route path="/pharmacist/inventory" element={<InventoryManagement />} />
+      <Route path="/pharmacist/suppliers" element={<SupplierManagement />} />
+      <Route path="/pharmacist/purchases" element={<DrugPurchaseManagement />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
