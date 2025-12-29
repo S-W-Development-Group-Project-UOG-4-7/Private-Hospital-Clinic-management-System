@@ -71,5 +71,56 @@ class DatabaseSeeder extends Seeder
         );
 
         $patient->syncRoles(['patient']);
+
+        // Doctor user
+        $doctorEmail = 'doctor@example.com';
+        $doctorUsername = User::where('email', $doctorEmail)->value('username') ?: (User::where('username', 'doctor')->exists() ? $makeUniqueUsername('doctor') : 'doctor');
+
+        $doctor = User::updateOrCreate(
+            ['email' => $doctorEmail],
+            [
+                'first_name' => 'Dr. John',
+                'last_name' => 'Smith',
+                'username' => $doctorUsername,
+                'password' => Hash::make('Doctor@123'),
+                'role_id' => $roleIds['doctor'] ?? null,
+            ]
+        );
+
+        $doctor->syncRoles(['doctor']);
+
+        // Pharmacist user
+        $pharmacistEmail = 'pharmacist@example.com';
+        $pharmacistUsername = User::where('email', $pharmacistEmail)->value('username') ?: (User::where('username', 'pharmacist')->exists() ? $makeUniqueUsername('pharmacist') : 'pharmacist');
+
+        $pharmacist = User::updateOrCreate(
+            ['email' => $pharmacistEmail],
+            [
+                'first_name' => 'Pharmacy',
+                'last_name' => 'Manager',
+                'username' => $pharmacistUsername,
+                'password' => Hash::make('Pharmacist@123'),
+                'role_id' => $roleIds['pharmacist'] ?? null,
+            ]
+        );
+
+        $pharmacist->syncRoles(['pharmacist']);
+
+        // Receptionist user
+        $receptionistEmail = 'receptionist@example.com';
+        $receptionistUsername = User::where('email', $receptionistEmail)->value('username') ?: (User::where('username', 'receptionist')->exists() ? $makeUniqueUsername('receptionist') : 'receptionist');
+
+        $receptionist = User::updateOrCreate(
+            ['email' => $receptionistEmail],
+            [
+                'first_name' => 'Reception',
+                'last_name' => 'Staff',
+                'username' => $receptionistUsername,
+                'password' => Hash::make('Receptionist@123'),
+                'role_id' => $roleIds['receptionist'] ?? null,
+            ]
+        );
+
+        $receptionist->syncRoles(['receptionist']);
     }
 }

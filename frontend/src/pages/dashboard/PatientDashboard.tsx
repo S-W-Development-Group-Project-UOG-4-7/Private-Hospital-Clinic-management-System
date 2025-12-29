@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { patientApi } from '../../api/patient';
-import Navbar from '../../components/common/Navbar';
 import type {
   CreateAppointmentPayload,
   CreateFeedbackPayload,
@@ -44,7 +43,6 @@ const PatientDashboard: React.FC = () => {
 
   const [active, setActive] = useState<SectionKey>('overview');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
 
   const [profileLoading, setProfileLoading] = useState(true);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
@@ -109,13 +107,6 @@ const PatientDashboard: React.FC = () => {
     [notifications]
   );
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -581,9 +572,7 @@ const PatientDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar isScrolled={isScrolled} />
-      
-      <div className="min-h-screen bg-gray-50 flex pt-16">
+      <div className="min-h-screen bg-gray-50 flex">
         {Sidebar}
 
         <div className="flex-1 min-w-0">
@@ -761,6 +750,12 @@ const PatientDashboard: React.FC = () => {
                   className="px-6 py-3 rounded-full bg-transparent border-2 border-white text-white hover:bg-white hover:text-gray-800 transition duration-300 font-bold"
                 >
                   Home
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="px-6 py-3 rounded-full bg-transparent border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition duration-300 font-bold"
+                >
+                  Logout
                 </button>
               </div>
             </motion.div>

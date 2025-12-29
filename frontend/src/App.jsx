@@ -6,7 +6,9 @@ import PortalPage from './pages/PortalPage';
 import HeroSection from './components/HomePage/HeroSection';
 import QuickActionsBar from './components/HomePage/QuickActionsBar';
 import FeaturesGrid from './components/HomePage/FeaturesGrid';
+import ServicesSection from './components/HomePage/ServicesSection';
 import WhyChooseUs from './components/HomePage/WhyChooseUs';
+import TestimonialsSection from './components/HomePage/TestimonialsSection';
 import TelemedicinePromo from './components/HomePage/TelemedicinePromo';
 import Footer from './components/HomePage/Footer';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
@@ -30,7 +32,9 @@ function App() {
       <HeroSection />
       <QuickActionsBar />
       <FeaturesGrid />
+      <ServicesSection />
       <WhyChooseUs />
+      <TestimonialsSection />
       <TelemedicinePromo />
       <Footer />
     </>
