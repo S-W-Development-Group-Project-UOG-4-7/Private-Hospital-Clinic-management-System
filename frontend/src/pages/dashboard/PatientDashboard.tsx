@@ -580,29 +580,32 @@ const PatientDashboard: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {Sidebar}
+    <div className="min-h-screen bg-white">
+      <Navbar isScrolled={isScrolled} />
+      
+      <div className="min-h-screen bg-gray-50 flex pt-16">
+        {Sidebar}
 
-      <div className="flex-1 min-w-0">
-        <div className="md:hidden bg-white border-b">
-          <div className="flex items-center justify-between px-4 h-16">
-            <button
-              onClick={() => setMobileNavOpen(true)}
-              className="p-2 rounded-lg hover:bg-gray-100"
-              aria-label="Open menu"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <div className="text-sm font-semibold text-gray-900">Patient Dashboard</div>
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-lg hover:bg-gray-100"
-              aria-label="Logout"
-            >
-              <LogOut className="w-6 h-6" />
-            </button>
+        <div className="flex-1 min-w-0">
+          <div className="md:hidden bg-white border-b">
+            <div className="flex items-center justify-between px-4 h-16">
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                aria-label="Open menu"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+              <div className="text-sm font-semibold text-gray-900">Patient Dashboard</div>
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                aria-label="Logout"
+              >
+                <LogOut className="w-6 h-6" />
+              </button>
+            </div>
           </div>
-        </div>
 
         {mobileNavOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
@@ -729,38 +732,38 @@ const PatientDashboard: React.FC = () => {
           </div>
         )}
 
-        <div className="bg-white border-b">
-          <div className="px-4 md:px-8 py-5 flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Patient Dashboard</h1>
-              <p className="text-gray-600 text-sm">Welcome back, {patientName}</p>
-            </div>
-            <div className="hidden md:flex items-center gap-3">
-              <button
-                onClick={() => setActive('notifications')}
-                className="relative p-2 rounded-lg hover:bg-gray-100"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadNotificationsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-teal-500 text-white text-xs flex items-center justify-center">
-                    {unreadNotificationsCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => navigate('/')}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
-              >
-                Home
-              </button>
-              <button
-                onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition"
-              >
-                Logout
-              </button>
-            </div>
+        {/* Hero-style Header */}
+        <div className="relative bg-cover bg-center" style={{ backgroundImage: "url('/images/Hero.png')" }}>
+          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+          <div className="relative z-10 px-4 md:px-8 py-12 md:py-16">
+            <motion.div
+              initial={{ opacity: 0, y: -50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+            >
+              <h1 className="text-3xl md:text-5xl font-extrabold text-white mb-2">Welcome back, {patientName}</h1>
+              <p className="text-lg md:text-xl text-gray-200 mb-6">Manage your health and appointments with ease</p>
+              <div className="hidden md:flex items-center gap-3">
+                <button
+                  onClick={() => setActive('notifications')}
+                  className="relative p-3 rounded-full bg-white/20 hover:bg-white/30 text-white transition duration-300 backdrop-blur-sm"
+                  aria-label="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-teal-500 text-white text-xs flex items-center justify-center">
+                      {unreadNotificationsCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-6 py-3 rounded-full bg-transparent border-2 border-white text-white hover:bg-white hover:text-gray-800 transition duration-300 font-bold"
+                >
+                  Home
+                </button>
+              </div>
+            </motion.div>
           </div>
         </div>
 
@@ -774,100 +777,168 @@ const PatientDashboard: React.FC = () => {
           {active === 'overview' && (
             <div className="space-y-8">
               {/* Dashboard Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {/* Book Appointment */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Book Appointment</h2>
-                  <p className="text-gray-600 mb-4">Schedule appointments with doctors</p>
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                >
+                  <div className="mb-6">
+                    <Calendar className="w-12 h-12 text-teal-500 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-3">Book Appointment</h2>
+                    <p className="text-gray-600">Schedule appointments with doctors</p>
+                  </div>
                   <button
                     onClick={openCreateAppointment}
-                    className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                   >
                     Book Now
                   </button>
-                </div>
+                </motion.div>
 
                 {/* My Appointments */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">My Appointments</h2>
-                  <p className="text-gray-600 mb-4">View upcoming and past appointments</p>
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                >
+                  <div className="mb-6">
+                    <Calendar className="w-12 h-12 text-teal-500 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-3">My Appointments</h2>
+                    <p className="text-gray-600">View upcoming and past appointments</p>
+                  </div>
                   <button
                     onClick={() => setActive('appointments')}
-                    className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                   >
                     View Appointments
                   </button>
-                </div>
+                </motion.div>
 
                 {/* Medical Records */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Medical Records</h2>
-                  <p className="text-gray-600 mb-4">Access your medical history and reports</p>
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                >
+                  <div className="mb-6">
+                    <UserCircle className="w-12 h-12 text-teal-500 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-3">Medical Records</h2>
+                    <p className="text-gray-600">Access your medical history and reports</p>
+                  </div>
                   <button
                     onClick={() => setActive('medical_records')}
-                    className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                   >
                     View Records
                   </button>
-                </div>
+                </motion.div>
 
                 {/* Prescriptions */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Prescriptions</h2>
-                  <p className="text-gray-600 mb-4">View your current and past prescriptions</p>
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                >
+                  <div className="mb-6">
+                    <CreditCard className="w-12 h-12 text-teal-500 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-3">Prescriptions</h2>
+                    <p className="text-gray-600">View your current and past prescriptions</p>
+                  </div>
                   <button
                     onClick={() => setActive('prescriptions')}
-                    className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                   >
                     View Prescriptions
                   </button>
-                </div>
+                </motion.div>
 
                 {/* Telemedicine */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Telemedicine</h2>
-                  <p className="text-gray-600 mb-4">Join virtual consultations</p>
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.4 }}
+                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                >
+                  <div className="mb-6">
+                    <Video className="w-12 h-12 text-teal-500 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-3">Telemedicine</h2>
+                    <p className="text-gray-600">Join virtual consultations</p>
+                  </div>
                   <button
                     onClick={() => setActive('telemedicine')}
-                    className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                   >
                     Start Consultation
                   </button>
-                </div>
+                </motion.div>
 
                 {/* Billing */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Billing & Payments</h2>
-                  <p className="text-gray-600 mb-4">View invoices and make payments</p>
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                >
+                  <div className="mb-6">
+                    <CreditCard className="w-12 h-12 text-teal-500 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-3">Billing & Payments</h2>
+                    <p className="text-gray-600">View invoices and make payments</p>
+                  </div>
                   <button
                     onClick={() => setActive('billing')}
-                    className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                   >
                     View Bills
                   </button>
-                </div>
+                </motion.div>
               </div>
 
               {/* Quick Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-                  <h3 className="text-2xl font-bold text-teal-500">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.6 }}
+                  className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                >
+                  <h3 className="text-4xl font-extrabold text-teal-500 mb-2">
                     {appointmentsLoading ? '...' : upcomingAppointments.length}
                   </h3>
-                  <p className="text-gray-600">Upcoming Appointments</p>
-                </div>
-                <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-                  <h3 className="text-2xl font-bold text-teal-500">-</h3>
-                  <p className="text-gray-600">Active Prescriptions</p>
-                </div>
-                <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-                  <h3 className="text-2xl font-bold text-teal-500">-</h3>
-                  <p className="text-gray-600">Medical Reports</p>
-                </div>
-                <div className="bg-white rounded-lg shadow-lg p-4 text-center">
-                  <h3 className="text-2xl font-bold text-teal-500">-</h3>
-                  <p className="text-gray-600">Pending Bills</p>
-                </div>
+                  <p className="text-gray-600 font-medium">Upcoming Appointments</p>
+                </motion.div>
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.7 }}
+                  className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                >
+                  <h3 className="text-4xl font-extrabold text-teal-500 mb-2">-</h3>
+                  <p className="text-gray-600 font-medium">Active Prescriptions</p>
+                </motion.div>
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.8 }}
+                  className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                >
+                  <h3 className="text-4xl font-extrabold text-teal-500 mb-2">-</h3>
+                  <p className="text-gray-600 font-medium">Medical Reports</p>
+                </motion.div>
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.9 }}
+                  className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                >
+                  <h3 className="text-4xl font-extrabold text-teal-500 mb-2">-</h3>
+                  <p className="text-gray-600 font-medium">Pending Bills</p>
+                </motion.div>
               </div>
             </div>
           )}
@@ -885,7 +956,7 @@ const PatientDashboard: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setProfileEditMode((v) => !v)}
-                      className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition"
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                     >
                       {profileEditMode ? 'Cancel' : 'Edit'}
                     </button>
@@ -958,14 +1029,14 @@ const PatientDashboard: React.FC = () => {
                       <div className="flex gap-3 pt-2">
                         <button
                           type="submit"
-                          className="bg-teal-500 hover:bg-teal-600 text-white px-5 py-2 rounded-lg transition"
+                          className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                         >
                           Save
                         </button>
                         <button
                           type="button"
                           onClick={() => setProfileEditMode(false)}
-                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-5 py-2 rounded-lg transition"
+                          className="bg-transparent border-2 border-gray-300 hover:border-gray-400 text-gray-800 font-bold py-3 px-6 rounded-full transition duration-300"
                         >
                           Cancel
                         </button>
@@ -986,7 +1057,7 @@ const PatientDashboard: React.FC = () => {
                 </div>
                 <button
                   onClick={openCreateAppointment}
-                  className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition"
+                  className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                 >
                   Book Appointment
                 </button>
@@ -1048,21 +1119,21 @@ const PatientDashboard: React.FC = () => {
                                   <div className="flex gap-2 flex-wrap">
                                     <button
                                       onClick={() => openEditAppointment(appt)}
-                                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs"
+                                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                                     >
                                       Reschedule
                                     </button>
                                     {appt.status === 'scheduled' && (
                                       <button
                                         onClick={() => cancelAppointment(appt)}
-                                        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs"
+                                        className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                                       >
                                         Cancel
                                       </button>
                                     )}
                                     <button
                                       onClick={() => deleteAppointment(appt)}
-                                      className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs"
+                                      className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                                     >
                                       Delete
                                     </button>
@@ -1148,7 +1219,7 @@ const PatientDashboard: React.FC = () => {
                                       href={t.meeting_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs"
+                                      className="inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                                     >
                                       <Video className="w-4 h-4" />
                                       Join
@@ -1179,13 +1250,13 @@ const PatientDashboard: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setEhrTab('diagnosis')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${ehrTab === 'diagnosis' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`px-6 py-3 rounded-full text-sm font-bold transition duration-300 ${ehrTab === 'diagnosis' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   >
                     Diagnoses
                   </button>
                   <button
                     onClick={() => setEhrTab('lab_report')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${ehrTab === 'lab_report' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`px-6 py-3 rounded-full text-sm font-bold transition duration-300 ${ehrTab === 'lab_report' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   >
                     Lab Reports
                   </button>
@@ -1287,7 +1358,7 @@ const PatientDashboard: React.FC = () => {
                                   {remaining > 0 && inv.status !== 'cancelled' ? (
                                     <button
                                       onClick={() => payInvoice(inv)}
-                                      className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs"
+                                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                                     >
                                       Pay
                                     </button>
@@ -1351,7 +1422,7 @@ const PatientDashboard: React.FC = () => {
                   <button
                     type="submit"
                     disabled={feedbackSaving}
-                    className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg"
+                    className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                   >
                     {feedbackSaving ? 'Submitting...' : 'Submit'}
                   </button>
@@ -1481,7 +1552,7 @@ const PatientDashboard: React.FC = () => {
                                 <td className="px-6 py-4">
                                   <button
                                     onClick={() => openPrescriptionDetails(p)}
-                                    className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs"
+                                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                                   >
                                     View
                                   </button>
@@ -1576,7 +1647,7 @@ const PatientDashboard: React.FC = () => {
                 <button
                   type="submit"
                   disabled={appointmentSaving}
-                  className="flex-1 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg"
+                  className="flex-1 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                 >
                   {appointmentSaving ? 'Saving...' : editingAppointment ? 'Update' : 'Create'}
                 </button>
@@ -1584,7 +1655,7 @@ const PatientDashboard: React.FC = () => {
                   type="button"
                   onClick={closeAppointmentModal}
                   disabled={appointmentSaving}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 disabled:opacity-60 text-gray-800 px-4 py-2 rounded-lg"
+                  className="flex-1 bg-transparent border-2 border-gray-300 hover:border-gray-400 disabled:opacity-60 text-gray-800 font-bold py-3 px-6 rounded-full transition duration-300"
                 >
                   Cancel
                 </button>
@@ -1691,6 +1762,7 @@ const PatientDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
