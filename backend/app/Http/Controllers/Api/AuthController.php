@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role as SpatieRole;
 
 class AuthController extends Controller
 {
@@ -18,18 +19,38 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
-            'role' => ['nullable', 'string', Rule::in(['admin', 'doctor', 'receptionist', 'pharmacist', 'patient'])],
+            'role' => ['nullable', 'string', Rule::in(['patient'])],
         ]);
 
-        $roleName = $data['role'] ?? 'patient';
+        // Public signup is patient-only
+        $roleName = 'patient';
+
+        $fullName = trim($data['name']);
+        $parts = preg_split('/\s+/', $fullName) ?: [];
+        $firstName = $parts[0] ?? $fullName;
+        $lastName = count($parts) > 1 ? trim(implode(' ', array_slice($parts, 1))) : 'Patient';
+
+        $usernameBase = Str::slug($firstName . ' ' . $lastName, '');
+        if ($usernameBase === '') {
+            $usernameBase = 'user';
+        }
+        $username = $usernameBase;
+        $suffix = 1;
+        while (User::where('username', $username)->exists()) {
+            $username = $usernameBase . $suffix;
+            $suffix++;
+        }
 
         $user = User::create([
-            'name' => $data['name'],
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'username' => $username,
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
         ]);
 
         // Assign role using Spatie Permission
+        SpatieRole::findOrCreate($roleName, 'web');
         $user->assignRole($roleName);
 
         $token = $user->createToken('auth_token')->plainTextToken;

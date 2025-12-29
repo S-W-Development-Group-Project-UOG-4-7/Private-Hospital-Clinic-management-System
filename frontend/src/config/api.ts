@@ -14,6 +14,17 @@ export const API_ENDPOINTS = {
   AUTH_LOGOUT: `${API_BASE_URL}/api/auth/logout`,
   AUTH_ME: `${API_BASE_URL}/api/auth/me`,
   
+  // Patient Portal
+  PATIENT_PROFILE: `${API_BASE_URL}/api/patient/profile`,
+  PATIENT_APPOINTMENTS: `${API_BASE_URL}/api/patient/appointments`,
+  PATIENT_TELECONSULTATIONS: `${API_BASE_URL}/api/patient/teleconsultations`,
+  PATIENT_EHR: `${API_BASE_URL}/api/patient/ehr`,
+  PATIENT_INVOICES: `${API_BASE_URL}/api/patient/invoices`,
+  PATIENT_PAYMENTS: `${API_BASE_URL}/api/patient/payments`,
+  PATIENT_FEEDBACK: `${API_BASE_URL}/api/patient/feedback`,
+  PATIENT_NOTIFICATIONS: `${API_BASE_URL}/api/patient/notifications`,
+  PATIENT_PRESCRIPTIONS: `${API_BASE_URL}/api/patient/prescriptions`,
+  
   // Prescriptions
   PRESCRIPTIONS: `${API_BASE_URL}/api/prescriptions`,
   PRESCRIPTION_PROCESS: (id: string) => `${API_BASE_URL}/api/prescriptions/${id}/process`,
@@ -33,4 +44,5 @@ export const API_ENDPOINTS = {
 };
 
 export default API_BASE_URL;
+
 

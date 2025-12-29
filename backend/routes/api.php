@@ -7,6 +7,14 @@ use App\Http\Controllers\Api\PrescriptionController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\DrugPurchaseController;
+use App\Http\Controllers\Api\PatientAppointmentController;
+use App\Http\Controllers\Api\PatientBillingController;
+use App\Http\Controllers\Api\PatientEhrController;
+use App\Http\Controllers\Api\PatientFeedbackController;
+use App\Http\Controllers\Api\PatientNotificationController;
+use App\Http\Controllers\Api\PatientProfileController;
+use App\Http\Controllers\Api\PatientPrescriptionController;
+use App\Http\Controllers\Api\PatientTeleconsultationController;
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
@@ -36,4 +44,30 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->group(function () {
     // Drug Purchases
     Route::apiResource('drug-purchases', DrugPurchaseController::class);
     Route::post('drug-purchases/{id}/receive', [DrugPurchaseController::class, 'receive']);
+});
+
+// Patient Portal Routes (Patient only)
+Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(function () {
+    Route::get('profile', [PatientProfileController::class, 'show']);
+    Route::put('profile', [PatientProfileController::class, 'update']);
+
+    Route::get('appointments', [PatientAppointmentController::class, 'index']);
+    Route::post('appointments', [PatientAppointmentController::class, 'store']);
+    Route::get('appointments/{id}', [PatientAppointmentController::class, 'show']);
+    Route::put('appointments/{id}', [PatientAppointmentController::class, 'update']);
+    Route::delete('appointments/{id}', [PatientAppointmentController::class, 'destroy']);
+
+    Route::get('teleconsultations', [PatientTeleconsultationController::class, 'index']);
+    Route::get('ehr', [PatientEhrController::class, 'index']);
+
+    Route::get('invoices', [PatientBillingController::class, 'invoices']);
+    Route::post('payments', [PatientBillingController::class, 'pay']);
+
+    Route::get('feedback', [PatientFeedbackController::class, 'index']);
+    Route::post('feedback', [PatientFeedbackController::class, 'store']);
+
+    Route::get('notifications', [PatientNotificationController::class, 'index']);
+
+    Route::get('prescriptions', [PatientPrescriptionController::class, 'index']);
+    Route::get('prescriptions/{id}', [PatientPrescriptionController::class, 'show']);
 });
