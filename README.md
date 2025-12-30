@@ -57,5 +57,3 @@ We also thank all lecturers and staff at LNBTI for providing the academic founda
 Finally, we appreciate the encouragement and support from our families, friends, and everyone who contributed to this project.
 
 
-
-busdaldka
