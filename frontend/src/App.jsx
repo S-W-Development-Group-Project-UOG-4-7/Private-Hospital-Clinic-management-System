@@ -27,6 +27,22 @@ function App() {
     return isAuthenticated ? children : <Navigate to="/login" replace />;
   };
 
+  const RequireRole = ({ children, role }) => {
+    const raw = localStorage.getItem('authUser');
+    let user = null;
+    try {
+      user = raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      user = null;
+    }
+
+    if (!user || user.role !== role) {
+      return <Navigate to="/portal" replace />;
+    }
+
+    return children;
+  };
+
   const Home = () => (
     <>
       <HeroSection />
@@ -67,7 +83,9 @@ function App() {
         path="/doctor"
         element={(
           <RequireAuth>
-            <DoctorDashboard />
+            <RequireRole role="doctor">
+              <DoctorDashboard />
+            </RequireRole>
           </RequireAuth>
         )}
       />

@@ -15,6 +15,14 @@ use App\Http\Controllers\Api\PatientNotificationController;
 use App\Http\Controllers\Api\PatientProfileController;
 use App\Http\Controllers\Api\PatientPrescriptionController;
 use App\Http\Controllers\Api\PatientTeleconsultationController;
+use App\Http\Controllers\Api\DoctorAppointmentController;
+use App\Http\Controllers\Api\DoctorTeleconsultationController;
+use App\Http\Controllers\Api\DoctorEhrController;
+use App\Http\Controllers\Api\DoctorVitalSignController;
+use App\Http\Controllers\Api\DoctorDiagnosisController;
+use App\Http\Controllers\Api\DoctorPrescriptionController;
+use App\Http\Controllers\Api\DoctorLabController;
+use App\Http\Controllers\Api\DoctorReferralController;
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
@@ -70,4 +78,46 @@ Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(fu
 
     Route::get('prescriptions', [PatientPrescriptionController::class, 'index']);
     Route::get('prescriptions/{id}', [PatientPrescriptionController::class, 'show']);
+});
+
+// Doctor Portal Routes (Doctor only)
+Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(function () {
+    // Appointments
+    Route::get('appointments', [DoctorAppointmentController::class, 'index']);
+    Route::get('appointments/{id}', [DoctorAppointmentController::class, 'show']);
+    Route::put('appointments/{id}/status', [DoctorAppointmentController::class, 'updateStatus']);
+
+    // Teleconsultations
+    Route::post('teleconsultations/start', [DoctorTeleconsultationController::class, 'start']);
+    Route::post('teleconsultations/{id}/end', [DoctorTeleconsultationController::class, 'end']);
+
+    // EHR / Patient Records
+    Route::get('patients/{id}/ehr', [DoctorEhrController::class, 'getPatientEhr']);
+
+    // Vital Signs
+    Route::post('vitals', [DoctorVitalSignController::class, 'store']);
+    Route::put('vitals/{id}', [DoctorVitalSignController::class, 'update']);
+    Route::delete('vitals/{id}', [DoctorVitalSignController::class, 'destroy']);
+
+    // Diagnoses
+    Route::post('diagnoses', [DoctorDiagnosisController::class, 'store']);
+    Route::put('diagnoses/{id}', [DoctorDiagnosisController::class, 'update']);
+    Route::get('diagnoses/patient/{id}', [DoctorDiagnosisController::class, 'getPatientDiagnoses']);
+
+    // Prescriptions
+    Route::post('prescriptions', [DoctorPrescriptionController::class, 'store']);
+    Route::get('prescriptions', [DoctorPrescriptionController::class, 'index']);
+    Route::get('prescriptions/{id}', [DoctorPrescriptionController::class, 'show']);
+
+    // Lab Orders & Results
+    Route::post('labs/orders', [DoctorLabController::class, 'createOrder']);
+    Route::get('labs/results/{patientId}', [DoctorLabController::class, 'getPatientResults']);
+    Route::post('labs/results/{id}/review', [DoctorLabController::class, 'reviewResult']);
+
+    // Referrals
+    Route::post('referrals', [DoctorReferralController::class, 'store']);
+    Route::get('referrals', [DoctorReferralController::class, 'index']);
+
+    // Inventory (read-only for prescriptions)
+    Route::get('inventory', [InventoryController::class, 'index']);
 });
