@@ -1,27 +1,33 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers; // Add \Admin here
 
-use App\Models\Bed;
+use App\Http\Controllers\Controller; // Add this line to allow it to find the base Controller
 use Illuminate\Http\Request;
+use App\Models\Ward;
+use App\Models\Bed;
 
 class BedController extends Controller
 {
-    // 1. Get all beds (for the Dashboard Grid)
+    // 1. Get all Wards with their Beds
     public function index()
     {
-        // Get all beds and attach the Ward info (e.g., "Bed 1 is in ICU")
-        // Note: This requires you to have a 'ward' relationship in your Bed model.
-        // If you haven't set that up yet, change 'with('ward')->get()' to just 'get()'
-        $beds = Bed::with('ward')->get();
-        
+        // Check if we have any wards. If not, create some defaults.
+        if (Ward::count() === 0) {
+            $this->seedDefaults();
+        }
+
+        $wards = Ward::with(['beds' => function($query) {
+            $query->orderBy('bed_number', 'asc');
+        }])->get();
+
         return response()->json([
             'success' => true,
-            'data' => $beds
+            'data' => $wards
         ]);
     }
 
-    // 2. Toggle Bed Status (Occupied/Empty)
+    // 2. Toggle a Bed's Availability
     public function toggleStatus($id)
     {
         $bed = Bed::find($id);
@@ -30,8 +36,7 @@ class BedController extends Controller
             return response()->json(['success' => false, 'message' => 'Bed not found'], 404);
         }
 
-        // Flip the status (True becomes False, False becomes True)
-        $bed->is_occupied = !$bed->is_occupied;
+        $bed->is_available = !$bed->is_available; // Switch true/false
         $bed->save();
 
         return response()->json([
@@ -39,5 +44,21 @@ class BedController extends Controller
             'message' => 'Bed status updated',
             'data' => $bed
         ]);
+    }
+
+    // Helper: Create default hospital setup if empty
+    private function seedDefaults()
+    {
+        // Create ICU Ward
+        $icu = Ward::create(['name' => 'Intensive Care Unit', 'type' => 'ICU', 'capacity' => 5]);
+        for ($i = 1; $i <= 5; $i++) {
+            Bed::create(['ward_id' => $icu->id, 'bed_number' => "ICU-0$i", 'is_available' => true]);
+        }
+
+        // Create General Ward
+        $gen = Ward::create(['name' => 'General Ward A', 'type' => 'General', 'capacity' => 10]);
+        for ($i = 1; $i <= 10; $i++) {
+            Bed::create(['ward_id' => $gen->id, 'bed_number' => "GEN-0$i", 'is_available' => true]);
+        }
     }
 }
