@@ -17,6 +17,7 @@ import type {
   UpdateAppointmentPayload,
 } from '../../types/patient';
 import { Bell, Calendar, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Video, X } from 'lucide-react';
+import ClinicAppointmentForm from '../../components/ClinicAppointmentForm';
 
 type SectionKey =
   | 'overview'
@@ -371,6 +372,17 @@ const PatientDashboard: React.FC = () => {
       setError(e?.message || 'Failed to save appointment');
     } finally {
       setAppointmentSaving(false);
+    }
+  };
+
+  // Handler used when ClinicAppointmentForm completes a booking
+  const handleClinicAppointmentSuccess = async (data: any) => {
+    setAppointmentModalOpen(false);
+    try {
+      await refreshAppointments();
+      setActive('appointments');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load appointments');
     }
   };
 
@@ -1583,6 +1595,7 @@ const PatientDashboard: React.FC = () => {
               </button>
             </div>
 
+            {editingAppointment ? (
             <form onSubmit={submitAppointment} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1656,6 +1669,9 @@ const PatientDashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+            ) : (
+              <ClinicAppointmentForm onSuccess={handleClinicAppointmentSuccess} />
+            ) }
           </div>
         </div>
       )}

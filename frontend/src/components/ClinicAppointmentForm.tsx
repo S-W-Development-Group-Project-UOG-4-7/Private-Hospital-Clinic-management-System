@@ -13,7 +13,22 @@ interface Doctor {
   email?: string;
 }
 
-export default function ClinicAppointmentForm() {
+interface Slot {
+  time: string;
+  available_count: number;
+}
+
+interface SlotsResponse {
+  date: string;
+  clinic_id: number;
+  slots: Slot[];
+}
+
+interface ClinicAppointmentFormProps {
+  onSuccess?: (data: any) => void;
+}
+
+export default function ClinicAppointmentForm({ onSuccess }: ClinicAppointmentFormProps) {
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedClinic, setSelectedClinic] = useState<number | null>(null);
@@ -79,7 +94,7 @@ export default function ClinicAppointmentForm() {
           params['doctor_id'] = String(selectedDoctor);
         }
 
-        const res = await axios.get(`/api/clinics/${selectedClinic}/slots`, { params });
+        const res = await axios.get<SlotsResponse>(`/api/clinics/${selectedClinic}/slots`, { params });
         setSlots(res.data.slots || []);
       } catch (err) {
         console.error(err);
@@ -121,7 +136,15 @@ export default function ClinicAppointmentForm() {
       .post('/api/patient/appointments', payload)
       .then((res) => {
         console.log('Appointment created', res.data);
-        // Reset or navigate
+        // Notify parent if provided
+        if (onSuccess) onSuccess(res.data);
+        // Reset local form
+        setSelectedClinic(null);
+        setSelectedDoctor(null);
+        setDate('');
+        setTime('');
+        setSlots([]);
+        setStep(1);
       })
       .catch((err) => {
         console.error(err.response?.data || err);
