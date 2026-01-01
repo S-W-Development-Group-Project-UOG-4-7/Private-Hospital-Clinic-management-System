@@ -19,13 +19,13 @@ const RegisterPage: React.FC = () => {
 
   useEffect(() => {
     document.title = 'Sign Up';
-    
+
     // Redirect if already authenticated
     const isAuthenticated = !!localStorage.getItem('authToken');
     if (isAuthenticated) {
       const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
       const role = authUser?.role?.toLowerCase() || 'patient';
-      
+
       let redirectPath = '/portal';
       switch (role) {
         case 'admin':
@@ -81,12 +81,12 @@ const RegisterPage: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/images/Hero.png')" }}>
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-      
+
       <Navbar isScrolled={isScrolled} />
 
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-12">
         <div className="w-full max-w-2xl">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
@@ -96,7 +96,7 @@ const RegisterPage: React.FC = () => {
             <p className="text-lg text-gray-200">Join our healthcare community today</p>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
@@ -104,7 +104,7 @@ const RegisterPage: React.FC = () => {
           >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-extrabold text-gray-900">Sign Up</h2>
-              <Link 
+              <Link
                 to="/"
                 className="inline-flex items-center gap-2 bg-transparent border-2 border-teal-500 text-teal-600 hover:bg-teal-500 hover:text-white font-bold py-2 px-4 rounded-full transition duration-300"
               >
@@ -190,8 +190,8 @@ const RegisterPage: React.FC = () => {
 
           <div className="text-center text-gray-200 mt-6">
             <p className="mb-2">Already have an account?</p>
-            <Link 
-              to="/login" 
+            <Link
+              to="/login"
               className="inline-block bg-transparent border-2 border-white text-white font-bold py-2 px-6 rounded-full hover:bg-white hover:text-gray-800 transition duration-300"
             >
               Login
@@ -204,4 +204,3 @@ const RegisterPage: React.FC = () => {
 };
 
 export default RegisterPage;
-
