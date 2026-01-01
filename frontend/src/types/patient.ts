@@ -30,6 +30,7 @@ export interface AppointmentDoctor {
 export interface PatientAppointment {
   id: number;
   patient_id: number;
+  clinic_id?: number | null;
   doctor_id: number | null;
   appointment_date: string;
   appointment_time: string;
@@ -40,6 +41,25 @@ export interface PatientAppointment {
   doctor?: AppointmentDoctor | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CreateAppointmentPayload {
+  clinic_id?: number | null;
+  doctor_id?: number | null;
+  appointment_date: string;
+  appointment_time: string;
+  type?: AppointmentType;
+  reason?: string | null;
+}
+
+export interface UpdateAppointmentPayload {
+  clinic_id?: number | null;
+  doctor_id?: number | null;
+  appointment_date?: string;
+  appointment_time?: string;
+  type?: AppointmentType;
+  status?: 'scheduled' | 'cancelled';
+  reason?: string | null;
 }
 
 export interface PatientAppointmentsResponse {
