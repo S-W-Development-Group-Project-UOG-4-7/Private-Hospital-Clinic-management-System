@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import Navbar from '../common/Navbar';
 
 const HeroSection: React.FC = () => {
@@ -42,8 +43,18 @@ const HeroSection: React.FC = () => {
           transition={{ duration: 0.5, delay: 0.6 }}
           className="flex space-x-4"
         >
-          <button className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-8 rounded-full transition duration-300">Book Appointment</button>
-          <button className="bg-transparent border-2 border-white text-white font-bold py-3 px-8 rounded-full hover:bg-white hover:text-gray-800 transition duration-300">Patient Portal Login</button>
+          <Link 
+            to="/register" 
+            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-8 rounded-full transition duration-300 inline-block"
+          >
+            Book Appointment
+          </Link>
+          <Link 
+            to="/login" 
+            className="bg-transparent border-2 border-white text-white font-bold py-4 px-8 rounded-full hover:bg-white hover:text-gray-800 transition duration-300 inline-block"
+          >
+            Patient Portal Login
+          </Link>
         </motion.div>
       </div>
     </div>
