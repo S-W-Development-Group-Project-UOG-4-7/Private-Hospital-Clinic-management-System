@@ -42,6 +42,7 @@ class AuthController extends Controller
         }
 
         $user = User::create([
+            'name' => $fullName,
             'first_name' => $firstName,
             'last_name' => $lastName,
             'username' => $username,

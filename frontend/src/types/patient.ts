@@ -30,6 +30,7 @@ export interface AppointmentDoctor {
 export interface PatientAppointment {
   id: number;
   patient_id: number;
+  clinic_id?: number | null;
   doctor_id: number | null;
   appointment_date: string;
   appointment_time: string;
@@ -42,11 +43,8 @@ export interface PatientAppointment {
   updated_at?: string;
 }
 
-export interface PatientAppointmentsResponse {
-  data: PatientAppointment[];
-}
-
 export interface CreateAppointmentPayload {
+  clinic_id?: number | null;
   doctor_id?: number | null;
   appointment_date: string;
   appointment_time: string;
@@ -55,12 +53,17 @@ export interface CreateAppointmentPayload {
 }
 
 export interface UpdateAppointmentPayload {
+  clinic_id?: number | null;
   doctor_id?: number | null;
   appointment_date?: string;
   appointment_time?: string;
   type?: AppointmentType;
   status?: 'scheduled' | 'cancelled';
   reason?: string | null;
+}
+
+export interface PatientAppointmentsResponse {
+  data: PatientAppointment[];
 }
 
 export type TeleconsultationStatus = 'scheduled' | 'completed' | 'cancelled';
