@@ -1,0 +1,37 @@
+# Set default behavior, in case users don't have core.autocrlf set.
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted
+# to native line endings on checkout.
+*.php text
+*.js text
+*.jsx text
+*.ts text
+*.tsx text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+*.txt text
+*.html text
+*.css text
+*.scss text
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.pdf binary
+
+# Normalize node_modules but don't track them
+node_modules/ text eol=lf
+
+# Package lock files should have consistent line endings
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+
+# Database migrations should have consistent line endings
+*.php text eol=lf
