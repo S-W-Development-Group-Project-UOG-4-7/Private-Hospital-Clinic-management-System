@@ -122,5 +122,8 @@ class DatabaseSeeder extends Seeder
         );
 
         $receptionist->syncRoles(['receptionist']);
+
+        // Seed default clinics
+        $this->call([\Database\Seeders\ClinicSeeder::class]);
     }
 }

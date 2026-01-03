@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 import Navbar from '../components/common/Navbar';
 import { login } from '../api/auth';
-import type { AuthUser } from '../types/auth';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,13 +16,13 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     document.title = 'Login';
-    
+
     // Redirect if already authenticated
     const isAuthenticated = !!localStorage.getItem('authToken');
     if (isAuthenticated) {
       const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
       const role = authUser?.role?.toLowerCase() || 'patient';
-      
+
       let redirectPath = '/portal';
       switch (role) {
         case 'admin':
@@ -59,13 +58,13 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     console.log('Login form submitted', { loginId, password });
-    
+
     if (!loginId || !password) {
       console.error('Missing login credentials');
       setError('Please enter both email and password');
       return;
     }
-    
+
     setError('');
     setLoading(true);
 
@@ -73,14 +72,14 @@ const LoginPage: React.FC = () => {
       console.log('Making login API call...');
       const response = await login(loginId, password);
       console.log('Login response:', response);
-      
+
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('authUser', JSON.stringify(response.user));
-      
+
       // Route based on user role
       const userRole = response.user.role.toLowerCase();
       console.log('User role:', userRole);
-      
+
       let redirectPath = '/portal';
       switch (userRole) {
         case 'admin':
@@ -101,7 +100,7 @@ const LoginPage: React.FC = () => {
         default:
           redirectPath = '/portal';
       }
-      
+
       console.log('Redirecting to:', redirectPath);
       navigate(redirectPath);
     } catch (err) {
@@ -115,12 +114,12 @@ const LoginPage: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/images/Hero.png')" }}>
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-      
+
       <Navbar isScrolled={isScrolled} />
 
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4">
         <div className="w-full max-w-md">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
@@ -130,7 +129,7 @@ const LoginPage: React.FC = () => {
             <p className="text-lg text-gray-200">Sign in to access your patient portal</p>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
@@ -138,7 +137,7 @@ const LoginPage: React.FC = () => {
           >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-extrabold text-gray-900">Login</h2>
-              <Link 
+              <Link
                 to="/"
                 className="inline-flex items-center gap-2 bg-transparent border-2 border-teal-500 text-teal-600 hover:bg-teal-500 hover:text-white font-bold py-2 px-4 rounded-full transition duration-300"
               >
@@ -211,8 +210,8 @@ const LoginPage: React.FC = () => {
 
           <div className="text-center text-gray-200">
             <p className="mb-2">Don't have an account?</p>
-            <Link 
-              to="/register" 
+            <Link
+              to="/register"
               className="inline-block bg-transparent border-2 border-white text-white font-bold py-2 px-6 rounded-full hover:bg-white hover:text-gray-800 transition duration-300"
             >
               Sign Up
@@ -225,4 +224,3 @@ const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
-

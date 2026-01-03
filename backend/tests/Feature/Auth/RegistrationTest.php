@@ -25,6 +25,11 @@ class RegistrationTest extends TestCase
             'password_confirmation' => 'password',
         ]);
 
+        // Debugging output
+        error_log('Register response status: ' . $response->getStatusCode());
+        error_log('Register response headers: ' . json_encode($response->headers->all()));
+        error_log('Register response content: ' . $response->getContent());
+
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
     }

@@ -11,6 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
+    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens, HasRoles;
 
     /**
@@ -19,12 +20,14 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'name',
         'first_name',
         'last_name',
         'username',
         'email',
         'password',
         'role_id',
+        'clinic_id',
     ];
 
     /**
@@ -57,6 +60,16 @@ class User extends Authenticatable
 
     public function getNameAttribute(): string
     {
+        // If a 'name' column exists, Eloquent will return that; otherwise synthesize from parts
+        if (isset($this->attributes['name']) && $this->attributes['name'] !== null) {
+            return (string) $this->attributes['name'];
+        }
+
         return trim($this->first_name . ' ' . $this->last_name);
+    }
+
+    public function clinic(): BelongsTo
+    {
+        return $this->belongsTo(Clinic::class, 'clinic_id');
     }
 }
