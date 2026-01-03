@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\DoctorDiagnosisController;
 use App\Http\Controllers\Api\DoctorPrescriptionController;
 use App\Http\Controllers\Api\DoctorLabController;
 use App\Http\Controllers\Api\DoctorReferralController;
+use App\Http\Controllers\Api\DoctorPatientController;
 use App\Http\Controllers\Api\ClinicController;
 
 Route::prefix('auth')->group(function () {
@@ -135,6 +136,9 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(func
     // Referrals
     Route::post('referrals', [DoctorReferralController::class, 'store']);
     Route::get('referrals', [DoctorReferralController::class, 'index']);
+
+    // Patients (Doctor can register patients)
+    Route::post('patients', [DoctorPatientController::class, 'store']);
 
     // Inventory (read-only for prescriptions)
     Route::get('inventory', [InventoryController::class, 'index']);

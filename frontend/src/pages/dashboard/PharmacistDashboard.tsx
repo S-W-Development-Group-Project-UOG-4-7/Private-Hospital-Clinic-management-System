@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps */
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { pharmacistApi } from '../../api/pharmacy';

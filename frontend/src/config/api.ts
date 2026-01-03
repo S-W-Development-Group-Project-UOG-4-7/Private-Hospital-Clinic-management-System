@@ -54,6 +54,7 @@ export const API_ENDPOINTS = {
   DOCTOR_TELECONSULTATION_START: `${API_BASE_URL}/api/doctor/teleconsultations/start`,
   DOCTOR_TELECONSULTATION_END: (id: string) => `${API_BASE_URL}/api/doctor/teleconsultations/${id}/end`,
   DOCTOR_PATIENT_EHR: (patientId: string) => `${API_BASE_URL}/api/doctor/patients/${patientId}/ehr`,
+  DOCTOR_PATIENTS: `${API_BASE_URL}/api/doctor/patients`,
   DOCTOR_VITALS: `${API_BASE_URL}/api/doctor/vitals`,
   DOCTOR_VITAL_UPDATE: (id: string) => `${API_BASE_URL}/api/doctor/vitals/${id}`,
   DOCTOR_DIAGNOSES: `${API_BASE_URL}/api/doctor/diagnoses`,

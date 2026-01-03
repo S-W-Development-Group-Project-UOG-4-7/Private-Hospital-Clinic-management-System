@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 class AuthController extends Controller
@@ -41,14 +42,21 @@ class AuthController extends Controller
             $suffix++;
         }
 
-        $user = User::create([
-            'name' => $fullName,
-            'first_name' => $firstName,
-            'last_name' => $lastName,
-            'username' => $username,
+        // Build user data depending on whether a "name" column exists
+        $userData = [
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
-        ]);
+        ];
+
+        if (Schema::hasColumn('users', 'name')) {
+            $userData['name'] = $fullName;
+        } else {
+            $userData['first_name'] = $firstName;
+            $userData['last_name'] = $lastName ?: 'Patient';
+            $userData['username'] = $username;
+        }
+
+        $user = User::create($userData);
 
         // Assign role using Spatie Permission
         SpatieRole::findOrCreate($roleName, 'web');
