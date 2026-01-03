@@ -212,3 +212,139 @@ export const drugPurchaseApi = {
   },
 };
 
+// Pharmacist API
+export const pharmacistApi = {
+  prescriptions: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    show: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_SHOW(id), {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    checkInteractions: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_INTERACTION_CHECK(id), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    dispense: (id: string, data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_DISPENSE(id), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  inventory: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    update: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_UPDATE, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+
+    lowStock: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_LOW_STOCK, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+
+  purchaseRequests: {
+    create: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PURCHASE_REQUEST, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  controlledDrugs: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_CONTROLLED_DRUGS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    log: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_CONTROLLED_DRUGS_LOG, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  labels: {
+    generate: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_LABELS_GENERATE, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+
+    print: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_LABELS_PRINT, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  returns: {
+    create: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_RETURNS, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_RETURNS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+
+  reports: {
+    inventory: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_REPORTS_INVENTORY, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    storage: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_REPORTS_STORAGE, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+
+  auditLogs: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_AUDIT_LOGS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+};
+
