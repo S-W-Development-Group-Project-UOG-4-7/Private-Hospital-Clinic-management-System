@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ReceptionistPatientRegistration from './pages/ReceptionistPatientRegistration';
 import PatientDashboard from './pages/dashboard/PatientDashboard';
 import DoctorDashboard from './pages/dashboard/DoctorDashboard';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
@@ -16,6 +17,7 @@ function App() {
       <Route path="/home" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/receptionist/register-patient" element={<ReceptionistPatientRegistration />} />
       <Route path="/patient" element={<PatientDashboard />} />
       <Route path="/doctor" element={<DoctorDashboard />} />
       <Route path="/admin" element={<AdminDashboard />} />
