@@ -36,23 +36,35 @@ Route::prefix('auth')->group(function () {
 });
 
 // Pharmacy & Inventory Management Routes (Pharmacist only)
-Route::middleware(['auth:sanctum', 'role:pharmacist'])->group(function () {
+Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->group(function () {
     // Prescriptions
-    Route::apiResource('prescriptions', PrescriptionController::class);
-    Route::post('prescriptions/{id}/process', [PrescriptionController::class, 'process']);
+    Route::get('prescriptions', [PrescriptionController::class, 'index']);
+    Route::get('prescriptions/{id}', [PrescriptionController::class, 'show']);
+    Route::post('prescriptions/{id}/interaction-check', [PrescriptionController::class, 'checkInteractions']);
+    Route::post('prescriptions/{id}/dispense', [PrescriptionController::class, 'dispense']);
     
     // Inventory
-    Route::apiResource('inventory', InventoryController::class);
-    Route::get('inventory/low-stock/list', [InventoryController::class, 'lowStock']);
-    Route::get('inventory/expiring-soon/list', [InventoryController::class, 'expiringSoon']);
-    Route::get('inventory/stats/overview', [InventoryController::class, 'stats']);
+    Route::get('inventory', [InventoryController::class, 'index']);
+    Route::post('inventory/update', [InventoryController::class, 'update']);
+    Route::get('inventory/low-stock', [InventoryController::class, 'lowStock']);
+    Route::post('purchase-request', [InventoryController::class, 'createPurchaseRequest']);
     
-    // Suppliers
-    Route::apiResource('suppliers', SupplierController::class);
+    // Controlled Substances
+    Route::get('controlled-drugs', [InventoryController::class, 'controlledDrugs']);
+    Route::post('controlled-drugs/log', [InventoryController::class, 'logControlledDrug']);
     
-    // Drug Purchases
-    Route::apiResource('drug-purchases', DrugPurchaseController::class);
-    Route::post('drug-purchases/{id}/receive', [DrugPurchaseController::class, 'receive']);
+    // Labels
+    Route::post('labels/generate', [PrescriptionController::class, 'generateLabel']);
+    Route::post('labels/print', [PrescriptionController::class, 'printLabel']);
+    
+    // Returns
+    Route::post('returns', [InventoryController::class, 'processReturn']);
+    Route::get('returns', [InventoryController::class, 'getReturns']);
+    
+    // Reports & Audit
+    Route::get('reports/inventory', [InventoryController::class, 'inventoryReport']);
+    Route::get('reports/storage', [InventoryController::class, 'storageReport']);
+    Route::get('audit-logs', [InventoryController::class, 'auditLogs']);
 });
 
 // Public clinic endpoints
