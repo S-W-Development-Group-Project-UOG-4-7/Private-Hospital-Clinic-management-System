@@ -46,6 +46,8 @@ export interface ReceptionistAppointment {
   id: number;
   patient_id: number;
   doctor_id: number | null;
+  clinic?: string | null;
+  appointment_number?: number | null;
   appointment_date: string;
   appointment_time: string;
   type: AppointmentType;
@@ -161,6 +163,7 @@ export interface UpdateReceptionistPatientPayload {
 export interface CreateReceptionistAppointmentPayload {
   patient_id: string | number;
   doctor_id?: number | null;
+  clinic?: string | null;
   appointment_date: string;
   appointment_time: string;
   type?: AppointmentType;
@@ -172,6 +175,7 @@ export interface CreateReceptionistAppointmentPayload {
 export interface UpdateReceptionistAppointmentPayload {
   patient_id?: string | number;
   doctor_id?: number | null;
+  clinic?: string | null;
   appointment_date?: string;
   appointment_time?: string;
   type?: AppointmentType;

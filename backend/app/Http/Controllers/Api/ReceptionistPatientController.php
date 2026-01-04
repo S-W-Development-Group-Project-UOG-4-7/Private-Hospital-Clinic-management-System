@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PatientProfile;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -89,9 +90,19 @@ class ReceptionistPatientController extends Controller
         $patient->assignRole('patient');
 
         // Generate patient ID starting from 001
-        $lastPatient = PatientProfile::whereNotNull('patient_id')
-            ->orderByRaw('CAST(patient_id AS UNSIGNED) DESC')
-            ->first();
+        $driver = DB::connection()->getDriverName();
+        $lastPatientQuery = PatientProfile::query()
+            ->whereNotNull('patient_id');
+
+        if ($driver === 'pgsql') {
+            $lastPatientQuery
+                ->whereRaw("patient_id ~ '^[0-9]+$'")
+                ->orderByRaw('patient_id::int DESC');
+        } else {
+            $lastPatientQuery->orderByRaw('CAST(patient_id AS UNSIGNED) DESC');
+        }
+
+        $lastPatient = $lastPatientQuery->first();
         $nextPatientId = 1;
         if ($lastPatient && $lastPatient->patient_id) {
             $lastId = (int) $lastPatient->patient_id;

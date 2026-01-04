@@ -95,13 +95,10 @@ const ReceptionistDashboard: React.FC = () => {
   const [appointmentPatients, setAppointmentPatients] = useState<ReceptionistPatient[]>([]);
   const [appointmentForm, setAppointmentForm] = useState({
     patient_id: '',
-    doctor_id: '',
     appointment_date: '',
     appointment_time: '',
     type: 'in_person' as 'in_person' | 'telemedicine',
     status: 'scheduled' as 'scheduled' | 'completed' | 'cancelled',
-    reason: '',
-    notes: '',
   });
 
   const [queueLoading, setQueueLoading] = useState(false);
@@ -411,13 +408,10 @@ const ReceptionistDashboard: React.FC = () => {
     setEditingAppointment(null);
     setAppointmentForm({
       patient_id: '',
-      doctor_id: '',
       appointment_date: '',
       appointment_time: '',
       type: 'in_person',
       status: 'scheduled',
-      reason: '',
-      notes: '',
     });
     loadAppointmentPatients();
     setAppointmentModalOpen(true);
@@ -427,13 +421,10 @@ const ReceptionistDashboard: React.FC = () => {
     setEditingAppointment(appt);
     setAppointmentForm({
       patient_id: String(appt.patient_id),
-      doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
       appointment_date: appt.appointment_date || '',
       appointment_time: (appt.appointment_time || '').slice(0, 5),
       type: appt.type || 'in_person',
       status: appt.status || 'scheduled',
-      reason: appt.reason || '',
-      notes: appt.notes || '',
     });
     loadAppointmentPatients();
     setAppointmentModalOpen(true);
@@ -451,7 +442,6 @@ const ReceptionistDashboard: React.FC = () => {
     setAppointmentSaving(true);
     try {
       const patientId = appointmentForm.patient_id.trim();
-      const doctorId = appointmentForm.doctor_id.trim() === '' ? null : Number(appointmentForm.doctor_id);
       if (patientId === '') {
         setError('Patient id is required');
         return;
@@ -460,27 +450,22 @@ const ReceptionistDashboard: React.FC = () => {
       if (editingAppointment) {
         await receptionistApi.appointments.update(editingAppointment.id, {
           patient_id: patientId,
-          doctor_id: Number.isFinite(doctorId as any) ? (doctorId as number) : null,
           appointment_date: appointmentForm.appointment_date,
           appointment_time: appointmentForm.appointment_time,
           type: appointmentForm.type,
           status: appointmentForm.status,
-          reason: appointmentForm.reason || null,
-          notes: appointmentForm.notes || null,
         });
         toast.success('Appointment updated');
       } else {
-        await receptionistApi.appointments.create({
+        const created = await receptionistApi.appointments.create({
           patient_id: patientId,
-          doctor_id: Number.isFinite(doctorId as any) ? (doctorId as number) : null,
           appointment_date: appointmentForm.appointment_date,
           appointment_time: appointmentForm.appointment_time,
           type: appointmentForm.type,
           status: appointmentForm.status,
-          reason: appointmentForm.reason || null,
-          notes: appointmentForm.notes || null,
         });
-        toast.success('Appointment created');
+        const apptNo = created?.appointment_number;
+        toast.success(apptNo ? `Appointment created (No: ${apptNo})` : 'Appointment created');
       }
 
       closeAppointmentModal();
@@ -1990,22 +1975,6 @@ const ReceptionistDashboard: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Doctor</label>
-                  <select
-                    value={appointmentForm.doctor_id}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, doctor_id: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    disabled={doctorsLoading}
-                  >
-                    <option value="">Unassigned</option>
-                    {doctors.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {`${d.first_name || ''} ${d.last_name || ''}`.trim() || d.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                   <input
                     type="date"
@@ -2047,24 +2016,6 @@ const ReceptionistDashboard: React.FC = () => {
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                  <textarea
-                    value={appointmentForm.reason}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, reason: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={2}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <textarea
-                    value={appointmentForm.notes}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, notes: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={2}
-                  />
                 </div>
               </div>
               <div className="flex gap-4">
