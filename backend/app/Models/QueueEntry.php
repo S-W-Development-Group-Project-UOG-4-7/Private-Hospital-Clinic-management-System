@@ -6,29 +6,32 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Appointment extends Model
+class QueueEntry extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'appointment_id',
         'patient_id',
         'doctor_id',
-        'clinic',
-        'appointment_date',
-        'appointment_time',
-        'type',
+        'queue_date',
+        'queue_number',
         'status',
-        'confirmed_at',
-        'is_walk_in',
-        'reason',
-        'notes',
+        'checked_in_at',
+        'checked_out_at',
+        'created_by',
     ];
 
     protected $casts = [
-        'appointment_date' => 'date',
-        'confirmed_at' => 'datetime',
-        'is_walk_in' => 'boolean',
+        'queue_date' => 'date',
+        'checked_in_at' => 'datetime',
+        'checked_out_at' => 'datetime',
     ];
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
+    }
 
     public function patient(): BelongsTo
     {
@@ -38,5 +41,10 @@ class Appointment extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

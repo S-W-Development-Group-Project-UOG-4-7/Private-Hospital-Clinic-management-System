@@ -25,8 +25,12 @@ class DatabaseSeeder extends Seeder
             'patient',
         ]);
 
+        // Create roles for both 'web' and 'sanctum' guards
         $roleIds = $roleSlugs->mapWithKeys(function (string $roleName) {
-            $role = Role::findOrCreate($roleName, 'web');
+            // Create role for web guard (for web routes)
+            Role::findOrCreate($roleName, 'web');
+            // Create role for sanctum guard (for API routes)
+            $role = Role::findOrCreate($roleName, 'sanctum');
             return [$roleName => $role->id];
         });
 
@@ -40,40 +44,24 @@ class DatabaseSeeder extends Seeder
             return $candidate;
         };
 
-        $adminEmail = 'admin@example.com';
+        $adminEmail = 'admin@mediclinic.com';
         $adminUsername = User::where('email', $adminEmail)->value('username') ?: (User::where('username', 'admin')->exists() ? $makeUniqueUsername('admin') : 'admin');
 
+        // Admin user
         $admin = User::updateOrCreate(
             ['email' => $adminEmail],
             [
                 'first_name' => 'System',
-                'last_name' => 'Admin',
+                'last_name' => 'Administrator',
                 'username' => $adminUsername,
-                'password' => Hash::make('Admin@123'),
+                'password' => Hash::make('admin123'),
                 'role_id' => $roleIds['admin'] ?? null,
             ]
         );
-
         $admin->syncRoles(['admin']);
 
-        $patientEmail = 'patient@example.com';
-        $patientUsername = User::where('email', $patientEmail)->value('username') ?: (User::where('username', 'patient')->exists() ? $makeUniqueUsername('patient') : 'patient');
-
-        $patient = User::updateOrCreate(
-            ['email' => $patientEmail],
-            [
-                'first_name' => 'Test',
-                'last_name' => 'Patient',
-                'username' => $patientUsername,
-                'password' => Hash::make('Patient@123'),
-                'role_id' => $roleIds['patient'] ?? null,
-            ]
-        );
-
-        $patient->syncRoles(['patient']);
-
         // Doctor user
-        $doctorEmail = 'doctor@example.com';
+        $doctorEmail = 'doctor@mediclinic.com';
         $doctorUsername = User::where('email', $doctorEmail)->value('username') ?: (User::where('username', 'doctor')->exists() ? $makeUniqueUsername('doctor') : 'doctor');
 
         $doctor = User::updateOrCreate(
@@ -82,45 +70,58 @@ class DatabaseSeeder extends Seeder
                 'first_name' => 'Dr. John',
                 'last_name' => 'Smith',
                 'username' => $doctorUsername,
-                'password' => Hash::make('Doctor@123'),
+                'password' => Hash::make('doctor123'),
                 'role_id' => $roleIds['doctor'] ?? null,
             ]
         );
-
         $doctor->syncRoles(['doctor']);
 
         // Pharmacist user
-        $pharmacistEmail = 'pharmacist@example.com';
+        $pharmacistEmail = 'pharmacist@mediclinic.com';
         $pharmacistUsername = User::where('email', $pharmacistEmail)->value('username') ?: (User::where('username', 'pharmacist')->exists() ? $makeUniqueUsername('pharmacist') : 'pharmacist');
 
         $pharmacist = User::updateOrCreate(
             ['email' => $pharmacistEmail],
             [
-                'first_name' => 'Pharmacy',
-                'last_name' => 'Manager',
+                'first_name' => 'Sarah',
+                'last_name' => 'Johnson',
                 'username' => $pharmacistUsername,
-                'password' => Hash::make('Pharmacist@123'),
+                'password' => Hash::make('pharmacist123'),
                 'role_id' => $roleIds['pharmacist'] ?? null,
             ]
         );
-
         $pharmacist->syncRoles(['pharmacist']);
 
         // Receptionist user
-        $receptionistEmail = 'receptionist@example.com';
+        $receptionistEmail = 'receptionist@mediclinic.com';
         $receptionistUsername = User::where('email', $receptionistEmail)->value('username') ?: (User::where('username', 'receptionist')->exists() ? $makeUniqueUsername('receptionist') : 'receptionist');
 
         $receptionist = User::updateOrCreate(
             ['email' => $receptionistEmail],
             [
-                'first_name' => 'Reception',
-                'last_name' => 'Staff',
+                'first_name' => 'Emily',
+                'last_name' => 'Brown',
                 'username' => $receptionistUsername,
-                'password' => Hash::make('Receptionist@123'),
+                'password' => Hash::make('receptionist123'),
                 'role_id' => $roleIds['receptionist'] ?? null,
             ]
         );
-
         $receptionist->syncRoles(['receptionist']);
+
+        // Patient user
+        $patientEmail = 'patient@mediclinic.com';
+        $patientUsername = User::where('email', $patientEmail)->value('username') ?: (User::where('username', 'patient')->exists() ? $makeUniqueUsername('patient') : 'patient');
+
+        $patient = User::updateOrCreate(
+            ['email' => $patientEmail],
+            [
+                'first_name' => 'John',
+                'last_name' => 'Wilson',
+                'username' => $patientUsername,
+                'password' => Hash::make('patient123'),
+                'role_id' => $roleIds['patient'] ?? null,
+            ]
+        );
+        $patient->syncRoles(['patient']);
     }
 }

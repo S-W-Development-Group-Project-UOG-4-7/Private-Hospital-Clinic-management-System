@@ -36,12 +36,12 @@ class AuthController extends Controller
         }
         $username = $usernameBase;
         $suffix = 1;
-        while (User::where('username', $username)->exists()) {
+        while (\App\Models\User::where('username', $username)->exists()) {
             $username = $usernameBase . $suffix;
             $suffix++;
         }
 
-        $user = User::create([
+        $user = \App\Models\User::create([
             'first_name' => $firstName,
             'last_name' => $lastName,
             'username' => $username,
@@ -50,7 +50,7 @@ class AuthController extends Controller
         ]);
 
         // Assign role using Spatie Permission
-        SpatieRole::findOrCreate($roleName, 'web');
+        SpatieRole::findOrCreate($roleName, 'sanctum');
         $user->assignRole($roleName);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -78,7 +78,7 @@ class AuthController extends Controller
         ]);
 
         // Since we only have email now, search by email only
-        $user = User::where('email', $credentials['login'])->first();
+        $user = \App\Models\User::where('email', $credentials['login'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
