@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\PatientProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -16,11 +16,24 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
+        \Log::info('Registration attempt', $request->all());
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['nullable', 'string', Rule::in(['patient'])],
+            'date_of_birth' => ['nullable', 'date'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'gender' => ['nullable', 'string', 'in:male,female,other'],
+            'blood_type' => ['nullable', 'string', 'in:A+,A-,B+,B-,AB+,AB-,O+,O-'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'state' => ['nullable', 'string', 'max:100'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'guardian_name' => ['nullable', 'string', 'max:255'],
+            'guardian_email' => ['nullable', 'email', 'max:255'],
+            'guardian_phone' => ['nullable', 'string', 'max:20'],
+            'guardian_relationship' => ['nullable', 'string', 'max:100'],
         ]);
 
         // Public signup is patient-only
@@ -58,14 +71,33 @@ class AuthController extends Controller
 
         $user = User::create($userData);
 
+        // Create patient profile with additional information
+        PatientProfile::create([
+            'user_id' => $user->id,
+            'phone' => $data['phone'] ?? null,
+            'date_of_birth' => $data['date_of_birth'] ?? null,
+            'gender' => $data['gender'] ?? null,
+            'address' => $data['address'] ?? null,
+            'blood_type' => $data['blood_type'] ?? null,
+            'city' => $data['city'] ?? null,
+            'state' => $data['state'] ?? null,
+            'postal_code' => $data['postal_code'] ?? null,
+            'guardian_name' => $data['guardian_name'] ?? null,
+            'guardian_email' => $data['guardian_email'] ?? null,
+            'guardian_phone' => $data['guardian_phone'] ?? null,
+            'guardian_relationship' => $data['guardian_relationship'] ?? null,
+        ]);
+
         // Assign role using Spatie Permission
-        SpatieRole::findOrCreate($roleName, 'web');
-        $user->assignRole($roleName);
+        $role = SpatieRole::findOrCreate($roleName, 'sanctum');
+        $user->assignRole($role);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // Get the user's role name
         $userRole = $user->roles->first()?->name ?? 'patient';
+
+        \Log::info('Registration successful for user', ['id' => $user->id, 'email' => $user->email]);
 
         return response()->json([
             'message' => 'Registration successful.',

@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
+use App\Models\PatientProfile;
 
 class User extends Authenticatable
 {
@@ -71,5 +72,10 @@ class User extends Authenticatable
     public function clinic(): BelongsTo
     {
         return $this->belongsTo(Clinic::class, 'clinic_id');
+    }
+
+    public function patientProfile(): HasOne
+    {
+        return $this->hasOne(PatientProfile::class);
     }
 }

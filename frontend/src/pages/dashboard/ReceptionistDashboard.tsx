@@ -41,7 +41,10 @@ const ReceptionistDashboard: React.FC = () => {
           <div className="bg-white rounded-lg shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Patient Registration</h2>
             <p className="text-gray-600 mb-4">Register new patients and update information</p>
-            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full">
+            <button 
+              onClick={() => navigate('/receptionist/register-patient')}
+              className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition w-full"
+            >
               Register Patient
             </button>
           </div>
