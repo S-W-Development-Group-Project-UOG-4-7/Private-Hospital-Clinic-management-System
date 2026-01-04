@@ -33,6 +33,7 @@ import type {
   PatientEhrData,
   Referral,
   UpdateDiagnosisPayload,
+  CreatePatientPayload,
 } from '../../types/doctor';
 import type { AuthUser } from '../../types/auth';
 
@@ -134,6 +135,26 @@ const DoctorDashboardView: React.FC = () => {
     referral_date: new Date().toISOString().slice(0, 10),
     appointment_date: '',
   });
+
+  // Patient registration (doctor)
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [patientSaving, setPatientSaving] = useState(false);
+  const [patientForm, setPatientForm] = useState<CreatePatientPayload>({
+    name: '',
+    email: '',
+    password: '',
+    date_of_birth: '',
+    phone: '',
+    gender: '',
+    blood_type: '',
+    address: '',
+    city: '',
+    state: '',
+    postal_code: '',
+  });
+  const [patientError, setPatientError] = useState<string | null>(null);
+  const [patientSuccessMsg, setPatientSuccessMsg] = useState<string | null>(null);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
@@ -243,6 +264,38 @@ const DoctorDashboardView: React.FC = () => {
   const openCreateDiagnosis = () => {
     setEditingDiagnosis(null);
     setDiagnosisModalOpen(true);
+  };
+
+  const openPatientRegistration = () => {
+    setPatientError(null);
+    setPatientSuccessMsg(null);
+    setGeneratedPassword(null);
+    setPatientForm((p) => ({ ...p, name: '', email: '', password: '', date_of_birth: '', phone: '', gender: '', blood_type: '', address: '', city: '', state: '', postal_code: '' }));
+    setPatientModalOpen(true);
+  };
+
+  const createPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPatientError(null);
+    setPatientSuccessMsg(null);
+    if (!patientForm.name.trim() || !patientForm.email.trim()) {
+      setPatientError('Name and email are required');
+      return;
+    }
+    setPatientSaving(true);
+    try {
+      const resp = await doctorApi.patients.create(patientForm);
+      setGeneratedPassword(resp.generated_password || null);
+      setPatientSuccessMsg('Patient registered successfully');
+      // Optionally clear form or keep for copy
+      setPatientForm((p) => ({ ...p, password: '' }));
+      // Close modal after a short delay
+      setTimeout(() => setPatientModalOpen(false), 1000);
+    } catch (err: any) {
+      setPatientError(err?.message || 'Failed to register patient');
+    } finally {
+      setPatientSaving(false);
+    }
   };
 
   const openEditDiagnosis = (d: Diagnosis) => {
@@ -701,6 +754,25 @@ const DoctorDashboardView: React.FC = () => {
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.2 }}
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                  >
+                    <div className="mb-6">
+                      <ClipboardList className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Register Patient</h2>
+                      <p className="text-gray-600">Create a new patient account</p>
+                    </div>
+                    <button
+                      onClick={openPatientRegistration}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      Register Patient
+                    </button>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
@@ -1562,6 +1634,137 @@ const DoctorDashboardView: React.FC = () => {
                 >
                   {labOrderSaving ? 'Saving...' : 'Create Order'}
                 </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {patientModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold">Register Patient</h2>
+                <button
+                  type="button"
+                  onClick={() => !patientSaving && setPatientModalOpen(false)}
+                  disabled={patientSaving}
+                  className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-60"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {patientError && <div className="mb-4 text-sm text-red-700">{patientError}</div>}
+              {patientSuccessMsg && (
+                <div className="mb-4 text-sm text-green-700">
+                  {patientSuccessMsg}{generatedPassword ? <div className="mt-2 text-xs text-gray-700">Generated password: <code className="bg-gray-100 px-2 py-1 rounded">{generatedPassword}</code></div> : null}
+                </div>
+              )}
+
+              <form onSubmit={createPatient} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                    <input
+                      required
+                      value={patientForm.name}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, name: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input
+                      required
+                      type="email"
+                      value={patientForm.email}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, email: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Password (optional)</label>
+                    <input
+                      type="password"
+                      value={patientForm.password || ''}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, password: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="Leave blank to auto-generate"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                    <input
+                      type="date"
+                      value={patientForm.date_of_birth || ''}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, date_of_birth: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      value={patientForm.phone || ''}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, phone: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                    <select
+                      value={patientForm.gender || ''}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, gender: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    >
+                      <option value="">Select</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Blood Type</label>
+                    <input
+                      value={patientForm.blood_type || ''}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, blood_type: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="e.g. A+"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input
+                      value={patientForm.address || ''}
+                      onChange={(e) => setPatientForm((p) => ({ ...p, address: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPatientModalOpen(false)}
+                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                    disabled={patientSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 rounded-lg bg-teal-500 hover:bg-teal-600 text-white font-bold"
+                    disabled={patientSaving}
+                  >
+                    {patientSaving ? 'Registering...' : 'Register Patient'}
+                  </button>
+                </div>
               </form>
             </div>
           </div>

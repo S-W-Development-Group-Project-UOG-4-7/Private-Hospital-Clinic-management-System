@@ -141,6 +141,30 @@ export interface UpdateVitalSignPayload {
   notes?: string | null;
 }
 
+export interface Patient {
+  id: number;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  date_of_birth?: string | null;
+  phone?: string | null;
+}
+
+export interface CreatePatientPayload {
+  name: string;
+  email: string;
+  password?: string;
+  date_of_birth?: string | null;
+  phone?: string | null;
+  gender?: string | null;
+  blood_type?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+}
+
 export interface Diagnosis {
   id: number;
   patient_id: number;
