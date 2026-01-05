@@ -26,7 +26,18 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $data = $request->validated();
+
+        // If the users table does not have a 'name' column, map 'name' into first_name/last_name
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('users', 'name') && isset($data['name'])) {
+            $fullName = trim($data['name']);
+            $parts = preg_split('/\s+/', $fullName) ?: [];
+            $data['first_name'] = $parts[0] ?? $fullName;
+            $data['last_name'] = count($parts) > 1 ? trim(implode(' ', array_slice($parts, 1))) : '';
+            unset($data['name']);
+        }
+
+        $request->user()->fill($data);
 
         if ($request->user()->isDirty('email')) {
             $request->user()->email_verified_at = null;

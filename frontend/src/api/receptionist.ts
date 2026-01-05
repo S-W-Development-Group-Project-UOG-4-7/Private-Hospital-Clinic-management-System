@@ -11,6 +11,7 @@ import type {
   Invoice,
   PaginatedResponse,
   QueueEntry,
+  ReceptionistAppointmentCreateResponse,
   ReceptionistAppointment,
   ReceptionistDashboardStats,
   ReceptionistDoctor,
@@ -144,14 +145,14 @@ export const receptionistApi = {
       return handleJson<PaginatedResponse<ReceptionistAppointment>>(response);
     },
 
-    create: async (payload: CreateReceptionistAppointmentPayload): Promise<ReceptionistAppointment> => {
+    create: async (payload: CreateReceptionistAppointmentPayload): Promise<ReceptionistAppointmentCreateResponse> => {
       const response = await fetch(API_ENDPOINTS.RECEPTIONIST_APPOINTMENTS, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
-      return handleJson<ReceptionistAppointment>(response);
+      return handleJson<ReceptionistAppointmentCreateResponse>(response);
     },
 
     update: async (id: number, payload: UpdateReceptionistAppointmentPayload): Promise<ReceptionistAppointment> => {

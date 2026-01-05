@@ -234,7 +234,7 @@ const ReceptionistDashboard: React.FC = () => {
     try {
       const resp = await receptionistApi.queue.list({
         date: queueDate,
-        doctor_id: queueDoctorFilter ? Number(queueDoctorFilter) : undefined,
+        doctor_id: queueDoctorFilter && queueDoctorFilter !== '0' ? Number(queueDoctorFilter) : queueDoctorFilter === '0' ? 0 : undefined,
       });
       setQueueItems(Array.isArray(resp.data) ? resp.data : []);
     } catch (e: any) {
@@ -464,12 +464,25 @@ const ReceptionistDashboard: React.FC = () => {
           type: appointmentForm.type,
           status: appointmentForm.status,
         });
-        const apptNo = created?.appointment_number;
-        toast.success(apptNo ? `Appointment created (No: ${apptNo})` : 'Appointment created');
+
+        const apptNo = created?.appointment?.appointment_number;
+        const queueNo = created?.queue_entry?.queue_number;
+
+        if (apptNo && queueNo) {
+          toast.success(`Appointment created (No: ${apptNo}) - Added to OPD queue (No: ${queueNo})`);
+        } else if (apptNo) {
+          toast.success(`Appointment created (No: ${apptNo})`);
+        } else {
+          toast.success('Appointment created');
+        }
       }
 
       closeAppointmentModal();
       await loadAppointments(1);
+
+      if (active === 'queue') {
+        await loadQueue();
+      }
     } catch (e: any) {
       setError(e?.message || 'Failed to save appointment');
     } finally {

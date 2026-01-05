@@ -15,6 +15,7 @@ class Appointment extends Model
         'doctor_id',
         'clinic',
         'appointment_number',
+        'clinic_id',
         'appointment_date',
         'appointment_time',
         'type',
@@ -39,5 +40,10 @@ class Appointment extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');
+    }
+
+    public function clinic(): BelongsTo
+    {
+        return $this->belongsTo(Clinic::class, 'clinic_id');
     }
 }

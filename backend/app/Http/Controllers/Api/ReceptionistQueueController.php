@@ -27,7 +27,13 @@ class ReceptionistQueueController extends Controller
             ->orderBy('queue_number');
 
         if ($request->has('doctor_id')) {
-            $query->where('doctor_id', (int) $request->get('doctor_id'));
+            $doctorId = (int) $request->get('doctor_id');
+
+            if ($doctorId === 0) {
+                $query->whereNull('doctor_id');
+            } else {
+                $query->where('doctor_id', $doctorId);
+            }
         }
 
         if ($request->has('status')) {
@@ -68,21 +74,19 @@ class ReceptionistQueueController extends Controller
 
             $patientId = $profile->user->id;
         } elseif ($rawPatientIdOrCode !== '') {
-            if (ctype_digit($rawPatientIdOrCode) && User::query()->whereKey((int) $rawPatientIdOrCode)->exists()) {
+            $profile = PatientProfile::query()
+                ->where('patient_id', $rawPatientIdOrCode)
+                ->with('user')
+                ->first();
+
+            if ($profile && $profile->user) {
+                $patientId = $profile->user->id;
+            } elseif (ctype_digit($rawPatientIdOrCode) && User::query()->whereKey((int) $rawPatientIdOrCode)->exists()) {
                 $patientId = (int) $rawPatientIdOrCode;
             } else {
-                $profile = PatientProfile::query()
-                    ->where('patient_id', $rawPatientIdOrCode)
-                    ->with('user')
-                    ->first();
-
-                if (! $profile || ! $profile->user) {
-                    return response()->json([
-                        'message' => 'Patient not found for provided patient id.',
-                    ], 422);
-                }
-
-                $patientId = $profile->user->id;
+                return response()->json([
+                    'message' => 'Patient not found for provided patient id.',
+                ], 422);
             }
         }
 

@@ -17,6 +17,7 @@ import type {
   UpdateAppointmentPayload,
 } from '../../types/patient';
 import { Bell, Calendar, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Video, X } from 'lucide-react';
+import ClinicAppointmentForm from '../../components/ClinicAppointmentForm';
 
 type SectionKey =
   | 'overview'
@@ -50,6 +51,7 @@ const PatientDashboard: React.FC = () => {
 
   const [profileData, setProfileData] = useState<PatientProfileResponse | null>(null);
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
+  const [clinics, setClinics] = useState<{ id: number; name: string }[]>([]);
 
   const [teleconsultationsLoaded, setTeleconsultationsLoaded] = useState(false);
   const [teleconsultationsLoading, setTeleconsultationsLoading] = useState(false);
@@ -93,6 +95,7 @@ const PatientDashboard: React.FC = () => {
   const [appointmentSaving, setAppointmentSaving] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<PatientAppointment | null>(null);
   const [appointmentForm, setAppointmentForm] = useState({
+    clinic_id: '',
     doctor_id: '',
     appointment_date: '',
     appointment_time: '',
@@ -309,24 +312,47 @@ const PatientDashboard: React.FC = () => {
   const openCreateAppointment = () => {
     setEditingAppointment(null);
     setAppointmentForm({
+      clinic_id: '',
       doctor_id: '',
       appointment_date: '',
       appointment_time: '',
       type: 'in_person',
       reason: '',
     });
+    // Load clinics so patient can choose clinic (default OPD is used server-side if left blank)
+    (async () => {
+      try {
+        const resp = await fetch('/api/clinics');
+        const json = await resp.json();
+        setClinics(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        // non-blocking
+      }
+    })();
     setAppointmentModalOpen(true);
   };
 
   const openEditAppointment = (appt: PatientAppointment) => {
     setEditingAppointment(appt);
     setAppointmentForm({
+      clinic_id: appt.clinic_id ? String(appt.clinic_id) : '',
       doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
       appointment_date: appt.appointment_date || '',
       appointment_time: (appt.appointment_time || '').slice(0, 5),
       type: appt.type || 'in_person',
       reason: appt.reason || '',
     });
+    // When editing, load clinics so the select is populated
+    (async () => {
+      try {
+        const resp = await fetch('/api/clinics');
+        const json = await resp.json();
+        setClinics(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        // non-blocking
+      }
+    })();
+
     setAppointmentModalOpen(true);
   };
 
@@ -343,7 +369,10 @@ const PatientDashboard: React.FC = () => {
 
     try {
       const doctorIdValue = appointmentForm.doctor_id.trim() === '' ? null : Number(appointmentForm.doctor_id);
+      const clinicIdValue = appointmentForm.clinic_id.trim() === '' ? null : Number(appointmentForm.clinic_id);
+
       const base: CreateAppointmentPayload = {
+        clinic_id: clinicIdValue,
         doctor_id: Number.isFinite(doctorIdValue as any) ? (doctorIdValue as number) : null,
         appointment_date: appointmentForm.appointment_date,
         appointment_time: appointmentForm.appointment_time,
@@ -353,6 +382,7 @@ const PatientDashboard: React.FC = () => {
 
       if (editingAppointment) {
         const payload: UpdateAppointmentPayload = {
+          clinic_id: base.clinic_id ?? null,
           doctor_id: base.doctor_id ?? null,
           appointment_date: base.appointment_date,
           appointment_time: base.appointment_time,
@@ -371,6 +401,17 @@ const PatientDashboard: React.FC = () => {
       setError(e?.message || 'Failed to save appointment');
     } finally {
       setAppointmentSaving(false);
+    }
+  };
+
+  // Handler used when ClinicAppointmentForm completes a booking
+  const handleClinicAppointmentSuccess = async (data: any) => {
+    setAppointmentModalOpen(false);
+    try {
+      await refreshAppointments();
+      setActive('appointments');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load appointments');
     }
   };
 
@@ -1583,8 +1624,22 @@ const PatientDashboard: React.FC = () => {
               </button>
             </div>
 
+            {editingAppointment ? (
             <form onSubmit={submitAppointment} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Clinic (optional)</label>
+                  <select
+                    value={appointmentForm.clinic_id}
+                    onChange={(e) => setAppointmentForm((p) => ({ ...p, clinic_id: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="">Default (OPD)</option>
+                    {clinics.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Doctor ID (optional)</label>
                   <input
@@ -1656,6 +1711,9 @@ const PatientDashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+            ) : (
+              <ClinicAppointmentForm onSuccess={handleClinicAppointmentSuccess} />
+            ) }
           </div>
         </div>
       )}

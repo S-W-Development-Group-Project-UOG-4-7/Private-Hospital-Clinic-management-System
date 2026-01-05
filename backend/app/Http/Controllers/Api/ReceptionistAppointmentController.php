@@ -77,21 +77,19 @@ class ReceptionistAppointmentController extends Controller
 
             $patientId = $profile->user->id;
         } elseif ($rawPatientIdOrCode !== '') {
-            if (ctype_digit($rawPatientIdOrCode) && User::query()->whereKey((int) $rawPatientIdOrCode)->exists()) {
+            $profile = PatientProfile::query()
+                ->where('patient_id', $rawPatientIdOrCode)
+                ->with('user')
+                ->first();
+
+            if ($profile && $profile->user) {
+                $patientId = $profile->user->id;
+            } elseif (ctype_digit($rawPatientIdOrCode) && User::query()->whereKey((int) $rawPatientIdOrCode)->exists()) {
                 $patientId = (int) $rawPatientIdOrCode;
             } else {
-                $profile = PatientProfile::query()
-                    ->where('patient_id', $rawPatientIdOrCode)
-                    ->with('user')
-                    ->first();
-
-                if (! $profile || ! $profile->user) {
-                    return response()->json([
-                        'message' => 'Patient not found for provided patient id.',
-                    ], 422);
-                }
-
-                $patientId = $profile->user->id;
+                return response()->json([
+                    'message' => 'Patient not found for provided patient id.',
+                ], 422);
             }
         }
 
@@ -135,6 +133,8 @@ class ReceptionistAppointmentController extends Controller
                 ->whereIn('status', ['waiting', 'in_consultation', 'completed'])
                 ->exists();
 
+            $queueEntry = null;
+
             if (! $alreadyInQueue) {
                 $lastQueueNumber = QueueEntry::query()
                     ->whereDate('queue_date', $queueDate)
@@ -145,7 +145,7 @@ class ReceptionistAppointmentController extends Controller
 
                 $nextQueueNumber = ((int) ($lastQueueNumber ?? 0)) + 1;
 
-                QueueEntry::create([
+                $queueEntry = QueueEntry::create([
                     'appointment_id' => $appointment->id,
                     'patient_id' => $patientId,
                     'doctor_id' => null,
@@ -157,7 +157,10 @@ class ReceptionistAppointmentController extends Controller
                 ]);
             }
 
-            return response()->json($appointment->load(['patient', 'doctor']), 201);
+            return response()->json([
+                'appointment' => $appointment->load(['patient', 'doctor']),
+                'queue_entry' => $queueEntry?->load(['patient', 'doctor', 'appointment']),
+            ], 201);
         });
     }
 
@@ -269,11 +272,18 @@ class ReceptionistAppointmentController extends Controller
 
     public function destroy(int $id)
     {
-        $appointment = Appointment::findOrFail($id);
-        $appointment->delete();
+        return DB::transaction(function () use ($id) {
+            $appointment = Appointment::findOrFail($id);
 
-        return response()->json([
-            'message' => 'Appointment deleted successfully',
-        ]);
+            QueueEntry::query()
+                ->where('appointment_id', $appointment->id)
+                ->delete();
+
+            $appointment->delete();
+
+            return response()->json([
+                'message' => 'Appointment deleted successfully',
+            ]);
+        });
     }
 }

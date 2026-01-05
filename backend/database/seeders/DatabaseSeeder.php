@@ -123,5 +123,8 @@ class DatabaseSeeder extends Seeder
             ]
         );
         $patient->syncRoles(['patient']);
+
+        // Seed default clinics
+        $this->call([\Database\Seeders\ClinicSeeder::class]);
     }
 }

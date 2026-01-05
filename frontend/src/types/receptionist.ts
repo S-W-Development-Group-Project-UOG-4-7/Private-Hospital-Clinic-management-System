@@ -60,6 +60,11 @@ export interface ReceptionistAppointment {
   updated_at?: string;
 }
 
+export interface ReceptionistAppointmentCreateResponse {
+  appointment: ReceptionistAppointment;
+  queue_entry?: QueueEntry | null;
+}
+
 export type QueueStatus = 'waiting' | 'in_consultation' | 'completed' | 'cancelled';
 
 export interface QueueEntry {

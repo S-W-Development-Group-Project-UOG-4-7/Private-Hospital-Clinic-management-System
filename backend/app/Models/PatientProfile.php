@@ -18,6 +18,14 @@ class PatientProfile extends Model
         'date_of_birth',
         'gender',
         'address',
+        'blood_type',
+        'city',
+        'state',
+        'postal_code',
+        'guardian_name',
+        'guardian_email',
+        'guardian_phone',
+        'guardian_relationship',
     ];
 
     protected $casts = [
