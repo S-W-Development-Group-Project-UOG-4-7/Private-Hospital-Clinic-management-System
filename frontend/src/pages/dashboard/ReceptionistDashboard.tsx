@@ -106,6 +106,8 @@ const ReceptionistDashboard: React.FC = () => {
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueDate, setQueueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [queueDoctorFilter, setQueueDoctorFilter] = useState('');
+  const [queueStartTime, setQueueStartTime] = useState('');
+  const [queueEndTime, setQueueEndTime] = useState('');
   const [queueItems, setQueueItems] = useState<QueueEntry[]>([]);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [checkInSaving, setCheckInSaving] = useState(false);
@@ -237,6 +239,8 @@ const ReceptionistDashboard: React.FC = () => {
       const resp = await receptionistApi.queue.list({
         date: queueDate,
         doctor_id: queueDoctorFilter && queueDoctorFilter !== '0' ? Number(queueDoctorFilter) : queueDoctorFilter === '0' ? 0 : undefined,
+        start_time: queueStartTime || undefined,
+        end_time: queueEndTime || undefined,
       });
       setQueueItems(Array.isArray(resp.data) ? resp.data : []);
     } catch (e: any) {
@@ -244,7 +248,7 @@ const ReceptionistDashboard: React.FC = () => {
     } finally {
       setQueueLoading(false);
     }
-  }, [queueDate, queueDoctorFilter]);
+  }, [queueDate, queueDoctorFilter, queueStartTime, queueEndTime]);
 
   const loadInvoices = useCallback(async (page = 1) => {
     setError(null);
@@ -1437,12 +1441,30 @@ const ReceptionistDashboard: React.FC = () => {
 
                 <div className="bg-white rounded-lg shadow-lg p-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input
-                      type="date"
-                      value={queueDate}
-                      onChange={(e) => setQueueDate(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="date"
+                        value={queueDate}
+                        onChange={(e) => setQueueDate(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="time"
+                          value={queueStartTime}
+                          onChange={(e) => setQueueStartTime(e.target.value)}
+                          className="w-1/2 px-3 py-2 border rounded-lg"
+                          aria-label="Start time"
+                        />
+                        <input
+                          type="time"
+                          value={queueEndTime}
+                          onChange={(e) => setQueueEndTime(e.target.value)}
+                          className="w-1/2 px-3 py-2 border rounded-lg"
+                          aria-label="End time"
+                        />
+                      </div>
+                    </div>
                     <select
                       value={queueDoctorFilter}
                       onChange={(e) => setQueueDoctorFilter(e.target.value)}
@@ -1475,6 +1497,7 @@ const ReceptionistDashboard: React.FC = () => {
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Queue</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Doctor</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -1492,8 +1515,15 @@ const ReceptionistDashboard: React.FC = () => {
                             queueItems.map((q) => (
                               <tr key={q.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4 text-sm text-gray-900">
-                                  <div className="font-semibold">#{q.queue_number}</div>
+                                  <div className="font-semibold">#{q.queue_number ?? '-'}</div>
                                   <div className="text-xs text-gray-500">{q.queue_date}</div>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-600">
+                                  {q.appointment?.appointment_time
+                                    ? q.appointment.appointment_time.slice(0, 5)
+                                    : q.checked_in_at
+                                    ? q.checked_in_at.slice(11, 16)
+                                    : '-'}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-600">
                                   {q.patient ? `${q.patient.first_name || ''} ${q.patient.last_name || ''}`.trim() : `#${q.patient_id}`}

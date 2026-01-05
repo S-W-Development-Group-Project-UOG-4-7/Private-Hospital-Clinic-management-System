@@ -17,6 +17,9 @@ class ReceptionistQueueController extends Controller
     {
         $date = $request->get('date') ?: now()->toDateString();
 
+        $startTime = $request->get('start_time');
+        $endTime = $request->get('end_time');
+
         $query = QueueEntry::query()
             ->whereDate('queue_date', $date)
             ->with([
@@ -40,8 +43,62 @@ class ReceptionistQueueController extends Controller
             $query->where('status', $request->get('status'));
         }
 
+        $entries = $query->get();
+
+        // Include scheduled appointments for the same date (even if not checked-in)
+        $appointmentIdsInQueue = $entries->pluck('appointment_id')->filter()->unique()->toArray();
+
+        $appointmentsQuery = Appointment::query()
+            ->whereDate('appointment_date', $date)
+            ->with([
+                'patient:id,first_name,last_name,email,username,is_active',
+                'doctor:id,first_name,last_name,email,username,is_active',
+            ])
+            ->orderBy('appointment_time');
+
+        if ($request->has('doctor_id')) {
+            $doctorId = (int) $request->get('doctor_id');
+            if ($doctorId === 0) {
+                $appointmentsQuery->whereNull('doctor_id');
+            } else {
+                $appointmentsQuery->where('doctor_id', $doctorId);
+            }
+        }
+
+        if (! empty($appointmentIdsInQueue)) {
+            $appointmentsQuery->whereNotIn('id', $appointmentIdsInQueue);
+        }
+
+        if ($startTime && $endTime) {
+            $appointmentsQuery->whereBetween('appointment_time', [$startTime, $endTime]);
+        } elseif ($startTime) {
+            $appointmentsQuery->where('appointment_time', '>=', $startTime);
+        } elseif ($endTime) {
+            $appointmentsQuery->where('appointment_time', '<=', $endTime);
+        }
+
+        $appointments = $appointmentsQuery->get();
+
+        // Transform appointments into queue-like items (not yet checked in)
+        $appointmentItems = $appointments->map(function ($a) {
+            return (object) [
+                'id' => 'appt_' . $a->id,
+                'queue_number' => null,
+                'queue_date' => $a->appointment_date,
+                'patient' => $a->patient ?? null,
+                'doctor' => $a->doctor ?? null,
+                'status' => $a->status ?? 'scheduled',
+                'appointment' => $a,
+            ];
+        });
+
+        // Merge checked-in entries first, then scheduled appointments
+        $combined = $entries->map(function ($e) {
+            return $e;
+        })->merge($appointmentItems);
+
         return response()->json([
-            'data' => $query->get(),
+            'data' => $combined->values()->all(),
         ]);
     }
 

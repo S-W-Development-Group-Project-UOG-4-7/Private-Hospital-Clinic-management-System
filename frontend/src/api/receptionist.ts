@@ -186,11 +186,13 @@ export const receptionistApi = {
   },
 
   queue: {
-    list: async (params?: { date?: string; doctor_id?: number; status?: string }): Promise<{ data: QueueEntry[] }> => {
+    list: async (params?: { date?: string; doctor_id?: number; status?: string; start_time?: string; end_time?: string }): Promise<{ data: QueueEntry[] }> => {
       const queryParams = new URLSearchParams();
       if (params?.date) queryParams.append('date', params.date);
       if (params?.doctor_id) queryParams.append('doctor_id', String(params.doctor_id));
       if (params?.status) queryParams.append('status', params.status);
+      if (params?.start_time) queryParams.append('start_time', params.start_time);
+      if (params?.end_time) queryParams.append('end_time', params.end_time);
 
       const url = queryParams.toString() ? `${API_ENDPOINTS.RECEPTIONIST_QUEUE}?${queryParams.toString()}` : API_ENDPOINTS.RECEPTIONIST_QUEUE;
 
