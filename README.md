@@ -54,6 +54,10 @@ Mr. Janith
 
 for their continuous guidance and support during this project.
 We also thank all lecturers and staff at LNBTI for providing the academic foundation required to complete this work successfully.
+<<<<<<< HEAD
+Finally, we appreciate the encouragement and support from our families, friends, and everyone who contributed to this project.
+=======
 Finally, we appreciate the encouragement and support from our families, friends, and everyone who contributed to this project.
 
 Nilusha's Testing Commitment
+>>>>>>> c137ee055ec83074b9ef6e1c8209415579f6e9ce
