@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Role as SpatieRole;
+use Faker\Factory as FakerFactory;
 
 class ReceptionistPatientController extends Controller
 {
@@ -181,5 +182,93 @@ class ReceptionistPatientController extends Controller
         return response()->json([
             'message' => 'Patient deactivated successfully',
         ]);
+    }
+
+    public function generateRandom(Request $request)
+    {
+        $validated = $request->validate([
+            'count' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $count = $validated['count'] ?? 5;
+
+        $created = [];
+
+        DB::transaction(function () use ($count, &$created) {
+            $faker = FakerFactory::create();
+
+            for ($i = 0; $i < $count; $i++) {
+                $firstName = $faker->firstName();
+                $lastName = $faker->lastName();
+
+                // username
+                $usernameBase = Str::slug($firstName . ' ' . $lastName, '');
+                $usernameBase = $usernameBase !== '' ? $usernameBase : 'patient';
+                $candidate = $usernameBase;
+                $suffix = 1;
+                while (User::where('username', $candidate)->exists()) {
+                    $candidate = $usernameBase . $suffix;
+                    $suffix++;
+                }
+                $username = $candidate;
+
+                // email
+                $emailBase = 'patient.' . $username . '@mediclinic.local';
+                $emailCandidate = $emailBase;
+                $emailSuffix = 1;
+                while (User::where('email', $emailCandidate)->exists()) {
+                    $emailCandidate = 'patient.' . $username . $emailSuffix . '@mediclinic.local';
+                    $emailSuffix++;
+                }
+                $email = $emailCandidate;
+
+                $defaultPassword = 'Patient@' . date('Y');
+
+                $patient = User::create([
+                    'first_name' => $firstName,
+                    'last_name' => $lastName,
+                    'username' => $username,
+                    'email' => $email,
+                    'password' => Hash::make($defaultPassword),
+                    'is_active' => true,
+                ]);
+
+                SpatieRole::findOrCreate('patient', 'sanctum');
+                $patient->assignRole('patient');
+
+                // Determine next patient id
+                $driver = DB::connection()->getDriverName();
+                $lastPatientQuery = PatientProfile::query()->whereNotNull('patient_id');
+
+                if ($driver === 'pgsql') {
+                    $lastPatientQuery
+                        ->whereRaw("patient_id ~ '^[0-9]+$'")
+                        ->orderByRaw('patient_id::int DESC');
+                } else {
+                    $lastPatientQuery->orderByRaw('CAST(patient_id AS UNSIGNED) DESC');
+                }
+
+                $lastPatient = $lastPatientQuery->first();
+                $nextPatientId = 1;
+                if ($lastPatient && $lastPatient->patient_id) {
+                    $lastId = (int) $lastPatient->patient_id;
+                    $nextPatientId = $lastId + 1;
+                }
+                $patientId = str_pad($nextPatientId, 3, '0', STR_PAD_LEFT);
+
+                PatientProfile::updateOrCreate(
+                    ['user_id' => $patient->id],
+                    [
+                        'patient_id' => $patientId,
+                        'phone' => $faker->numerify('07########'),
+                        'age' => $faker->numberBetween(1, 90),
+                    ]
+                );
+
+                $created[] = $patient->fresh()->load('patientProfile');
+            }
+        });
+
+        return response()->json(['data' => $created]);
     }
 }

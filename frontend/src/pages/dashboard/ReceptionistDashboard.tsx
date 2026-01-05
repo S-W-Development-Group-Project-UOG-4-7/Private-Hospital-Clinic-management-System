@@ -344,44 +344,6 @@ const ReceptionistDashboard: React.FC = () => {
     setPatientModalOpen(true);
   };
 
-  const generateRandomPatients = useCallback((count = 10) => {
-    const firstNames = ['Asha', 'Kamal', 'Nimal', 'Saman', 'Priya', 'Nirosha', 'Kasun', 'Malith', 'Ishara', 'Dilani'];
-    const lastNames = ['Perera', 'Silva', 'Fernando', 'Jayasinghe', 'Wijesinghe', 'Karunaratne', 'Senanayake', 'Gunasekara'];
-
-    const rand = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-    const makePhone = () => '07' + Math.floor(10000000 + Math.random() * 89999999).toString();
-    const makePatientId = (i: number) => `P${String(10000 + i).slice(-5)}`;
-
-    const data = Array.from({ length: count }).map((_, idx) => {
-      const id = 1000 + idx + Math.floor(Math.random() * 1000);
-      const first_name = rand(firstNames);
-      const last_name = rand(lastNames);
-      const age = Math.floor(Math.random() * 80) + 1;
-      return {
-        id,
-        first_name,
-        last_name,
-        email: `${first_name.toLowerCase()}.${last_name.toLowerCase()}${id}@example.com`,
-        username: `${first_name.toLowerCase()}${id}`,
-        is_active: Math.random() > 0.1,
-        patient_profile: {
-          patient_id: makePatientId(idx + 1),
-          phone: makePhone(),
-          age,
-          date_of_birth: null,
-          gender: Math.random() > 0.5 ? 'male' : 'female',
-          address: null,
-          city: null,
-          state: null,
-          postal_code: null,
-        },
-      };
-    });
-
-    setPatientsResp({ data, current_page: 1, last_page: 1, per_page: count, total: count });
-    setPatientsPage(1);
-  }, []);
-
   const openEditPatient = (patient: ReceptionistPatient) => {
     setEditingPatient(patient);
     setPatientForm({
@@ -1145,10 +1107,28 @@ const ReceptionistDashboard: React.FC = () => {
                       New Patient
                     </button>
                     <button
-                      onClick={() => generateRandomPatients(10)}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium px-4 py-2 rounded-lg transition"
+                      onClick={async () => {
+                        const input = window.prompt('How many random patients to create?', '5');
+                        if (!input) return;
+                        const count = Number(input);
+                        if (!Number.isFinite(count) || count <= 0) {
+                          toast.error('Invalid number');
+                          return;
+                        }
+                        try {
+                          toast.loading('Creating random patients...');
+                          await receptionistApi.patients.generateRandom(count);
+                          toast.dismiss();
+                          toast.success(`Created ${count} random patient(s)`);
+                          await loadPatients(1);
+                        } catch (e: any) {
+                          toast.dismiss();
+                          toast.error(e?.message || 'Failed to create random patients');
+                        }
+                      }}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-lg transition"
                     >
-                      Generate Sample Patients
+                      Generate Random
                     </button>
                   </div>
                 </div>

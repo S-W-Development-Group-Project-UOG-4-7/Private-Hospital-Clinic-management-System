@@ -104,6 +104,16 @@ export const receptionistApi = {
       return handleJson<ReceptionistPatient>(response);
     },
 
+    generateRandom: async (count?: number): Promise<{ data: ReceptionistPatient[] }> => {
+      const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_PATIENTS}/generate-random`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ count }),
+      });
+
+      return handleJson<{ data: ReceptionistPatient[] }>(response);
+    },
+
     update: async (id: number, payload: UpdateReceptionistPatientPayload): Promise<ReceptionistPatient> => {
       const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_PATIENTS}/${id}`, {
         method: 'PUT',

@@ -113,6 +113,7 @@ Route::middleware(['auth:sanctum', 'role:receptionist'])->prefix('receptionist')
 
     Route::get('patients', [ReceptionistPatientController::class, 'index']);
     Route::post('patients', [ReceptionistPatientController::class, 'store']);
+    Route::post('patients/generate-random', [ReceptionistPatientController::class, 'generateRandom']);
     Route::get('patients/{id}', [ReceptionistPatientController::class, 'show']);
     Route::put('patients/{id}', [ReceptionistPatientController::class, 'update']);
     Route::delete('patients/{id}', [ReceptionistPatientController::class, 'destroy']);
