@@ -83,6 +83,13 @@ export const doctorApi = {
     },
   },
 
+  patients: {
+    create: async (payload: any): Promise<any> => {
+      const response = await http.post<any>(API_ENDPOINTS.DOCTOR_PATIENTS, payload);
+      return response.data;
+    },
+  },
+
   diagnoses: {
     create: async (payload: CreateDiagnosisPayload): Promise<Diagnosis> => {
       const response = await http.post<Diagnosis>(API_ENDPOINTS.DOCTOR_DIAGNOSES, payload);
