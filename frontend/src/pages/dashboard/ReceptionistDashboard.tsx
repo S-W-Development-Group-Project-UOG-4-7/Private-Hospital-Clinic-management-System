@@ -93,6 +93,8 @@ const ReceptionistDashboard: React.FC = () => {
   const [editingAppointment, setEditingAppointment] = useState<ReceptionistAppointment | null>(null);
   const [appointmentPatientsLoading, setAppointmentPatientsLoading] = useState(false);
   const [appointmentPatients, setAppointmentPatients] = useState<ReceptionistPatient[]>([]);
+  const [appointmentPatientSearch, setAppointmentPatientSearch] = useState('');
+  const appointmentPatientSearchTimer = React.useRef<number | null>(null);
   const [appointmentForm, setAppointmentForm] = useState({
     patient_id: '',
     appointment_date: '',
@@ -216,10 +218,10 @@ const ReceptionistDashboard: React.FC = () => {
     }
   }, [appointmentsQueryDate]);
 
-  const loadAppointmentPatients = useCallback(async () => {
+  const loadAppointmentPatients = useCallback(async (search = '') => {
     setAppointmentPatientsLoading(true);
     try {
-      const resp = await receptionistApi.patients.list({ per_page: 50, page: 1, is_active: true });
+      const resp = await receptionistApi.patients.list({ per_page: 50, page: 1, is_active: true, search: search || undefined });
       setAppointmentPatients(Array.isArray(resp.data) ? resp.data : []);
     } catch {
       setAppointmentPatients([]);
@@ -413,7 +415,8 @@ const ReceptionistDashboard: React.FC = () => {
       type: 'in_person',
       status: 'scheduled',
     });
-    loadAppointmentPatients();
+    setAppointmentPatientSearch('');
+    loadAppointmentPatients('');
     setAppointmentModalOpen(true);
   };
 
@@ -1099,12 +1102,38 @@ const ReceptionistDashboard: React.FC = () => {
                     <h2 className="text-2xl font-bold text-gray-900">Patients</h2>
                     <p className="text-gray-600 text-sm">Register, update, and deactivate patient accounts</p>
                   </div>
-                  <button
-                    onClick={openCreatePatient}
-                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-lg transition"
-                  >
-                    New Patient
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={openCreatePatient}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-lg transition"
+                    >
+                      New Patient
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const input = window.prompt('How many random patients to create?', '5');
+                        if (!input) return;
+                        const count = Number(input);
+                        if (!Number.isFinite(count) || count <= 0) {
+                          toast.error('Invalid number');
+                          return;
+                        }
+                        try {
+                          toast.loading('Creating random patients...');
+                          await receptionistApi.patients.generateRandom(count);
+                          toast.dismiss();
+                          toast.success(`Created ${count} random patient(s)`);
+                          await loadPatients(1);
+                        } catch (e: any) {
+                          toast.dismiss();
+                          toast.error(e?.message || 'Failed to create random patients');
+                        }
+                      }}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-lg transition"
+                    >
+                      Generate Random
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-lg p-4">
@@ -1382,6 +1411,27 @@ const ReceptionistDashboard: React.FC = () => {
                     className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-lg transition"
                   >
                     Check-in
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm('Clear all queue entries for the selected date and doctor? This cannot be undone.')) return;
+                      try {
+                        toast.loading('Clearing queue...');
+                        const params: any = { date: queueDate };
+                        if (queueDoctorFilter !== '') params.doctor_id = Number(queueDoctorFilter);
+                        const resp = await receptionistApi.queue.clear(params);
+                        toast.dismiss();
+                        toast.success(`Cleared ${resp.deleted} queue entr${resp.deleted === 1 ? 'y' : 'ies'}`);
+                        await loadQueue();
+                        await loadStats();
+                      } catch (e: any) {
+                        toast.dismiss();
+                        toast.error(e?.message || 'Failed to clear queue');
+                      }
+                    }}
+                    className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-lg transition"
+                  >
+                    Clear Queue
                   </button>
                 </div>
 
@@ -1953,39 +2003,52 @@ const ReceptionistDashboard: React.FC = () => {
             <form onSubmit={submitAppointment} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Patient ID *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
                   <input
                     type="text"
-                    required
-                    value={appointmentForm.patient_id}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, patient_id: e.target.value }))}
+                    placeholder="Search patient by name, phone or ID"
+                    value={appointmentPatientSearch}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAppointmentPatientSearch(v);
+                      if (appointmentPatientSearchTimer.current) {
+                        window.clearTimeout(appointmentPatientSearchTimer.current);
+                      }
+                      appointmentPatientSearchTimer.current = window.setTimeout(() => {
+                        loadAppointmentPatients(v);
+                      }, 300);
+                    }}
                     className="w-full px-3 py-2 border rounded-lg"
                   />
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const selected = appointmentPatients.find((p) => String(p.id) === e.target.value);
-                      const patientCode = selected?.patient_profile?.patient_id;
-                      const fallbackUserId = selected ? String(selected.id) : '';
-                      setAppointmentForm((prev) => ({
-                        ...prev,
-                        patient_id: (patientCode || fallbackUserId || '').toString(),
-                      }));
-                    }}
-                    className="w-full mt-2 px-3 py-2 border rounded-lg"
-                    disabled={appointmentPatientsLoading}
-                  >
-                    <option value="">{appointmentPatientsLoading ? 'Loading patients...' : 'Select a patient (optional)'}</option>
-                    {appointmentPatients.map((p) => {
-                      const patientCode = p.patient_profile?.patient_id;
-                      const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
-                      return (
-                        <option key={p.id} value={p.id}>
-                          {patientCode ? `${patientCode} - ${name}` : `${p.id} - ${name}`}
-                        </option>
-                      );
-                    })}
-                  </select>
+
+                  <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto bg-white">
+                    {appointmentPatientsLoading ? (
+                      <div className="p-2 text-sm text-gray-500">Loading patients...</div>
+                    ) : appointmentPatients.length === 0 ? (
+                      <div className="p-2 text-sm text-gray-500">No patients found.</div>
+                    ) : (
+                      appointmentPatients.map((p) => {
+                        const patientCode = p.patient_profile?.patient_id;
+                        const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              const value = (patientCode || String(p.id)).toString();
+                              setAppointmentForm((prev) => ({ ...prev, patient_id: value }));
+                              setAppointmentPatientSearch(`${patientCode ? `${patientCode} - ` : ''}${name}`);
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm"
+                          >
+                            {patientCode ? `${patientCode} - ${name}` : `${p.id} - ${name}`}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="text-xs text-gray-500 mt-1">Selected ID: {appointmentForm.patient_id || '-'}</div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>

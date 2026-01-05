@@ -17,13 +17,10 @@ import TelemedicinePromo from './components/HomePage/TelemedicinePromo';
 import Footer from './components/HomePage/Footer';
 
 // --- Dashboard Imports ---
-=======
 import ReceptionistPatientRegistration from './pages/ReceptionistPatientRegistration';
 import PatientDashboard from './pages/dashboard/PatientDashboard';
 import DoctorDashboard from './pages/dashboard/DoctorDashboard';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
-import DoctorDashboard from './pages/dashboard/DoctorDashboard';
-import PatientDashboard from './pages/dashboard/PatientDashboard';
 import PharmacistDashboard from './pages/dashboard/PharmacistDashboard';
 import ReceptionistDashboard from './pages/dashboard/ReceptionistDashboard';
 
@@ -126,6 +123,15 @@ const App: React.FC = () => (
     />
 
     <Route
+      path="/receptionist/register-patient"
+      element={(
+        <RequireAuth>
+          <ReceptionistPatientRegistration />
+        </RequireAuth>
+      )}
+    />
+
+    <Route
       path="/pharmacist"
       element={(
         <RequireAuth>
@@ -174,23 +180,5 @@ const App: React.FC = () => (
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );
-=======
-function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/home" element={<HomePage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/receptionist/register-patient" element={<ReceptionistPatientRegistration />} />
-      <Route path="/patient" element={<PatientDashboard />} />
-      <Route path="/doctor" element={<DoctorDashboard />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/pharmacist" element={<PharmacistDashboard />} />
-      <Route path="/receptionist" element={<ReceptionistDashboard />} />
-    </Routes>
-  );
-}
-
 export default App;
 
