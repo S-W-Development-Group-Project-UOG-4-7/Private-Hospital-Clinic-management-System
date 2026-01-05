@@ -127,6 +127,7 @@ Route::middleware(['auth:sanctum', 'role:receptionist'])->prefix('receptionist')
 
     Route::get('queue', [ReceptionistQueueController::class, 'index']);
     Route::post('queue/check-in', [ReceptionistQueueController::class, 'checkIn']);
+    Route::post('queue/clear', [ReceptionistQueueController::class, 'clear']);
     Route::put('queue/{id}/status', [ReceptionistQueueController::class, 'updateStatus']);
 
     Route::get('invoices', [ReceptionistInvoiceController::class, 'index']);

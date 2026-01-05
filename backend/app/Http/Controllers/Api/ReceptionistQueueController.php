@@ -178,4 +178,26 @@ class ReceptionistQueueController extends Controller
 
         return response()->json($entry->fresh()->load(['patient', 'doctor', 'appointment']));
     }
+
+    public function clear(Request $request)
+    {
+        $validated = $request->validate([
+            'date' => ['nullable', 'date'],
+            'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
+        ]);
+
+        $date = $validated['date'] ?? now()->toDateString();
+
+        $query = QueueEntry::query()->whereDate('queue_date', $date);
+
+        if (array_key_exists('doctor_id', $validated) && $validated['doctor_id'] !== null) {
+            $query->where('doctor_id', $validated['doctor_id']);
+        }
+
+        $count = $query->count();
+
+        $query->delete();
+
+        return response()->json(['deleted' => $count]);
+    }
 }

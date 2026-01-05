@@ -1412,6 +1412,27 @@ const ReceptionistDashboard: React.FC = () => {
                   >
                     Check-in
                   </button>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm('Clear all queue entries for the selected date and doctor? This cannot be undone.')) return;
+                      try {
+                        toast.loading('Clearing queue...');
+                        const params: any = { date: queueDate };
+                        if (queueDoctorFilter !== '') params.doctor_id = Number(queueDoctorFilter);
+                        const resp = await receptionistApi.queue.clear(params);
+                        toast.dismiss();
+                        toast.success(`Cleared ${resp.deleted} queue entr${resp.deleted === 1 ? 'y' : 'ies'}`);
+                        await loadQueue();
+                        await loadStats();
+                      } catch (e: any) {
+                        toast.dismiss();
+                        toast.error(e?.message || 'Failed to clear queue');
+                      }
+                    }}
+                    className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-lg transition"
+                  >
+                    Clear Queue
+                  </button>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-lg p-4">

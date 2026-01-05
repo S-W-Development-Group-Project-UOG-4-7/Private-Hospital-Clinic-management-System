@@ -220,6 +220,15 @@ export const receptionistApi = {
 
       return handleJson<QueueEntry>(response);
     },
+    clear: async (params?: { date?: string; doctor_id?: number }): Promise<{ deleted: number }> => {
+      const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_QUEUE}/clear`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(params || {}),
+      });
+
+      return handleJson<{ deleted: number }>(response);
+    },
   },
 
   invoices: {
