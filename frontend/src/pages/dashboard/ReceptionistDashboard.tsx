@@ -344,6 +344,44 @@ const ReceptionistDashboard: React.FC = () => {
     setPatientModalOpen(true);
   };
 
+  const generateRandomPatients = useCallback((count = 10) => {
+    const firstNames = ['Asha', 'Kamal', 'Nimal', 'Saman', 'Priya', 'Nirosha', 'Kasun', 'Malith', 'Ishara', 'Dilani'];
+    const lastNames = ['Perera', 'Silva', 'Fernando', 'Jayasinghe', 'Wijesinghe', 'Karunaratne', 'Senanayake', 'Gunasekara'];
+
+    const rand = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+    const makePhone = () => '07' + Math.floor(10000000 + Math.random() * 89999999).toString();
+    const makePatientId = (i: number) => `P${String(10000 + i).slice(-5)}`;
+
+    const data = Array.from({ length: count }).map((_, idx) => {
+      const id = 1000 + idx + Math.floor(Math.random() * 1000);
+      const first_name = rand(firstNames);
+      const last_name = rand(lastNames);
+      const age = Math.floor(Math.random() * 80) + 1;
+      return {
+        id,
+        first_name,
+        last_name,
+        email: `${first_name.toLowerCase()}.${last_name.toLowerCase()}${id}@example.com`,
+        username: `${first_name.toLowerCase()}${id}`,
+        is_active: Math.random() > 0.1,
+        patient_profile: {
+          patient_id: makePatientId(idx + 1),
+          phone: makePhone(),
+          age,
+          date_of_birth: null,
+          gender: Math.random() > 0.5 ? 'male' : 'female',
+          address: null,
+          city: null,
+          state: null,
+          postal_code: null,
+        },
+      };
+    });
+
+    setPatientsResp({ data, current_page: 1, last_page: 1, per_page: count, total: count });
+    setPatientsPage(1);
+  }, []);
+
   const openEditPatient = (patient: ReceptionistPatient) => {
     setEditingPatient(patient);
     setPatientForm({
@@ -1099,12 +1137,20 @@ const ReceptionistDashboard: React.FC = () => {
                     <h2 className="text-2xl font-bold text-gray-900">Patients</h2>
                     <p className="text-gray-600 text-sm">Register, update, and deactivate patient accounts</p>
                   </div>
-                  <button
-                    onClick={openCreatePatient}
-                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-lg transition"
-                  >
-                    New Patient
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={openCreatePatient}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-lg transition"
+                    >
+                      New Patient
+                    </button>
+                    <button
+                      onClick={() => generateRandomPatients(10)}
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium px-4 py-2 rounded-lg transition"
+                    >
+                      Generate Sample Patients
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-lg p-4">
