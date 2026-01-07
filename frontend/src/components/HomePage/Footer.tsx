@@ -12,10 +12,10 @@ const Footer: React.FC = () => {
             <h3 className="text-xl font-bold text-white mb-4">PCMS</h3>
             <p className="text-gray-400">Providing world-class healthcare with a compassionate touch. Our commitment is to your well-being.</p>
             <div className="mt-6 flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-white"><Facebook /></a>
-              <a href="#" className="text-gray-400 hover:text-white"><Twitter /></a>
-              <a href="#" className="text-gray-400 hover:text-white"><Instagram /></a>
-              <a href="#" className="text-gray-400 hover:text-white"><Linkedin /></a>
+              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-white"><Facebook /></a>
+              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="text-gray-400 hover:text-white"><Twitter /></a>
+              <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-white"><Instagram /></a>
+              <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="text-gray-400 hover:text-white"><Linkedin /></a>
             </div>
           </div>
 
@@ -23,11 +23,11 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Quick Links</h3>
             <ul className="space-y-2">
-              <li><a href="#" className="hover:text-white">About Us</a></li>
-              <li><a href="#" className="hover:text-white">Services</a></li>
-              <li><a href="#" className="hover:text-white">Find a Doctor</a></li>
-              <li><a href="#" className="hover:text-white">Patient Portal</a></li>
-              <li><a href="#" className="hover:text-white">Contact Us</a></li>
+              <li><a href="/about" className="hover:text-white">About Us</a></li>
+              <li><a href="/services" className="hover:text-white">Services</a></li>
+              <li><a href="/find-doctor" className="hover:text-white">Find a Doctor</a></li>
+              <li><a href="/patient-portal" className="hover:text-white">Patient Portal</a></li>
+              <li><a href="/contact" className="hover:text-white">Contact Us</a></li>
             </ul>
           </div>
 

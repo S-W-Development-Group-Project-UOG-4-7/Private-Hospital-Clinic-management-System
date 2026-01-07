@@ -15,6 +15,12 @@ class DoctorPrescriptionController extends Controller
     public function store(Request $request)
     {
         $doctor = $request->user();
+        
+        // Log incoming request for debugging
+        \Log::info('Prescription creation request', [
+            'user_id' => $doctor->id,
+            'request_data' => $request->all()
+        ]);
 
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:users,id'],

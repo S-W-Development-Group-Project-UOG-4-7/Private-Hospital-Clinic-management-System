@@ -59,60 +59,53 @@ const Navbar: React.FC<NavbarProps> = ({ isScrolled }) => {
       <div className="container mx-auto px-6 py-4 flex justify-between items-center">
         <div className={`text-2xl font-bold ${shouldShowBackground ? 'text-gray-800' : 'text-white'}`}>PCMS</div>
         <div className="hidden md:flex space-x-8">
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className={`transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
           >
             Home
-          </a>
-          <a 
-            href="#services" 
-            onClick={(e) => {
-              e.preventDefault();
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               const element = document.getElementById('services');
               element?.scrollIntoView({ behavior: 'smooth' });
             }}
             className={`transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
           >
             Services
-          </a>
-          <a 
-            href="#about" 
-            onClick={(e) => {
-              e.preventDefault();
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               const element = document.getElementById('about');
               element?.scrollIntoView({ behavior: 'smooth' });
             }}
             className={`transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
           >
             About Us
-          </a>
-          <a 
-            href="#testimonials" 
-            onClick={(e) => {
-              e.preventDefault();
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               const element = document.getElementById('testimonials');
               element?.scrollIntoView({ behavior: 'smooth' });
             }}
             className={`transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
           >
             Testimonials
-          </a>
-          <a 
-            href="#contact" 
-            onClick={(e) => {
-              e.preventDefault();
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               const element = document.getElementById('contact');
               element?.scrollIntoView({ behavior: 'smooth' });
             }}
             className={`transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
           >
             Contact
-          </a>
+          </button>
         </div>
         <div className="hidden md:flex space-x-4">
           {isAuthenticated ? (
@@ -161,65 +154,41 @@ const Navbar: React.FC<NavbarProps> = ({ isScrolled }) => {
       {isMobileMenuOpen && (
         <div className={`md:hidden ${shouldShowBackground ? 'bg-white' : 'bg-gray-900'} border-t ${shouldShowBackground ? 'border-gray-200' : 'border-gray-700'}`}>
           <div className="container mx-auto px-6 py-4 space-y-4">
-            <a 
-              href="#" 
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+            <button
+              type="button"
+              onClick={() => { setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
               className={`block transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
             >
               Home
-            </a>
-            <a 
-              href="#services" 
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                const element = document.getElementById('services');
-                element?.scrollIntoView({ behavior: 'smooth' });
-              }}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsMobileMenuOpen(false); const element = document.getElementById('services'); element?.scrollIntoView({ behavior: 'smooth' }); }}
               className={`block transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
             >
               Services
-            </a>
-            <a 
-              href="#about" 
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                const element = document.getElementById('about');
-                element?.scrollIntoView({ behavior: 'smooth' });
-              }}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsMobileMenuOpen(false); const element = document.getElementById('about'); element?.scrollIntoView({ behavior: 'smooth' }); }}
               className={`block transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
             >
               About Us
-            </a>
-            <a 
-              href="#testimonials" 
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                const element = document.getElementById('testimonials');
-                element?.scrollIntoView({ behavior: 'smooth' });
-              }}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsMobileMenuOpen(false); const element = document.getElementById('testimonials'); element?.scrollIntoView({ behavior: 'smooth' }); }}
               className={`block transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
             >
               Testimonials
-            </a>
-            <a 
-              href="#contact" 
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                const element = document.getElementById('contact');
-                element?.scrollIntoView({ behavior: 'smooth' });
-              }}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsMobileMenuOpen(false); const element = document.getElementById('contact'); element?.scrollIntoView({ behavior: 'smooth' }); }}
               className={`block transition duration-300 ${shouldShowBackground ? 'text-gray-600 hover:text-green-600' : 'text-white hover:text-green-400'}`}
             >
               Contact
-            </a>
+            </button>
             <div className="flex flex-col space-y-2 pt-4 border-t border-gray-200">
               {isAuthenticated ? (
                 <>

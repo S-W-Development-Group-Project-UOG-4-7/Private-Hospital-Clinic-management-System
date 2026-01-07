@@ -14,10 +14,10 @@ const QuickActionsBar: React.FC = () => {
       <div className="container mx-auto px-6 py-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {actions.map((action, index) => (
-            <a href="#" key={index} className="hover:bg-blue-700 p-4 rounded-lg transition-colors duration-300">
+            <button key={index} type="button" className="hover:bg-blue-700 p-4 rounded-lg transition-colors duration-300">
               {action.icon}
               <span className="font-semibold">{action.label}</span>
-            </a>
+            </button>
           ))}
         </div>
       </div>
