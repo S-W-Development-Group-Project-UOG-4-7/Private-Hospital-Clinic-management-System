@@ -81,6 +81,7 @@ class ReceptionistPatientController extends Controller
         $patient = User::create([
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
+            'name' => trim($validated['first_name'] . ' ' . $validated['last_name']),
             'username' => $username,
             'email' => $email,
             'password' => Hash::make($defaultPassword),
@@ -227,6 +228,7 @@ class ReceptionistPatientController extends Controller
                 $patient = User::create([
                     'first_name' => $firstName,
                     'last_name' => $lastName,
+                    'name' => trim($firstName . ' ' . $lastName),
                     'username' => $username,
                     'email' => $email,
                     'password' => Hash::make($defaultPassword),

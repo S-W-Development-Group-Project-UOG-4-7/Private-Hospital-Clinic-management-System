@@ -17,6 +17,29 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens, HasRoles;
 
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            if (empty($user->name)) {
+                $fallback = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+                if ($fallback === '') {
+                    $fallback = $user->username ?? 'user';
+                }
+                $user->name = $fallback;
+            }
+        });
+
+        static::updating(function (User $user) {
+            if (array_key_exists('name', $user->getDirty()) && $user->name === null) {
+                $fallback = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+                if ($fallback === '') {
+                    $fallback = $user->username ?? 'user';
+                }
+                $user->name = $fallback;
+            }
+        });
+    }
+
     /**
      * The attributes that are mass assignable.
      *
