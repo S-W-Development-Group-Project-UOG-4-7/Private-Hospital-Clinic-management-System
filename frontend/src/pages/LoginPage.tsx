@@ -112,7 +112,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/images/Hero.png')" }}>
+    <div className="relative min-h-screen bg-center bg-cover" style={{ backgroundImage: "url('/images/Hero.png')" }}>
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
 
       <Navbar isScrolled={isScrolled} />
@@ -123,9 +123,9 @@ const LoginPage: React.FC = () => {
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="text-center mb-8"
+            className="mb-8 text-center"
           >
-            <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">Welcome Back</h1>
+            <h1 className="mb-4 text-4xl font-extrabold text-white md:text-5xl">Welcome Back</h1>
             <p className="text-lg text-gray-200">Sign in to access your patient portal</p>
           </motion.div>
 
@@ -133,13 +133,13 @@ const LoginPage: React.FC = () => {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl p-8 space-y-6"
+            className="p-8 space-y-6 border border-gray-200 shadow-2xl bg-white/95 backdrop-blur-lg rounded-2xl"
           >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-extrabold text-gray-900">Login</h2>
               <Link
                 to="/"
-                className="inline-flex items-center gap-2 bg-transparent border-2 border-teal-500 text-teal-600 hover:bg-teal-500 hover:text-white font-bold py-2 px-4 rounded-full transition duration-300"
+                className="inline-flex items-center gap-2 px-4 py-2 font-bold text-teal-600 transition duration-300 bg-transparent border-2 border-teal-500 rounded-full hover:bg-teal-500 hover:text-white"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
@@ -148,14 +148,14 @@ const LoginPage: React.FC = () => {
               </Link>
             </div>
             {error && (
-              <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm">
+              <div className="px-4 py-3 text-sm text-red-800 border border-red-200 rounded-lg bg-red-50">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label htmlFor="login" className="block text-sm font-medium text-gray-800 mb-2">Email</label>
+                <label htmlFor="login" className="block mb-2 text-sm font-medium text-gray-800">Email</label>
                 <input
                   id="login"
                   name="login"
@@ -164,13 +164,13 @@ const LoginPage: React.FC = () => {
                   autoComplete="email"
                   value={loginId}
                   onChange={(e) => setLoginId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
+                  className="w-full px-4 py-3 text-gray-900 transition bg-white border border-gray-300 rounded-lg shadow-sm outline-none placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                   placeholder="Enter your email"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-800 mb-2">Password</label>
+                <label htmlFor="password" className="block mb-2 text-sm font-medium text-gray-800">Password</label>
                 <div className="relative">
                   <input
                     id="password"
@@ -180,13 +180,13 @@ const LoginPage: React.FC = () => {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 pr-12 text-gray-900 placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition shadow-sm"
+                    className="w-full px-4 py-3 pr-12 text-gray-900 transition bg-white border border-gray-300 rounded-lg shadow-sm outline-none placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                     placeholder="Enter your password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none transition-colors"
+                    className="absolute text-gray-500 transition-colors -translate-y-1/2 right-3 top-1/2 hover:text-gray-700 focus:outline-none"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
@@ -201,7 +201,7 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                className="w-full px-8 py-3 font-bold text-white transition duration-300 bg-teal-600 rounded-full shadow-lg hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-xl"
               >
                 {loading ? 'Logging in...' : 'Login'}
               </button>
@@ -212,7 +212,7 @@ const LoginPage: React.FC = () => {
             <p className="mb-2">Don't have an account?</p>
             <Link
               to="/register"
-              className="inline-block bg-transparent border-2 border-white text-white font-bold py-2 px-6 rounded-full hover:bg-white hover:text-gray-800 transition duration-300"
+              className="inline-block px-6 py-2 font-bold text-white transition duration-300 bg-transparent border-2 border-white rounded-full hover:bg-white hover:text-gray-800"
             >
               Sign Up
             </Link>
