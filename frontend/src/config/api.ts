@@ -47,11 +47,25 @@ export const API_ENDPOINTS = {
   PRESCRIPTIONS: `${API_BASE_URL}/api/prescriptions`,
   PRESCRIPTION_PROCESS: (id: string) => `${API_BASE_URL}/api/prescriptions/${id}/process`,
 
-  // Inventory
-  INVENTORY: `${API_BASE_URL}/api/inventory`,
-  INVENTORY_LOW_STOCK: `${API_BASE_URL}/api/inventory/low-stock/list`,
-  INVENTORY_EXPIRING_SOON: `${API_BASE_URL}/api/inventory/expiring-soon/list`,
-  INVENTORY_STATS: `${API_BASE_URL}/api/inventory/stats/overview`,
+  // Pharmacist specific endpoints
+  PHARMACIST_PRESCRIPTIONS: `${API_BASE_URL}/api/pharmacist/prescriptions`,
+  PHARMACIST_PRESCRIPTION_SHOW: (id: string) => `${API_BASE_URL}/api/pharmacist/prescriptions/${id}`,
+  PHARMACIST_PRESCRIPTION_INTERACTION_CHECK: (id: string) => `${API_BASE_URL}/api/pharmacist/prescriptions/${id}/interaction-check`,
+  PHARMACIST_PRESCRIPTION_DISPENSE: (id: string) => `${API_BASE_URL}/api/pharmacist/prescriptions/${id}/dispense`,
+  PHARMACIST_INVENTORY: `${API_BASE_URL}/api/pharmacist/inventory`,
+  PHARMACIST_INVENTORY_UPDATE: `${API_BASE_URL}/api/pharmacist/inventory/update`,
+  PHARMACIST_INVENTORY_LOW_STOCK: `${API_BASE_URL}/api/pharmacist/inventory/low-stock`,
+  PHARMACIST_INVENTORY_EXPIRING_SOON: `${API_BASE_URL}/api/pharmacist/inventory/expiring-soon`,
+  PHARMACIST_INVENTORY_STATS: `${API_BASE_URL}/api/pharmacist/inventory/stats`,
+  PHARMACIST_PURCHASE_REQUEST: `${API_BASE_URL}/api/pharmacist/purchase-request`,
+  PHARMACIST_CONTROLLED_DRUGS: `${API_BASE_URL}/api/pharmacist/controlled-drugs`,
+  PHARMACIST_CONTROLLED_DRUGS_LOG: `${API_BASE_URL}/api/pharmacist/controlled-drugs/log`,
+  PHARMACIST_LABELS_GENERATE: `${API_BASE_URL}/api/pharmacist/labels/generate`,
+  PHARMACIST_LABELS_PRINT: `${API_BASE_URL}/api/pharmacist/labels/print`,
+  PHARMACIST_RETURNS: `${API_BASE_URL}/api/pharmacist/returns`,
+  PHARMACIST_REPORTS_INVENTORY: `${API_BASE_URL}/api/pharmacist/reports/inventory`,
+  PHARMACIST_REPORTS_STORAGE: `${API_BASE_URL}/api/pharmacist/reports/storage`,
+  PHARMACIST_AUDIT_LOGS: `${API_BASE_URL}/api/pharmacist/audit-logs`,
 
   // Suppliers
   SUPPLIERS: `${API_BASE_URL}/api/suppliers`,
@@ -79,24 +93,6 @@ export const API_ENDPOINTS = {
   DOCTOR_LAB_RESULTS: (patientId: string) => `${API_BASE_URL}/api/doctor/labs/results/${patientId}`,
   DOCTOR_LAB_RESULT_REVIEW: (id: string) => `${API_BASE_URL}/api/doctor/labs/results/${id}/review`,
   DOCTOR_REFERRALS: `${API_BASE_URL}/api/doctor/referrals`,
-
-  // Pharmacist Portal
-  PHARMACIST_PRESCRIPTIONS: `${API_BASE_URL}/api/pharmacist/prescriptions`,
-  PHARMACIST_PRESCRIPTION_SHOW: (id: string) => `${API_BASE_URL}/api/pharmacist/prescriptions/${id}`,
-  PHARMACIST_PRESCRIPTION_INTERACTION_CHECK: (id: string) => `${API_BASE_URL}/api/pharmacist/prescriptions/${id}/interaction-check`,
-  PHARMACIST_PRESCRIPTION_DISPENSE: (id: string) => `${API_BASE_URL}/api/pharmacist/prescriptions/${id}/dispense`,
-  PHARMACIST_INVENTORY: `${API_BASE_URL}/api/pharmacist/inventory`,
-  PHARMACIST_INVENTORY_UPDATE: `${API_BASE_URL}/api/pharmacist/inventory/update`,
-  PHARMACIST_INVENTORY_LOW_STOCK: `${API_BASE_URL}/api/pharmacist/inventory/low-stock`,
-  PHARMACIST_PURCHASE_REQUEST: `${API_BASE_URL}/api/pharmacist/purchase-request`,
-  PHARMACIST_CONTROLLED_DRUGS: `${API_BASE_URL}/api/pharmacist/controlled-drugs`,
-  PHARMACIST_CONTROLLED_DRUGS_LOG: `${API_BASE_URL}/api/pharmacist/controlled-drugs/log`,
-  PHARMACIST_LABELS_GENERATE: `${API_BASE_URL}/api/pharmacist/labels/generate`,
-  PHARMACIST_LABELS_PRINT: `${API_BASE_URL}/api/pharmacist/labels/print`,
-  PHARMACIST_RETURNS: `${API_BASE_URL}/api/pharmacist/returns`,
-  PHARMACIST_REPORTS_INVENTORY: `${API_BASE_URL}/api/pharmacist/reports/inventory`,
-  PHARMACIST_REPORTS_STORAGE: `${API_BASE_URL}/api/pharmacist/reports/storage`,
-  PHARMACIST_AUDIT_LOGS: `${API_BASE_URL}/api/pharmacist/audit-logs`,
 };
 
 export default API_BASE_URL;
