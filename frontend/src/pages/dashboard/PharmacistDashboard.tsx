@@ -42,7 +42,6 @@ type SectionKey =
   | 'prescriptions'
   | 'inventory'
   | 'controlled_substances'
-  | 'labels'
   | 'returns'
   | 'reports'
   | 'notifications';
@@ -313,13 +312,6 @@ const PharmacistDashboard: React.FC = () => {
           <span className="text-sm font-medium">Controlled Substances</span>
         </button>
         <button
-          onClick={() => setActive('labels')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'labels' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-        >
-          <Printer className="w-5 h-5" />
-          <span className="text-sm font-medium">Labels & Dispensing</span>
-        </button>
-        <button
           onClick={() => setActive('returns')}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'returns' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
         >
@@ -331,7 +323,7 @@ const PharmacistDashboard: React.FC = () => {
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'reports' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
         >
           <BarChart3 className="w-5 h-5" />
-          <span className="text-sm font-medium">Reports & Logs</span>
+          <span className="text-sm font-medium">Reports</span>
         </button>
         <button
           onClick={() => setActive('notifications')}
@@ -434,16 +426,6 @@ const PharmacistDashboard: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      setActive('labels');
-                      setMobileNavOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'labels' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <Printer className="w-5 h-5" />
-                    <span className="text-sm font-medium">Labels & Dispensing</span>
-                  </button>
-                  <button
-                    onClick={() => {
                       setActive('returns');
                       setMobileNavOpen(false);
                     }}
@@ -460,7 +442,7 @@ const PharmacistDashboard: React.FC = () => {
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'reports' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
                   >
                     <BarChart3 className="w-5 h-5" />
-                    <span className="text-sm font-medium">Reports & Logs</span>
+                    <span className="text-sm font-medium">Reports</span>
                   </button>
                   <button
                     onClick={() => {
@@ -545,113 +527,175 @@ const PharmacistDashboard: React.FC = () => {
             {active === 'overview' && (
               <div className="space-y-8">
                 {/* Dashboard Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {/* Prescriptions Received Today */}
-                  <motion.div
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {/* Process Prescriptions */}
+                  <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-6"
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Prescriptions Today</p>
-                        <p className="text-2xl font-bold text-teal-600">{stats.prescriptions_today}</p>
-                      </div>
-                      <Calendar className="w-8 h-8 text-teal-500" />
+                    <div className="mb-6">
+                      <Pill className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Process Prescriptions</h2>
+                      <p className="text-gray-600">Review and dispense patient prescriptions</p>
                     </div>
+                    <button
+                      onClick={() => setActive('prescriptions')}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      View Prescriptions
+                    </button>
                   </motion.div>
 
-                  {/* Medications Dispensed */}
-                  <motion.div
+                  {/* Manage Inventory */}
+                  <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.1 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-6"
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Medications Dispensed</p>
-                        <p className="text-2xl font-bold text-green-600">{stats.medications_dispensed}</p>
-                      </div>
-                      <Pill className="w-8 h-8 text-green-500" />
+                    <div className="mb-6">
+                      <Package className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Manage Inventory</h2>
+                      <p className="text-gray-600">Monitor stock levels and reorder medications</p>
                     </div>
+                    <button
+                      onClick={() => setActive('inventory')}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      View Inventory
+                    </button>
                   </motion.div>
 
-                  {/* Low Stock Alerts */}
-                  <motion.div
+                  {/* Controlled Substances */}
+                  <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-6"
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Low Stock Alerts</p>
-                        <p className="text-2xl font-bold text-orange-600">{stats.low_stock_alerts}</p>
-                      </div>
-                      <AlertTriangle className="w-8 h-8 text-orange-500" />
+                    <div className="mb-6">
+                      <Shield className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Controlled Substances</h2>
+                      <p className="text-gray-600">Track and manage controlled drug inventory</p>
                     </div>
+                    <button
+                      onClick={() => setActive('controlled_substances')}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      View Logs
+                    </button>
                   </motion.div>
 
-                  {/* Pending Requests */}
-                  <motion.div
+                  {/* Returns Management */}
+                  <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.3 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-6"
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Pending Requests</p>
-                        <p className="text-2xl font-bold text-blue-600">{stats.pending_requests}</p>
-                      </div>
-                      <ShoppingCart className="w-8 h-8 text-blue-500" />
+                    <div className="mb-6">
+                      <RotateCcw className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Returns Management</h2>
+                      <p className="text-gray-600">Handle medication returns and refunds</p>
                     </div>
+                    <button
+                      onClick={() => setActive('returns')}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      View Returns
+                    </button>
+                  </motion.div>
+
+                  {/* Reports & Analytics */}
+                  <motion.div 
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                  >
+                    <div className="mb-6">
+                      <BarChart3 className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Reports & Analytics</h2>
+                      <p className="text-gray-600">Generate pharmacy performance reports</p>
+                    </div>
+                    <button
+                      onClick={() => setActive('reports')}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      View Reports
+                    </button>
+                  </motion.div>
+
+                  {/* Notifications */}
+                  <motion.div 
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
+                  >
+                    <div className="mb-6">
+                      <Bell className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Notifications</h2>
+                      <p className="text-gray-600">View alerts and system notifications</p>
+                    </div>
+                    <button
+                      onClick={() => setActive('notifications')}
+                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
+                    >
+                      View Notifications
+                    </button>
                   </motion.div>
                 </div>
 
-                {/* Recent Activity */}
-                <motion.div
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.4 }}
-                  className="bg-white rounded-lg shadow-lg p-6"
-                >
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">Recent Prescriptions</h2>
-                  {prescriptionsLoading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-500 mx-auto"></div>
-                      <p className="text-gray-500 mt-2">Loading prescriptions...</p>
-                    </div>
-                  ) : prescriptions.length > 0 ? (
-                    <div className="space-y-3">
-                      {prescriptions.slice(0, 5).map((prescription) => (
-                        <div key={prescription.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="font-medium text-gray-800">{prescription.patient_name}</p>
-                            <p className="text-sm text-gray-600">Dr. {prescription.doctor_name}</p>
-                          </div>
-                          <div className="text-right">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              prescription.status === 'dispensed' ? 'bg-green-100 text-green-800' :
-                              prescription.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                              prescription.status === 'held' ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {prescription.status}
-                            </span>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {new Date(prescription.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-center py-8">No recent prescriptions</p>
-                  )}
-                </motion.div>
+                {/* Quick Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, delay: 0.6 }}
+                    className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                  >
+                    <h3 className="text-4xl font-extrabold text-teal-500 mb-2">
+                      {stats.prescriptions_today}
+                    </h3>
+                    <p className="text-gray-600 font-medium">Prescriptions Today</p>
+                  </motion.div>
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, delay: 0.7 }}
+                    className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                  >
+                    <h3 className="text-4xl font-extrabold text-teal-500 mb-2">
+                      {stats.medications_dispensed}
+                    </h3>
+                    <p className="text-gray-600 font-medium">Medications Dispensed</p>
+                  </motion.div>
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, delay: 0.8 }}
+                    className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                  >
+                    <h3 className="text-4xl font-extrabold text-red-500 mb-2">
+                      {stats.low_stock_alerts}
+                    </h3>
+                    <p className="text-gray-600 font-medium">Low Stock Alerts</p>
+                  </motion.div>
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, delay: 0.9 }}
+                    className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
+                  >
+                    <h3 className="text-4xl font-extrabold text-teal-500 mb-2">
+                      {stats.pending_requests}
+                    </h3>
+                    <p className="text-gray-600 font-medium">Pending Requests</p>
+                  </motion.div>
+                </div>
               </div>
             )}
 
@@ -740,11 +784,117 @@ const PharmacistDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* Other sections would be implemented similarly */}
-            {active !== 'overview' && active !== 'prescriptions' && (
-              <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">{active.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h2>
-                <p className="text-gray-500">This section is under development.</p>
+            {active === 'inventory' && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Inventory Management</h2>
+                {inventoryLoading ? (
+                  <div className="text-center py-12">Loading inventory...</div>
+                ) : inventory.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No inventory items found</div>
+                ) : (
+                  <div className="space-y-4">
+                    {inventory.map((item) => (
+                      <div key={item.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{item.drug_name}</h3>
+                            <p className="text-sm text-gray-600">Quantity: {item.quantity} {item.unit}</p>
+                            <p className="text-sm text-gray-600">Expiry: {item.expiry_date}</p>
+                            {item.is_low_stock && (
+                              <span className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
+                                Low Stock
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {active === 'controlled_substances' && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Controlled Substances Log</h2>
+                {controlledDrugsLoading ? (
+                  <div className="text-center py-12">Loading controlled drugs...</div>
+                ) : controlledDrugs.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No controlled drug logs found</div>
+                ) : (
+                  <div className="space-y-4">
+                    {controlledDrugs.map((log) => (
+                      <div key={log.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{log.drug_name}</h3>
+                            <p className="text-sm text-gray-600">Quantity: {log.quantity}</p>
+                            <p className="text-sm text-gray-600">Date: {new Date(log.timestamp).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {active === 'returns' && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Returns Management</h2>
+                {returnsLoading ? (
+                  <div className="text-center py-12">Loading returns...</div>
+                ) : returns.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No returns found</div>
+                ) : (
+                  <div className="space-y-4">
+                    {returns.map((item) => (
+                      <div key={item.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{item.drug_name}</h3>
+                            <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                            <p className="text-sm text-gray-600">Reason: {item.reason}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {active === 'reports' && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Reports & Analytics</h2>
+                <div className="text-center py-12 text-gray-500">
+                  Reports functionality coming soon...
+                </div>
+              </div>
+            )}
+
+            {active === 'notifications' && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Notifications</h2>
+                {notificationsLoading ? (
+                  <div className="text-center py-12">Loading notifications...</div>
+                ) : notifications.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No notifications</div>
+                ) : (
+                  <div className="space-y-4">
+                    {notifications.map((notification) => (
+                      <div key={notification.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{notification.title}</h3>
+                            <p className="text-sm text-gray-600">{notification.message}</p>
+                            <p className="text-xs text-gray-500">{new Date(notification.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
