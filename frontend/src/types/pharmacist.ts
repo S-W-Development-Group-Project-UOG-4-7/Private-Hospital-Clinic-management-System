@@ -32,16 +32,28 @@ export interface PharmacistPrescriptionItem {
 
 export interface InventoryItem {
   id: number;
-  drug_name: string;
+  name: string;
+  generic_name?: string;
+  brand_name?: string;
+  description?: string;
   category: string;
-  quantity: number;
   unit: string;
+  quantity: number;
+  reorder_level: number;
+  unit_price?: number;
+  selling_price?: number;
   expiry_date: string;
-  batch_number: string;
-  supplier_name: string;
-  low_stock_threshold: number;
+  batch_number?: string;
+  supplier_id?: number;
+  supplier?: {
+    id: number;
+    name: string;
+  };
+  is_active: boolean;
   is_low_stock: boolean;
   is_expiring_soon: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ControlledDrugLog {
@@ -94,6 +106,13 @@ export interface PharmacistNotification {
   message: string;
   is_read: boolean;
   created_at: string;
+}
+
+export interface InventoryStats {
+  total_items: number;
+  low_stock_items: number;
+  expiring_soon_items: number;
+  total_value: number;
 }
 
 export interface DashboardStats {

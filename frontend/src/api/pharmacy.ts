@@ -57,8 +57,8 @@ export const inventoryApi = {
     if (params?.expiring_soon) queryParams.append('expiring_soon', '1');
     
     const url = queryParams.toString() 
-      ? `${API_ENDPOINTS.INVENTORY}?${queryParams.toString()}`
-      : API_ENDPOINTS.INVENTORY;
+      ? `${API_ENDPOINTS.PHARMACIST_INVENTORY}?${queryParams.toString()}`
+      : API_ENDPOINTS.PHARMACIST_INVENTORY;
     
     return fetch(url, {
       headers: getAuthHeaders(),
@@ -66,13 +66,13 @@ export const inventoryApi = {
   },
 
   getById: (id: string) => {
-    return fetch(`${API_ENDPOINTS.INVENTORY}/${id}`, {
+    return fetch(`${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}`, {
       headers: getAuthHeaders(),
     }).then(res => res.json());
   },
 
   create: (data: any) => {
-    return fetch(API_ENDPOINTS.INVENTORY, {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -80,7 +80,7 @@ export const inventoryApi = {
   },
 
   update: (id: string, data: any) => {
-    return fetch(`${API_ENDPOINTS.INVENTORY}/${id}`, {
+    return fetch(`${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -88,26 +88,26 @@ export const inventoryApi = {
   },
 
   delete: (id: string) => {
-    return fetch(`${API_ENDPOINTS.INVENTORY}/${id}`, {
+    return fetch(`${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     }).then(res => res.json());
   },
 
   getLowStock: () => {
-    return fetch(API_ENDPOINTS.INVENTORY_LOW_STOCK, {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_LOW_STOCK, {
       headers: getAuthHeaders(),
     }).then(res => res.json());
   },
 
   getExpiringSoon: () => {
-    return fetch(API_ENDPOINTS.INVENTORY_EXPIRING_SOON, {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_EXPIRING_SOON, {
       headers: getAuthHeaders(),
     }).then(res => res.json());
   },
 
   getStats: () => {
-    return fetch(API_ENDPOINTS.INVENTORY_STATS, {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_STATS, {
       headers: getAuthHeaders(),
     }).then(res => res.json());
   },

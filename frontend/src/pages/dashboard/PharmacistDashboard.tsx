@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 /* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps */
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { pharmacistApi } from '../../api/pharmacy';
+import { pharmacistApi, inventoryApi } from '../../api/pharmacy';
 import type {
   DashboardStats,
   PharmacistPrescription,
   InventoryItem,
+  InventoryStats,
   PharmacistNotification,
   ControlledDrugLog,
   PurchaseRequest,
@@ -35,6 +36,8 @@ import {
   Package,
   Calendar,
   Activity,
+  Plus,
+  TrendingUp,
 } from 'lucide-react';
 
 type SectionKey =
@@ -54,6 +57,7 @@ const PharmacistDashboard: React.FC = () => {
 
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const [stats, setStats] = useState<DashboardStats>({
     prescriptions_today: 0,
@@ -71,6 +75,31 @@ const PharmacistDashboard: React.FC = () => {
   const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventoryStats, setInventoryStats] = useState({
+    total_items: 0,
+    low_stock_items: 0,
+    expiring_soon_items: 0,
+    total_value: 0,
+  });
+
+  // Inventory management state
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('');
+  const [inventoryShowLowStock, setInventoryShowLowStock] = useState(false);
+  const [inventoryShowExpiringSoon, setInventoryShowExpiringSoon] = useState(false);
+  const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
+  const [editingInventoryItem, setEditingInventoryItem] = useState<InventoryItem | null>(null);
+  const [inventoryForm, setInventoryForm] = useState({
+    drug_name: '',
+    category: '',
+    quantity: '',
+    unit: '',
+    expiry_date: '',
+    batch_number: '',
+    supplier_name: '',
+    low_stock_threshold: '',
+  });
+  const [inventorySaving, setInventorySaving] = useState(false);
 
   const [controlledDrugsLoaded, setControlledDrugsLoaded] = useState(false);
   const [controlledDrugsLoading, setControlledDrugsLoading] = useState(false);
@@ -127,6 +156,7 @@ const PharmacistDashboard: React.FC = () => {
       }
       if (active === 'inventory' && !inventoryLoaded && !inventoryLoading) {
         await loadInventory();
+        await loadInventoryStats();
       }
       if (active === 'controlled_substances' && !controlledDrugsLoaded && !controlledDrugsLoading) {
         await loadControlledDrugs();
@@ -171,16 +201,22 @@ const PharmacistDashboard: React.FC = () => {
     }
   };
 
-  const loadInventory = async () => {
+  const loadInventory = async (filters?: {
+    search?: string;
+    category?: string;
+    low_stock?: boolean;
+    expiring_soon?: boolean;
+  }) => {
     setError(null);
     setInventoryLoading(true);
     try {
-      const resp = await pharmacistApi.inventory.list();
-      setInventory(Array.isArray(resp.data) ? resp.data : []);
+      const resp = await inventoryApi.getAll(filters);
+      setInventory(Array.isArray(resp.data) ? resp.data : resp.data?.data || []);
       setInventoryLoaded(true);
 
-      // Update low stock alerts
-      const lowStockCount = resp.data?.filter((item: InventoryItem) => item.is_low_stock).length || 0;
+      // Update low stock alerts - calculate from the returned data
+      const items = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
+      const lowStockCount = items.filter((item: InventoryItem) => item.quantity <= item.reorder_level).length;
       setStats(prev => ({
         ...prev,
         low_stock_alerts: lowStockCount,
@@ -189,6 +225,127 @@ const PharmacistDashboard: React.FC = () => {
       setError(e?.message || 'Failed to load inventory');
     } finally {
       setInventoryLoading(false);
+    }
+  };
+
+  const loadInventoryStats = async () => {
+    try {
+      const resp = await inventoryApi.getStats();
+      setInventoryStats(resp.data || inventoryStats);
+    } catch (e: any) {
+      console.error('Failed to load inventory stats:', e);
+    }
+  };
+
+  const handleInventorySearch = () => {
+    loadInventory({
+      search: inventorySearch || undefined,
+      category: inventoryCategoryFilter || undefined,
+      low_stock: inventoryShowLowStock || undefined,
+      expiring_soon: inventoryShowExpiringSoon || undefined,
+    });
+  };
+
+  const openInventoryModal = (item?: InventoryItem) => {
+    if (item) {
+      setEditingInventoryItem(item);
+      setInventoryForm({
+        drug_name: item.name,
+        category: item.category,
+        quantity: item.quantity.toString(),
+        unit: item.unit,
+        expiry_date: item.expiry_date,
+        batch_number: item.batch_number || '',
+        supplier_name: item.supplier?.name || '',
+        low_stock_threshold: item.reorder_level.toString(),
+      });
+    } else {
+      setEditingInventoryItem(null);
+      setInventoryForm({
+        drug_name: '',
+        category: '',
+        quantity: '',
+        unit: '',
+        expiry_date: '',
+        batch_number: '',
+        supplier_name: '',
+        low_stock_threshold: '',
+      });
+    }
+    setInventoryModalOpen(true);
+  };
+
+  const closeInventoryModal = () => {
+    setInventoryModalOpen(false);
+    setEditingInventoryItem(null);
+    setInventoryForm({
+      drug_name: '',
+      category: '',
+      quantity: '',
+      unit: '',
+      expiry_date: '',
+      batch_number: '',
+      supplier_name: '',
+      low_stock_threshold: '',
+    });
+  };
+
+  const saveInventoryItem = async () => {
+    if (!inventoryForm.drug_name.trim()) return;
+
+    setInventorySaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const data = {
+        name: inventoryForm.drug_name,
+        category: inventoryForm.category,
+        quantity: parseInt(inventoryForm.quantity) || 0,
+        unit: inventoryForm.unit,
+        expiry_date: inventoryForm.expiry_date,
+        batch_number: inventoryForm.batch_number,
+        reorder_level: parseInt(inventoryForm.low_stock_threshold) || 0,
+        supplier_id: null, // For now, we'll set this to null since we don't have supplier selection
+        is_active: true,
+      };
+
+      if (editingInventoryItem) {
+        await inventoryApi.update(editingInventoryItem.id.toString(), data);
+        setSuccess('Inventory item updated successfully!');
+      } else {
+        await inventoryApi.create(data);
+        setSuccess('Inventory item added successfully!');
+      }
+
+      await loadInventory();
+      await loadInventoryStats();
+      closeInventoryModal();
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save inventory item');
+      setSuccess(null);
+    } finally {
+      setInventorySaving(false);
+    }
+  };
+
+  const deleteInventoryItem = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this inventory item?')) return;
+
+    setError(null);
+    setSuccess(null);
+    try {
+      await inventoryApi.delete(id.toString());
+      await loadInventory();
+      await loadInventoryStats();
+      setSuccess('Inventory item deleted successfully!');
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to delete inventory item');
     }
   };
 
@@ -233,7 +390,7 @@ const PharmacistDashboard: React.FC = () => {
           id: index + 1,
           type: 'low_stock',
           title: 'Low Stock Alert',
-          message: `${item.drug_name} is running low (${item.quantity} ${item.unit} remaining)`,
+          message: `${item.name} is running low (${item.quantity} ${item.unit} remaining)`,
           is_read: false,
           created_at: new Date().toISOString(),
         });
@@ -785,30 +942,364 @@ const PharmacistDashboard: React.FC = () => {
             )}
 
             {active === 'inventory' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Inventory Management</h2>
-                {inventoryLoading ? (
-                  <div className="text-center py-12">Loading inventory...</div>
-                ) : inventory.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">No inventory items found</div>
-                ) : (
-                  <div className="space-y-4">
-                    {inventory.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{item.drug_name}</h3>
-                            <p className="text-sm text-gray-600">Quantity: {item.quantity} {item.unit}</p>
-                            <p className="text-sm text-gray-600">Expiry: {item.expiry_date}</p>
-                            {item.is_low_stock && (
-                              <span className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
-                                Low Stock
-                              </span>
-                            )}
+              <div className="space-y-6">
+                {/* Inventory Statistics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <Package className="w-8 h-8 text-teal-500 mr-3" />
+                      <div>
+                        <p className="text-sm text-gray-600">Total Items</p>
+                        <p className="text-2xl font-bold text-gray-900">{inventoryStats.total_items || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <AlertTriangle className="w-8 h-8 text-red-500 mr-3" />
+                      <div>
+                        <p className="text-sm text-gray-600">Low Stock</p>
+                        <p className="text-2xl font-bold text-red-600">{inventoryStats.low_stock_items || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <Clock className="w-8 h-8 text-orange-500 mr-3" />
+                      <div>
+                        <p className="text-sm text-gray-600">Expiring Soon</p>
+                        <p className="text-2xl font-bold text-orange-600">{inventoryStats.expiring_soon_items || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <TrendingUp className="w-8 h-8 text-green-500 mr-3" />
+                      <div>
+                        <p className="text-sm text-gray-600">Total Value</p>
+                        <p className="text-2xl font-bold text-gray-900">${inventoryStats.total_value || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Success and Error Messages */}
+                {success && (
+                  <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-6">
+                    <div className="flex items-center">
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      {success}
+                    </div>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
+                    <div className="flex items-center">
+                      <AlertTriangle className="w-5 h-5 mr-2" />
+                      {error}
+                    </div>
+                  </div>
+                )}
+
+                {/* Search and Filters */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="flex flex-col md:flex-row gap-4 mb-6">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search inventory..."
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="md:w-48">
+                      <select
+                        value={inventoryCategoryFilter}
+                        onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      >
+                        <option value="">All Categories</option>
+                        <option value="analgesics">Analgesics</option>
+                        <option value="antibiotics">Antibiotics</option>
+                        <option value="antihistamines">Antihistamines</option>
+                        <option value="cardiovascular">Cardiovascular</option>
+                        <option value="dermatological">Dermatological</option>
+                        <option value="gastrointestinal">Gastrointestinal</option>
+                        <option value="respiratory">Respiratory</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={inventoryShowLowStock}
+                          onChange={(e) => setInventoryShowLowStock(e.target.checked)}
+                          className="mr-2"
+                        />
+                        Low Stock
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={inventoryShowExpiringSoon}
+                          onChange={(e) => setInventoryShowExpiringSoon(e.target.checked)}
+                          className="mr-2"
+                        />
+                        Expiring Soon
+                      </label>
+                    </div>
+                    <button
+                      onClick={handleInventorySearch}
+                      className="bg-teal-500 hover:bg-teal-600 text-white px-6 py-2 rounded-lg transition duration-300"
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  {/* Add New Item Button */}
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Inventory Items</h3>
+                    <button
+                      onClick={() => openInventoryModal()}
+                      className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition duration-300 flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Item
+                    </button>
+                  </div>
+
+                  {/* Inventory Table */}
+                  {inventoryLoading ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto"></div>
+                      <p className="text-gray-500 mt-4">Loading inventory...</p>
+                    </div>
+                  ) : inventory.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <Package className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p>No inventory items found</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Drug Name</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {inventory.map((item) => (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                                <div className="text-sm text-gray-500">{item.batch_number}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800 capitalize">
+                                  {item.category}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {item.quantity} {item.unit}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {new Date(item.expiry_date).toLocaleDateString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {item.quantity <= item.reorder_level && (
+                                  <span className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full mr-2">
+                                    Low Stock
+                                  </span>
+                                )}
+                                {item.is_expiring_soon && (
+                                  <span className="inline-block bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">
+                                    Expiring Soon
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button
+                                  onClick={() => openInventoryModal(item)}
+                                  className="text-teal-600 hover:text-teal-900 mr-3"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => deleteInventoryItem(item.id)}
+                                  className="text-red-600 hover:text-red-900"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Inventory Modal */}
+                {inventoryModalOpen && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {editingInventoryItem ? 'Edit Inventory Item' : 'Add New Item'}
+                        </h3>
+                        <button
+                          onClick={closeInventoryModal}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-6 h-6" />
+                        </button>
+                      </div>
+
+                      {/* Success and Error Messages */}
+                      {success && (
+                        <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg">
+                          <div className="flex items-center">
+                            <CheckCircle className="w-5 h-5 mr-2" />
+                            {success}
                           </div>
                         </div>
+                      )}
+
+                      {error && (
+                        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                          <div className="flex items-center">
+                            <AlertTriangle className="w-5 h-5 mr-2" />
+                            {error}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Drug Name</label>
+                          <input
+                            type="text"
+                            value={inventoryForm.drug_name}
+                            onChange={(e) => setInventoryForm(prev => ({ ...prev, drug_name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                          <select
+                            value={inventoryForm.category}
+                            onChange={(e) => setInventoryForm(prev => ({ ...prev, category: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          >
+                            <option value="">Select Category</option>
+                            <option value="analgesics">Analgesics</option>
+                            <option value="antibiotics">Antibiotics</option>
+                            <option value="antihistamines">Antihistamines</option>
+                            <option value="cardiovascular">Cardiovascular</option>
+                            <option value="dermatological">Dermatological</option>
+                            <option value="gastrointestinal">Gastrointestinal</option>
+                            <option value="respiratory">Respiratory</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                            <input
+                              type="number"
+                              value={inventoryForm.quantity}
+                              onChange={(e) => setInventoryForm(prev => ({ ...prev, quantity: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                            <select
+                              value={inventoryForm.unit}
+                              onChange={(e) => setInventoryForm(prev => ({ ...prev, unit: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            >
+                              <option value="tablets">Tablets</option>
+                              <option value="capsules">Capsules</option>
+                              <option value="ml">ml</option>
+                              <option value="mg">mg</option>
+                              <option value="units">Units</option>
+                              <option value="bottles">Bottles</option>
+                              <option value="vials">Vials</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+                          <input
+                            type="date"
+                            value={inventoryForm.expiry_date}
+                            onChange={(e) => setInventoryForm(prev => ({ ...prev, expiry_date: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Batch Number</label>
+                          <input
+                            type="text"
+                            value={inventoryForm.batch_number}
+                            onChange={(e) => setInventoryForm(prev => ({ ...prev, batch_number: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name</label>
+                          <input
+                            type="text"
+                            value={inventoryForm.supplier_name}
+                            onChange={(e) => setInventoryForm(prev => ({ ...prev, supplier_name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
+                          <input
+                            type="number"
+                            value={inventoryForm.low_stock_threshold}
+                            onChange={(e) => setInventoryForm(prev => ({ ...prev, low_stock_threshold: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            min="0"
+                          />
+                        </div>
                       </div>
-                    ))}
+
+                      <div className="flex justify-end gap-3 mt-6">
+                        <button
+                          onClick={closeInventoryModal}
+                          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition duration-300"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveInventoryItem}
+                          disabled={inventorySaving}
+                          className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {inventorySaving ? 'Saving...' : (editingInventoryItem ? 'Update' : 'Add')}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
