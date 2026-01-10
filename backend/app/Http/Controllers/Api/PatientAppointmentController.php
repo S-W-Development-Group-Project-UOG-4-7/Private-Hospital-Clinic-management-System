@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Models\QueueEntry;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class PatientAppointmentController extends Controller
@@ -160,14 +162,20 @@ class PatientAppointmentController extends Controller
     {
         $user = $request->user();
 
-        $appointment = Appointment::query()
-            ->where('patient_id', $user->id)
-            ->findOrFail($id);
+        return DB::transaction(function () use ($user, $id) {
+            $appointment = Appointment::query()
+                ->where('patient_id', $user->id)
+                ->findOrFail($id);
 
-        $appointment->delete();
+            QueueEntry::query()
+                ->where('appointment_id', $appointment->id)
+                ->delete();
 
-        return response()->json([
-            'message' => 'Appointment deleted successfully',
-        ]);
+            $appointment->delete();
+
+            return response()->json([
+                'message' => 'Appointment deleted successfully',
+            ]);
+        });
     }
 }

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate } from 'react-router-dom';
 import { prescriptionApi } from '../../api/pharmacy';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Search } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, Search } from 'lucide-react';
 
 interface PrescriptionItem {
   id: number;

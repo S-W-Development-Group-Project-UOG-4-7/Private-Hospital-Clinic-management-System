@@ -31,6 +31,18 @@ export const API_ENDPOINTS = {
   PATIENT_NOTIFICATIONS: `${API_BASE_URL}/api/patient/notifications`,
   PATIENT_PRESCRIPTIONS: `${API_BASE_URL}/api/patient/prescriptions`,
 
+  RECEPTIONIST_DASHBOARD_STATS: `${API_BASE_URL}/api/receptionist/dashboard/stats`,
+  RECEPTIONIST_PATIENTS: `${API_BASE_URL}/api/receptionist/patients`,
+  RECEPTIONIST_APPOINTMENTS: `${API_BASE_URL}/api/receptionist/appointments`,
+  RECEPTIONIST_QUEUE: `${API_BASE_URL}/api/receptionist/queue`,
+  RECEPTIONIST_QUEUE_CHECK_IN: `${API_BASE_URL}/api/receptionist/queue/check-in`,
+  RECEPTIONIST_QUEUE_STATUS: (id: number | string) => `${API_BASE_URL}/api/receptionist/queue/${id}/status`,
+  RECEPTIONIST_INVOICES: `${API_BASE_URL}/api/receptionist/invoices`,
+  RECEPTIONIST_PAYMENTS: `${API_BASE_URL}/api/receptionist/payments`,
+  RECEPTIONIST_DOCTORS: `${API_BASE_URL}/api/receptionist/doctors`,
+  RECEPTIONIST_DOCTOR_SCHEDULES: `${API_BASE_URL}/api/receptionist/doctor-schedules`,
+  RECEPTIONIST_REFERRALS: `${API_BASE_URL}/api/receptionist/referrals`,
+
   // Prescriptions
   PRESCRIPTIONS: `${API_BASE_URL}/api/prescriptions`,
   PRESCRIPTION_PROCESS: (id: string) => `${API_BASE_URL}/api/prescriptions/${id}/process`,
@@ -54,6 +66,7 @@ export const API_ENDPOINTS = {
   DOCTOR_TELECONSULTATION_START: `${API_BASE_URL}/api/doctor/teleconsultations/start`,
   DOCTOR_TELECONSULTATION_END: (id: string) => `${API_BASE_URL}/api/doctor/teleconsultations/${id}/end`,
   DOCTOR_PATIENT_EHR: (patientId: string) => `${API_BASE_URL}/api/doctor/patients/${patientId}/ehr`,
+  DOCTOR_PATIENTS: `${API_BASE_URL}/api/doctor/patients`,
   DOCTOR_VITALS: `${API_BASE_URL}/api/doctor/vitals`,
   DOCTOR_VITAL_UPDATE: (id: string) => `${API_BASE_URL}/api/doctor/vitals/${id}`,
   DOCTOR_DIAGNOSES: `${API_BASE_URL}/api/doctor/diagnoses`,

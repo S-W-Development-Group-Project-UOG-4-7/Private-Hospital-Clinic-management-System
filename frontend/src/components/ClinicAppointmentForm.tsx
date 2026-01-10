@@ -134,7 +134,7 @@ export default function ClinicAppointmentForm({ onSuccess }: ClinicAppointmentFo
 
     axios
       .post('/api/patient/appointments', payload)
-      .then((res) => {
+      .then((res: any) => {
         console.log('Appointment created', res.data);
         // Notify parent if provided
         if (onSuccess) onSuccess(res.data);
@@ -146,7 +146,7 @@ export default function ClinicAppointmentForm({ onSuccess }: ClinicAppointmentFo
         setSlots([]);
         setStep(1);
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.error(err.response?.data || err);
       });
   }

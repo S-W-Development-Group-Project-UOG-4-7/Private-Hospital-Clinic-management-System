@@ -13,17 +13,23 @@ class Appointment extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
+        'clinic',
+        'appointment_number',
         'clinic_id',
         'appointment_date',
         'appointment_time',
         'type',
         'status',
+        'confirmed_at',
+        'is_walk_in',
         'reason',
         'notes',
     ];
 
     protected $casts = [
         'appointment_date' => 'date',
+        'confirmed_at' => 'datetime',
+        'is_walk_in' => 'boolean',
     ];
 
     public function patient(): BelongsTo

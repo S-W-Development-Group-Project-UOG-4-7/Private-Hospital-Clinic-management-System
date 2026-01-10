@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { drugPurchaseApi, supplierApi, inventoryApi } from '../../api/pharmacy';
-import { ArrowLeft, Plus, CheckCircle, Search } from 'lucide-react';
+import { ArrowLeft, Plus, CheckCircle } from 'lucide-react';
 
 interface PurchaseItem {
   id: number;

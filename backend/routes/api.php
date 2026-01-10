@@ -15,6 +15,15 @@ use App\Http\Controllers\Api\PatientNotificationController;
 use App\Http\Controllers\Api\PatientProfileController;
 use App\Http\Controllers\Api\PatientPrescriptionController;
 use App\Http\Controllers\Api\PatientTeleconsultationController;
+use App\Http\Controllers\Api\ReceptionistAppointmentController;
+use App\Http\Controllers\Api\ReceptionistDashboardController;
+use App\Http\Controllers\Api\ReceptionistDoctorController;
+use App\Http\Controllers\Api\ReceptionistDoctorScheduleController;
+use App\Http\Controllers\Api\ReceptionistInvoiceController;
+use App\Http\Controllers\Api\ReceptionistPatientController;
+use App\Http\Controllers\Api\ReceptionistPaymentController;
+use App\Http\Controllers\Api\ReceptionistQueueController;
+use App\Http\Controllers\Api\ReceptionistReferralController;
 use App\Http\Controllers\Api\DoctorAppointmentController;
 use App\Http\Controllers\Api\DoctorTeleconsultationController;
 use App\Http\Controllers\Api\DoctorEhrController;
@@ -23,6 +32,7 @@ use App\Http\Controllers\Api\DoctorDiagnosisController;
 use App\Http\Controllers\Api\DoctorPrescriptionController;
 use App\Http\Controllers\Api\DoctorLabController;
 use App\Http\Controllers\Api\DoctorReferralController;
+use App\Http\Controllers\Api\DoctorPatientController;
 use App\Http\Controllers\Api\ClinicController;
 
 Route::prefix('auth')->group(function () {
@@ -98,6 +108,48 @@ Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(fu
     Route::get('prescriptions/{id}', [PatientPrescriptionController::class, 'show']);
 });
 
+Route::middleware(['auth:sanctum', 'role:receptionist'])->prefix('receptionist')->group(function () {
+    Route::get('dashboard/stats', [ReceptionistDashboardController::class, 'stats']);
+
+    Route::get('patients', [ReceptionistPatientController::class, 'index']);
+    Route::post('patients', [ReceptionistPatientController::class, 'store']);
+    Route::post('patients/generate-random', [ReceptionistPatientController::class, 'generateRandom']);
+    Route::get('patients/{id}', [ReceptionistPatientController::class, 'show']);
+    Route::put('patients/{id}', [ReceptionistPatientController::class, 'update']);
+    Route::delete('patients/{id}', [ReceptionistPatientController::class, 'destroy']);
+
+    Route::get('appointments', [ReceptionistAppointmentController::class, 'index']);
+    Route::post('appointments', [ReceptionistAppointmentController::class, 'store']);
+    Route::get('appointments/{id}', [ReceptionistAppointmentController::class, 'show']);
+    Route::put('appointments/{id}', [ReceptionistAppointmentController::class, 'update']);
+    Route::post('appointments/{id}/confirm', [ReceptionistAppointmentController::class, 'confirm']);
+    Route::delete('appointments/{id}', [ReceptionistAppointmentController::class, 'destroy']);
+
+    Route::get('queue', [ReceptionistQueueController::class, 'index']);
+    Route::post('queue/check-in', [ReceptionistQueueController::class, 'checkIn']);
+    Route::post('queue/clear', [ReceptionistQueueController::class, 'clear']);
+    Route::put('queue/{id}/status', [ReceptionistQueueController::class, 'updateStatus']);
+
+    Route::get('invoices', [ReceptionistInvoiceController::class, 'index']);
+    Route::post('invoices', [ReceptionistInvoiceController::class, 'store']);
+    Route::get('invoices/{id}', [ReceptionistInvoiceController::class, 'show']);
+    Route::put('invoices/{id}', [ReceptionistInvoiceController::class, 'update']);
+    Route::delete('invoices/{id}', [ReceptionistInvoiceController::class, 'destroy']);
+    Route::post('payments', [ReceptionistPaymentController::class, 'store']);
+
+    Route::get('doctors', [ReceptionistDoctorController::class, 'index']);
+    Route::get('doctor-schedules', [ReceptionistDoctorScheduleController::class, 'index']);
+    Route::post('doctor-schedules', [ReceptionistDoctorScheduleController::class, 'store']);
+    Route::put('doctor-schedules/{id}', [ReceptionistDoctorScheduleController::class, 'update']);
+    Route::delete('doctor-schedules/{id}', [ReceptionistDoctorScheduleController::class, 'destroy']);
+
+    Route::get('referrals', [ReceptionistReferralController::class, 'index']);
+    Route::post('referrals', [ReceptionistReferralController::class, 'store']);
+    Route::get('referrals/{id}', [ReceptionistReferralController::class, 'show']);
+    Route::put('referrals/{id}', [ReceptionistReferralController::class, 'update']);
+    Route::delete('referrals/{id}', [ReceptionistReferralController::class, 'destroy']);
+});
+
 // Doctor Portal Routes (Doctor only)
 Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(function () {
     // Appointments
@@ -135,6 +187,9 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(func
     // Referrals
     Route::post('referrals', [DoctorReferralController::class, 'store']);
     Route::get('referrals', [DoctorReferralController::class, 'index']);
+
+    // Patients (Doctor can register patients)
+    Route::post('patients', [DoctorPatientController::class, 'store']);
 
     // Inventory (read-only for prescriptions)
     Route::get('inventory', [InventoryController::class, 'index']);

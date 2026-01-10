@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate } from 'react-router-dom';
 import { inventoryApi } from '../../api/pharmacy';
 import { ArrowLeft, Plus, Edit, Trash2, Search, AlertTriangle, Calendar } from 'lucide-react';

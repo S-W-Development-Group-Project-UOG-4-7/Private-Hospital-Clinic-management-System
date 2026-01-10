@@ -11,26 +11,21 @@ class Referral extends Model
     use HasFactory;
 
     protected $fillable = [
-        'referral_number',
         'patient_id',
-        'referring_doctor_id',
-        'referred_doctor_id',
-        'specialty',
-        'status',
+        'referred_by_doctor_id',
+        'referred_to_doctor_id',
+        'type',
+        'external_provider',
         'reason',
-        'clinical_summary',
+        'status',
+        'referred_at',
         'notes',
-        'referral_date',
-        'appointment_date',
-        'accepted_at',
-        'completed_at',
+        'report_url',
+        'created_by',
     ];
 
     protected $casts = [
-        'referral_date' => 'date',
-        'appointment_date' => 'date',
-        'accepted_at' => 'datetime',
-        'completed_at' => 'datetime',
+        'referred_at' => 'date',
     ];
 
     public function patient(): BelongsTo
@@ -38,14 +33,18 @@ class Referral extends Model
         return $this->belongsTo(User::class, 'patient_id');
     }
 
-    public function referringDoctor(): BelongsTo
+    public function referredByDoctor(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'referring_doctor_id');
+        return $this->belongsTo(User::class, 'referred_by_doctor_id');
     }
 
-    public function referredDoctor(): BelongsTo
+    public function referredToDoctor(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'referred_doctor_id');
+        return $this->belongsTo(User::class, 'referred_to_doctor_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }
-
