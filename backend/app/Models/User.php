@@ -12,11 +12,9 @@ use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use App\Models\Role;
 use App\Models\PatientProfile;
-
 use App\Models\Prescription;
 use App\Models\ClinicReferral;
 use App\Models\Clinic;
-use App\Models\Prescription;
 
 class User extends Authenticatable
 {

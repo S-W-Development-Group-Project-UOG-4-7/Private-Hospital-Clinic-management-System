@@ -69,7 +69,6 @@ export const API_ENDPOINTS = {
   PHARMACIST_REPORTS_DISPENSING: `${API_BASE_URL}/api/pharmacist/reports/dispensing`,
   PHARMACIST_REPORTS_CONTROLLED_DRUGS: `${API_BASE_URL}/api/pharmacist/reports/controlled-drugs`,
   PHARMACIST_REPORTS_STORAGE: `${API_BASE_URL}/api/pharmacist/reports/storage`,
-  PHARMACIST_REPORTS_DISPENSING: `${API_BASE_URL}/api/pharmacist/reports/dispensing`,
   PHARMACIST_REPORTS_SALES: `${API_BASE_URL}/api/pharmacist/reports/sales`,
   PHARMACIST_REPORTS_PATIENT_ACTIVITY: `${API_BASE_URL}/api/pharmacist/reports/patient-activity`,
   PHARMACIST_PATIENTS: `${API_BASE_URL}/api/pharmacist/patients`,

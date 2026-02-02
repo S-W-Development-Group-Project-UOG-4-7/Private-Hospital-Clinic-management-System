@@ -12,7 +12,6 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Log; // <--- ADDED THIS IMPORT
 use Spatie\Permission\Models\Role as SpatieRole;
 
 class AuthController extends Controller

@@ -59,8 +59,6 @@ type SectionKey =
   | 'prescriptions'
   | 'inventory'
   | 'patients'
-  | 'controlled_substances'
-  | 'returns'
   | 'reports'
   | 'notifications';
 
@@ -378,14 +376,6 @@ const PharmacistDashboard: React.FC = () => {
     setShowDrugDropdown(false);
   };
 
-  const [controlledDrugsLoaded, setControlledDrugsLoaded] = useState(false);
-  const [controlledDrugsLoading, setControlledDrugsLoading] = useState(false);
-  const [controlledDrugs, setControlledDrugs] = useState<ControlledDrugLog[]>([]);
-
-  const [returnsLoaded, setReturnsLoaded] = useState(false);
-  const [returnsLoading, setReturnsLoading] = useState(false);
-  const [returns, setReturns] = useState<ReturnItem[]>([]);
-
   const [notificationsLoaded, setNotificationsLoaded] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notifications, setNotifications] = useState<PharmacistNotification[]>([]);
@@ -462,12 +452,6 @@ const PharmacistDashboard: React.FC = () => {
       }
       if (active === 'patients' && !patientsLoaded && !patientsLoading) {
         await loadPatients();
-      }
-      if (active === 'controlled_substances' && !controlledDrugsLoaded && !controlledDrugsLoading) {
-        await loadControlledDrugs();
-      }
-      if (active === 'returns' && !returnsLoaded && !returnsLoading) {
-        await loadReturns();
       }
       if (active === 'reports' && !reportsLoaded && !reportsLoading) {
         await loadReport();
@@ -789,34 +773,6 @@ const PharmacistDashboard: React.FC = () => {
     }
   };
 
-  const loadControlledDrugs = async () => {
-    setError(null);
-    setControlledDrugsLoading(true);
-    try {
-      const resp = await pharmacistApi.controlledDrugs.list();
-      setControlledDrugs(Array.isArray(resp.data) ? resp.data : []);
-      setControlledDrugsLoaded(true);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load controlled drugs');
-    } finally {
-      setControlledDrugsLoading(false);
-    }
-  };
-
-  const loadReturns = async () => {
-    setError(null);
-    setReturnsLoading(true);
-    try {
-      const resp = await pharmacistApi.returns.list();
-      setReturns(Array.isArray(resp.data) ? resp.data : []);
-      setReturnsLoaded(true);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load returns');
-    } finally {
-      setReturnsLoading(false);
-    }
-  };
-
   const loadNotifications = async (sourceInventory?: InventoryItem[]): Promise<PharmacistNotification[]> => {
     setError(null);
     setNotificationsLoading(true);
@@ -975,6 +931,275 @@ const PharmacistDashboard: React.FC = () => {
     loadReport(type);
   };
 
+  // Print bill as PDF
+  const handlePrintBill = () => {
+    if (!selectedPrescription) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setModalError('Unable to open print window. Please allow popups.');
+      return;
+    }
+
+    const invoiceNumber = selectedPrescription.invoice?.invoice_number || `RX-${selectedPrescription.id}`;
+    const invoiceDate = selectedPrescription.dispensed_at 
+      ? new Date(selectedPrescription.dispensed_at).toLocaleDateString()
+      : new Date().toLocaleDateString();
+    const total = selectedPrescription.invoice?.amount ?? selectedPrescriptionTotal;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Bill - ${invoiceNumber}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            padding: 40px; 
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+          }
+          .header { 
+            text-align: center; 
+            border-bottom: 3px solid #0d9488; 
+            padding-bottom: 20px; 
+            margin-bottom: 30px; 
+          }
+          .header h1 { 
+            color: #0d9488; 
+            font-size: 28px; 
+            margin-bottom: 5px;
+          }
+          .header p { 
+            color: #666; 
+            font-size: 14px;
+          }
+          .invoice-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+          }
+          .invoice-info div { flex: 1; }
+          .invoice-info h3 { 
+            color: #0d9488; 
+            font-size: 12px; 
+            text-transform: uppercase; 
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+          }
+          .invoice-info p { 
+            font-size: 14px; 
+            margin: 4px 0; 
+          }
+          .invoice-number {
+            text-align: right;
+          }
+          .invoice-number .number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0d9488;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0; 
+          }
+          th { 
+            background: #0d9488; 
+            color: white; 
+            padding: 12px 15px; 
+            text-align: left;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          th:last-child { text-align: right; }
+          td { 
+            padding: 15px; 
+            border-bottom: 1px solid #e5e7eb; 
+            font-size: 14px;
+          }
+          td:last-child { text-align: right; font-weight: 600; }
+          .medication-name { font-weight: 600; color: #111; }
+          .medication-details { font-size: 12px; color: #666; margin-top: 4px; }
+          .totals { 
+            margin-top: 20px;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 20px;
+          }
+          .totals-row {
+            display: flex;
+            justify-content: flex-end;
+            margin: 8px 0;
+            font-size: 14px;
+          }
+          .totals-row span:first-child {
+            margin-right: 50px;
+            color: #666;
+          }
+          .totals-row.grand-total {
+            font-size: 20px;
+            font-weight: bold;
+            color: #0d9488;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #0d9488;
+          }
+          .notes {
+            margin-top: 30px;
+            padding: 15px;
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            border-radius: 4px;
+          }
+          .notes h4 { 
+            color: #92400e; 
+            margin-bottom: 8px;
+            font-size: 14px;
+          }
+          .notes p { 
+            font-size: 13px; 
+            color: #78350f; 
+          }
+          .footer { 
+            margin-top: 50px; 
+            text-align: center; 
+            color: #666; 
+            font-size: 12px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+          }
+          .footer p { margin: 3px 0; }
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+          }
+          .status-dispensed { background: #d1fae5; color: #065f46; }
+          .status-pending { background: #fef3c7; color: #92400e; }
+          .status-paid { background: #d1fae5; color: #065f46; }
+          .status-unpaid { background: #fee2e2; color: #991b1b; }
+          @media print {
+            body { padding: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🏥 Private Hospital & Clinic</h1>
+          <p>Pharmacy Department</p>
+          <p>123 Medical Center Drive, Healthcare City | Tel: (555) 123-4567</p>
+        </div>
+
+        <div class="invoice-info">
+          <div>
+            <h3>Bill To</h3>
+            <p><strong>${selectedPrescription.patient_name}</strong></p>
+            <p>Patient ID: ${selectedPrescription.patient_id}</p>
+          </div>
+          <div>
+            <h3>Prescribing Doctor</h3>
+            <p>Dr. ${selectedPrescription.doctor_name}</p>
+            <p>Date: ${new Date(selectedPrescription.created_at).toLocaleDateString()}</p>
+          </div>
+          <div class="invoice-number">
+            <h3>Invoice</h3>
+            <p class="number">${invoiceNumber}</p>
+            <p>Date: ${invoiceDate}</p>
+            <p>
+              <span class="status-badge ${selectedPrescription.status === 'dispensed' ? 'status-dispensed' : 'status-pending'}">
+                ${selectedPrescription.status}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50%">Medication</th>
+              <th style="width: 15%">Qty</th>
+              <th style="width: 15%">Unit Price</th>
+              <th style="width: 20%">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${selectedPrescription.items.map(item => `
+              <tr>
+                <td>
+                  <div class="medication-name">${item.medication_name}</div>
+                  <div class="medication-details">
+                    ${[item.dosage, item.frequency, item.duration].filter(Boolean).join(' • ')}
+                    ${item.instructions ? `<br/>Instructions: ${item.instructions}` : ''}
+                  </div>
+                </td>
+                <td>${item.quantity}</td>
+                <td>$${(item.unit_price ?? 0).toFixed(2)}</td>
+                <td>$${(item.total_price ?? item.quantity * (item.unit_price ?? 0)).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="totals-row">
+            <span>Subtotal:</span>
+            <span>$${selectedPrescriptionTotal.toFixed(2)}</span>
+          </div>
+          <div class="totals-row">
+            <span>Tax (0%):</span>
+            <span>$0.00</span>
+          </div>
+          <div class="totals-row grand-total">
+            <span>Total Amount:</span>
+            <span>$${total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        ${selectedPrescription.invoice ? `
+          <div style="margin-top: 20px; text-align: right;">
+            <span class="status-badge ${selectedPrescription.invoice.status === 'paid' ? 'status-paid' : 'status-unpaid'}">
+              Payment: ${selectedPrescription.invoice.status}
+            </span>
+          </div>
+        ` : ''}
+
+        ${selectedPrescription.notes ? `
+          <div class="notes">
+            <h4>Pharmacist Notes</h4>
+            <p>${selectedPrescription.notes}</p>
+          </div>
+        ` : ''}
+
+        <div class="footer">
+          <p><strong>Thank you for choosing Private Hospital & Clinic Pharmacy</strong></p>
+          <p>For questions about your medication, please contact our pharmacy at (555) 123-4567</p>
+          <p>Please present this bill at the reception for payment</p>
+          <p style="margin-top: 10px; color: #999;">Generated on ${new Date().toLocaleString()}</p>
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
@@ -1023,20 +1248,6 @@ const PharmacistDashboard: React.FC = () => {
         >
           <Users className="w-5 h-5" />
           <span className="text-sm font-medium">Patients</span>
-        </button>
-        <button
-          onClick={() => setActive('controlled_substances')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'controlled_substances' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-        >
-          <Shield className="w-5 h-5" />
-          <span className="text-sm font-medium">Controlled Substances</span>
-        </button>
-        <button
-          onClick={() => setActive('returns')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'returns' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-        >
-          <RotateCcw className="w-5 h-5" />
-          <span className="text-sm font-medium">Returns</span>
         </button>
         <button
           onClick={() => setActive('reports')}
@@ -1143,26 +1354,6 @@ const PharmacistDashboard: React.FC = () => {
                   >
                     <Users className="w-5 h-5" />
                     <span className="text-sm font-medium">Patients</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActive('controlled_substances');
-                      setMobileNavOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'controlled_substances' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <Shield className="w-5 h-5" />
-                    <span className="text-sm font-medium">Controlled Substances</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActive('returns');
-                      setMobileNavOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'returns' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <RotateCcw className="w-5 h-5" />
-                    <span className="text-sm font-medium">Returns</span>
                   </button>
                   <button
                     onClick={() => {
@@ -1298,31 +1489,11 @@ const PharmacistDashboard: React.FC = () => {
                     </button>
                   </motion.div>
 
-                  {/* Controlled Substances */}
-                  <motion.div 
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
-                  >
-                    <div className="mb-6">
-                      <Shield className="w-12 h-12 text-teal-500 mb-4" />
-                      <h2 className="text-xl font-bold text-gray-800 mb-3">Controlled Substances</h2>
-                      <p className="text-gray-600">Track and manage controlled drug inventory</p>
-                    </div>
-                    <button
-                      onClick={() => setActive('controlled_substances')}
-                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
-                    >
-                      View Logs
-                    </button>
-                  </motion.div>
-
                   {/* Patient History */}
                   <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.25 }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
@@ -1338,31 +1509,11 @@ const PharmacistDashboard: React.FC = () => {
                     </button>
                   </motion.div>
 
-                  {/* Returns Management */}
-                  <motion.div 
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
-                  >
-                    <div className="mb-6">
-                      <RotateCcw className="w-12 h-12 text-teal-500 mb-4" />
-                      <h2 className="text-xl font-bold text-gray-800 mb-3">Returns Management</h2>
-                      <p className="text-gray-600">Handle medication returns and refunds</p>
-                    </div>
-                    <button
-                      onClick={() => setActive('returns')}
-                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
-                    >
-                      View Returns
-                    </button>
-                  </motion.div>
-
                   {/* Reports & Analytics */}
                   <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.4 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
@@ -1382,7 +1533,7 @@ const PharmacistDashboard: React.FC = () => {
                   <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.5 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
@@ -1404,7 +1555,7 @@ const PharmacistDashboard: React.FC = () => {
                   <motion.div 
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.6 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
                     className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
                   >
                     <h3 className="text-4xl font-extrabold text-teal-500 mb-2">
@@ -1453,11 +1604,6 @@ const PharmacistDashboard: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-800">Prescription Management</h2>
-                  <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition">
-                      New Prescription
-                    </button>
-                  </div>
                 </div>
 
                 {prescriptionsLoading ? (
@@ -1961,31 +2107,6 @@ const PharmacistDashboard: React.FC = () => {
               </div>
             )}
 
-            {active === 'controlled_substances' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Controlled Substances Log</h2>
-                {controlledDrugsLoading ? (
-                  <div className="text-center py-12">Loading controlled drugs...</div>
-                ) : controlledDrugs.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">No controlled drug logs found</div>
-                ) : (
-                  <div className="space-y-4">
-                    {controlledDrugs.map((log) => (
-                      <div key={log.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{log.drug_name}</h3>
-                            <p className="text-sm text-gray-600">Quantity: {log.quantity}</p>
-                            <p className="text-sm text-gray-600">Date: {new Date(log.timestamp).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             {active === 'patients' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -2120,22 +2241,22 @@ const PharmacistDashboard: React.FC = () => {
                       <div className="p-6">
                         {/* Patient Info */}
                         <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                            <div className="min-w-0">
                               <span className="text-gray-500">Email:</span>
-                              <p className="font-medium">{selectedPatient.email}</p>
+                              <p className="font-medium truncate" title={selectedPatient.email}>{selectedPatient.email}</p>
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <span className="text-gray-500">Phone:</span>
                               <p className="font-medium">{selectedPatient.phone || '—'}</p>
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <span className="text-gray-500">Blood Type:</span>
                               <p className="font-medium">{selectedPatient.blood_type || '—'}</p>
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <span className="text-gray-500">Allergies:</span>
-                              <p className="font-medium">{selectedPatient.allergies || 'None recorded'}</p>
+                              <p className="font-medium break-words">{selectedPatient.allergies || 'None recorded'}</p>
                             </div>
                           </div>
                         </div>
@@ -2220,31 +2341,6 @@ const PharmacistDashboard: React.FC = () => {
                         )}
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {active === 'returns' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Returns Management</h2>
-                {returnsLoading ? (
-                  <div className="text-center py-12">Loading returns...</div>
-                ) : returns.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">No returns found</div>
-                ) : (
-                  <div className="space-y-4">
-                    {returns.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{item.drug_name}</h3>
-                            <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
-                            <p className="text-sm text-gray-600">Reason: {item.reason}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 )}
               </div>
@@ -3003,6 +3099,13 @@ const PharmacistDashboard: React.FC = () => {
                         : 'Awaiting pharmacist action'}
                     </div>
                     <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={handlePrintBill}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Bill
+                      </button>
                       <button
                         onClick={closePrescriptionModal}
                         className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"

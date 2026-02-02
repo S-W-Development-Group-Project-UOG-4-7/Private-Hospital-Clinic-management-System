@@ -43,7 +43,6 @@ use App\Http\Controllers\Api\ClinicController;
 use App\Http\Controllers\Api\PharmacistController;
 use App\Http\Controllers\Api\PatientController;
 use App\Http\Controllers\Api\AIController;
-=======
 use App\Http\Controllers\Api\PharmacistPatientController;
 use App\Http\Controllers\Api\PharmacistReportController;
 
@@ -152,10 +151,6 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->gr
     Route::get('returns', [InventoryController::class, 'getReturns']);
 
 
-    // Reports & Audit
-    Route::get('reports/inventory', [InventoryController::class, 'inventoryReport']);
-=======
-    
     // Patients (view basic patient info and medication history)
     Route::get('patients', [PharmacistPatientController::class, 'index']);
     Route::get('patients/{id}', [PharmacistPatientController::class, 'show']);
@@ -169,7 +164,6 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->gr
     Route::get('reports/patient-activity', [PharmacistReportController::class, 'patientActivityReport']);
     
     // Storage Report & Audit
-
     Route::get('reports/storage', [InventoryController::class, 'storageReport']);
     Route::get('audit-logs', [InventoryController::class, 'auditLogs']);
 });
@@ -341,5 +335,3 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('features', [AIController::class, 'getFeatures']);
     });
 });
-=======
-
