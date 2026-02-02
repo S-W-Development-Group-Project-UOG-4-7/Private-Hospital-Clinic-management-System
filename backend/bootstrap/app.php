@@ -15,8 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(HandleCors::class);
 
+        // --- CORRECTED SECTION ---
         $middleware->alias([
-            'role' => \App\Http\Middleware\EnsureUserRole::class,
+            // Point "role" to Spatie's middleware, NOT your own custom file
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+
+            // It is good practice to add these two as well:
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

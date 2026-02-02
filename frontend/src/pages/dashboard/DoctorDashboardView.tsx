@@ -39,10 +39,12 @@ import type {
   Referral,
   UpdateDiagnosisPayload,
   CreateClinicReferralPayload,
+  DailySummaryResponse,
+  ConsultedPatient,
 } from '../../types/doctor';
 import type { AuthUser } from '../../types/auth';
 
-type SectionKey = 'overview' | 'queue' | 'consultation' | 'prescriptions' | 'labs' | 'referrals' | 'ai_insights';
+type SectionKey = 'overview' | 'queue' | 'consultation' | 'prescriptions' | 'labs' | 'referrals' | 'ai_insights' | 'daily_summary';
 
 const safeParseJson = (value: string | null) => {
   if (!value) return null;
@@ -215,6 +217,21 @@ const DoctorDashboardView: React.FC = () => {
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
   const [callingNext, setCallingNext] = useState(false);
+  const [consultationTypeFilter, setConsultationTypeFilter] = useState<'all' | 'online' | 'physical'>('all');
+
+  // Filter queue entries based on consultation type
+  const filteredQueueEntries = useMemo(() => {
+    if (consultationTypeFilter === 'all') return queueEntries;
+    return queueEntries.filter(entry => {
+      const appointmentType = entry.appointment?.type?.toLowerCase() || '';
+      if (consultationTypeFilter === 'online') {
+        return appointmentType === 'telemedicine' || appointmentType === 'online' || appointmentType === 'video';
+      } else {
+        // Physical consultation - includes in_person, physical, or any other type that's not telemedicine
+        return appointmentType !== 'telemedicine' && appointmentType !== 'online' && appointmentType !== 'video';
+      }
+    });
+  }, [queueEntries, consultationTypeFilter]);
 
   // Current patient in consultation (derived from queue)
   const currentPatientInConsultation = useMemo(() => 
@@ -228,6 +245,13 @@ const DoctorDashboardView: React.FC = () => {
     }
     return 'Unknown Patient';
   };
+
+  // Daily Summary state
+  const [dailySummaryDate, setDailySummaryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dailySummaryLoading, setDailySummaryLoading] = useState(false);
+  const [dailySummaryLoaded, setDailySummaryLoaded] = useState(false);
+  const [dailySummary, setDailySummary] = useState<DailySummaryResponse | null>(null);
+  const [expandedPatientId, setExpandedPatientId] = useState<number | null>(null);
 
   // Patient registration (doctor)
   const handleLogout = () => {
@@ -653,6 +677,22 @@ const DoctorDashboardView: React.FC = () => {
     }
   }, []);
 
+  // Daily Summary function
+  const loadDailySummary = useCallback(async (date: string) => {
+    setError(null);
+    setDailySummaryLoading(true);
+    try {
+      const data = await doctorApi.dashboard.getDailySummary(date);
+      setDailySummary(data);
+      setDailySummaryLoaded(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load daily summary');
+      toast.error(e?.message || 'Failed to load daily summary');
+    } finally {
+      setDailySummaryLoading(false);
+    }
+  }, []);
+
   const callNextPatient = async () => {
     setCallingNext(true);
     setError(null);
@@ -708,6 +748,9 @@ const DoctorDashboardView: React.FC = () => {
     if (active === 'queue' && !queueLoaded && !queueLoading) {
       loadQueue();
     }
+    if (active === 'daily_summary' && !dailySummaryLoaded && !dailySummaryLoading) {
+      loadDailySummary(dailySummaryDate);
+    }
     // Auto-load lab results when switching to labs tab with a current consultation patient
     if (active === 'labs' && currentPatientInConsultation && !labsLoading) {
       const patientId = String(currentPatientInConsultation.patient_id);
@@ -726,7 +769,7 @@ const DoctorDashboardView: React.FC = () => {
         }
       }
     }
-  }, [active, initialReferralFilters, loadPrescriptions, loadReferrals, loadQueue, prescriptionsLoaded, prescriptionsLoading, referralsLoaded, referralsLoading, queueLoaded, queueLoading, currentPatientInConsultation, labsPatientId, labsLoading, labData]);
+  }, [active, initialReferralFilters, loadPrescriptions, loadReferrals, loadQueue, loadDailySummary, prescriptionsLoaded, prescriptionsLoading, referralsLoaded, referralsLoading, queueLoaded, queueLoading, dailySummaryLoaded, dailySummaryLoading, dailySummaryDate, currentPatientInConsultation, labsPatientId, labsLoading, labData]);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const todaysAppointments = useMemo(
@@ -761,17 +804,17 @@ const DoctorDashboardView: React.FC = () => {
           <span className="text-sm font-medium">Overview</span>
         </button>
         <button
+          onClick={() => setActive('daily_summary')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'daily_summary' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+        >
+          <ClipboardList className="w-5 h-5" />
+          <span className="text-sm font-medium">Daily Summary</span>
+        </button>
+        <button
           onClick={() => setActive('queue')}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'queue' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
         >
           <Users className="w-5 h-5" />
-          <span className="text-sm font-medium">Patient Queue</span>
-        </button>
-        <button
-          onClick={() => setActive('consultation')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'consultation' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-        >
-          <Video className="w-5 h-5" />
           <span className="text-sm font-medium">Consultation</span>
         </button>
         <button
@@ -817,8 +860,8 @@ const DoctorDashboardView: React.FC = () => {
           {(
             [
               ['overview', 'Overview', LayoutDashboard],
-              ['queue', 'Patient Queue', Users],
-              ['consultation', 'Consultation', Video],
+              ['daily_summary', 'Daily Summary', ClipboardList],
+              ['queue', 'Consultation', Users],
               ['prescriptions', 'Prescriptions', Pill],
               ['labs', 'Lab Orders', FlaskConical],
               ['referrals', 'Referrals', Share2],
@@ -965,7 +1008,7 @@ const DoctorDashboardView: React.FC = () => {
                       <p className="text-gray-600">Start and manage consultations</p>
                     </div>
                     <button
-                      onClick={() => setActive('consultation')}
+                      onClick={() => setActive('queue')}
                       className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                     >
                       Start
@@ -1068,6 +1111,259 @@ const DoctorDashboardView: React.FC = () => {
                     <p className="text-gray-600">Cancelled</p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {active === 'daily_summary' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Daily Summary</h2>
+                    <p className="text-gray-600 text-sm">View summary of patients consulted for selected date</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="date"
+                      value={dailySummaryDate}
+                      onChange={(e) => {
+                        setDailySummaryDate(e.target.value);
+                        setDailySummary(null);
+                        setDailySummaryLoaded(false);
+                      }}
+                      className="px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                    <button
+                      onClick={() => loadDailySummary(dailySummaryDate)}
+                      disabled={dailySummaryLoading}
+                      className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-2 px-6 rounded-full transition duration-300"
+                    >
+                      {dailySummaryLoading ? 'Loading...' : 'Load Summary'}
+                    </button>
+                  </div>
+                </div>
+
+                {dailySummaryLoading && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-500"></div>
+                    <span className="ml-3 text-gray-600">Loading daily summary...</span>
+                  </div>
+                )}
+
+                {!dailySummaryLoading && dailySummary && (
+                  <>
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      <div className="bg-white rounded-lg shadow p-4 text-center border-l-4 border-teal-500">
+                        <h3 className="text-3xl font-bold text-teal-600">{dailySummary.stats.completed_consultations}</h3>
+                        <p className="text-gray-600 text-sm">Consultations</p>
+                      </div>
+                      <div className="bg-white rounded-lg shadow p-4 text-center border-l-4 border-blue-500">
+                        <h3 className="text-3xl font-bold text-blue-600">{dailySummary.stats.prescriptions_issued}</h3>
+                        <p className="text-gray-600 text-sm">Prescriptions</p>
+                      </div>
+                      <div className="bg-white rounded-lg shadow p-4 text-center border-l-4 border-purple-500">
+                        <h3 className="text-3xl font-bold text-purple-600">{dailySummary.stats.lab_orders_placed}</h3>
+                        <p className="text-gray-600 text-sm">Lab Orders</p>
+                      </div>
+                      <div className="bg-white rounded-lg shadow p-4 text-center border-l-4 border-orange-500">
+                        <h3 className="text-3xl font-bold text-orange-600">{dailySummary.stats.referrals_made}</h3>
+                        <p className="text-gray-600 text-sm">Referrals</p>
+                      </div>
+                      <div className="bg-white rounded-lg shadow p-4 text-center border-l-4 border-gray-500">
+                        <h3 className="text-3xl font-bold text-gray-600">{dailySummary.stats.pending_appointments}</h3>
+                        <p className="text-gray-600 text-sm">Pending</p>
+                      </div>
+                    </div>
+
+                    {/* Consultation Type Breakdown */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-green-700 font-medium">In-Person Consultations</span>
+                          <span className="text-2xl font-bold text-green-600">{dailySummary.stats.in_person_consultations}</span>
+                        </div>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-blue-700 font-medium">Telemedicine Consultations</span>
+                          <span className="text-2xl font-bold text-blue-600">{dailySummary.stats.telemedicine_consultations}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Consulted Patients List */}
+                    <div className="bg-white rounded-lg shadow">
+                      <div className="p-4 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Patients Consulted ({dailySummary.consulted_patients.length})
+                        </h3>
+                      </div>
+                      {dailySummary.consulted_patients.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">
+                          No consultations completed for this date.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {dailySummary.consulted_patients.map((patient: ConsultedPatient) => (
+                            <div key={patient.appointment_id} className="p-4 hover:bg-gray-50">
+                              <div 
+                                className="flex items-center justify-between cursor-pointer"
+                                onClick={() => setExpandedPatientId(expandedPatientId === patient.patient_id ? null : patient.patient_id)}
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center font-semibold">
+                                    {patient.patient_name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-semibold text-gray-900">{patient.patient_name}</h4>
+                                    <div className="flex items-center gap-3 text-sm text-gray-500">
+                                      <span>{patient.appointment_time?.slice(0, 5)}</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                        patient.consultation_type === 'in_person' 
+                                          ? 'bg-green-100 text-green-700' 
+                                          : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {patient.consultation_type === 'in_person' ? 'In-Person' : 'Telemedicine'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="flex gap-2">
+                                    {patient.prescriptions_count > 0 && (
+                                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                        {patient.prescriptions_count} Rx
+                                      </span>
+                                    )}
+                                    {patient.lab_orders_count > 0 && (
+                                      <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                                        {patient.lab_orders_count} Lab
+                                      </span>
+                                    )}
+                                    {patient.referrals_count > 0 && (
+                                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                                        {patient.referrals_count} Ref
+                                      </span>
+                                    )}
+                                  </div>
+                                  <svg 
+                                    className={`w-5 h-5 text-gray-400 transition-transform ${expandedPatientId === patient.patient_id ? 'rotate-180' : ''}`} 
+                                    fill="none" 
+                                    viewBox="0 0 24 24" 
+                                    stroke="currentColor"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
+                              </div>
+
+                              {/* Expanded Details */}
+                              {expandedPatientId === patient.patient_id && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="mt-4 pl-14 space-y-3"
+                                >
+                                  {/* Contact Info */}
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                                    <div>
+                                      <span className="text-gray-500">Phone:</span>
+                                      <span className="ml-2 text-gray-900">{patient.patient_phone}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Gender:</span>
+                                      <span className="ml-2 text-gray-900 capitalize">{patient.patient_gender}</span>
+                                    </div>
+                                    {patient.patient_email && (
+                                      <div>
+                                        <span className="text-gray-500">Email:</span>
+                                        <span className="ml-2 text-gray-900">{patient.patient_email}</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Reason & Notes */}
+                                  {patient.reason && (
+                                    <div className="text-sm">
+                                      <span className="text-gray-500 font-medium">Reason:</span>
+                                      <span className="ml-2 text-gray-700">{patient.reason}</span>
+                                    </div>
+                                  )}
+                                  {patient.notes && (
+                                    <div className="text-sm bg-gray-50 p-3 rounded">
+                                      <span className="text-gray-500 font-medium">Notes:</span>
+                                      <p className="mt-1 text-gray-700">{patient.notes}</p>
+                                    </div>
+                                  )}
+
+                                  {/* Prescriptions */}
+                                  {patient.prescriptions.length > 0 && (
+                                    <div className="bg-blue-50 p-3 rounded">
+                                      <h5 className="text-sm font-semibold text-blue-800 mb-2">Prescriptions</h5>
+                                      <div className="space-y-1">
+                                        {patient.prescriptions.map((rx) => (
+                                          <div key={rx.id} className="flex items-center justify-between text-sm">
+                                            <span className="text-blue-700">{rx.prescription_number}</span>
+                                            <span className="text-blue-600">{rx.items_count} items • {rx.status}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Lab Orders */}
+                                  {patient.lab_orders.length > 0 && (
+                                    <div className="bg-purple-50 p-3 rounded">
+                                      <h5 className="text-sm font-semibold text-purple-800 mb-2">Lab Orders</h5>
+                                      <div className="space-y-1">
+                                        {patient.lab_orders.map((lab) => (
+                                          <div key={lab.id} className="flex items-center justify-between text-sm">
+                                            <span className="text-purple-700">{lab.test_type}</span>
+                                            <span className="text-purple-600">{lab.status}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Referrals */}
+                                  {patient.referrals.length > 0 && (
+                                    <div className="bg-orange-50 p-3 rounded">
+                                      <h5 className="text-sm font-semibold text-orange-800 mb-2">Clinic Referrals</h5>
+                                      <div className="space-y-1">
+                                        {patient.referrals.map((ref) => (
+                                          <div key={ref.id} className="flex items-center justify-between text-sm">
+                                            <span className="text-orange-700">{ref.clinic_name}</span>
+                                            <span className={`px-2 py-0.5 rounded text-xs ${
+                                              ref.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                                              ref.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                                              'bg-gray-100 text-gray-700'
+                                            }`}>
+                                              {ref.priority}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {!dailySummaryLoading && !dailySummary && (
+                  <div className="bg-white rounded-lg shadow p-8 text-center">
+                    <ClipboardList className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">No Summary Loaded</h3>
+                    <p className="text-gray-500">Select a date and click "Load Summary" to view your consultation history.</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1549,13 +1845,13 @@ const DoctorDashboardView: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Patient Queue</h2>
-                    <p className="text-gray-600 text-sm">View and manage patients waiting to be seen</p>
+                    <h2 className="text-2xl font-bold text-gray-900">Consultation</h2>
+                    <p className="text-gray-600 text-sm">View and manage patients for consultation</p>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={callNextPatient}
-                      disabled={callingNext || queueEntries.filter(e => e.status === 'waiting').length === 0}
+                      disabled={callingNext || filteredQueueEntries.filter(e => e.status === 'waiting').length === 0}
                       className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                     >
                       {callingNext ? 'Calling...' : 'Call Next Patient'}
@@ -1570,10 +1866,66 @@ const DoctorDashboardView: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Consultation Type Selection */}
+                <div className="bg-white rounded-lg shadow-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Consultation Type</h3>
+                  <div className="flex flex-wrap gap-4">
+                    <button
+                      onClick={() => setConsultationTypeFilter('online')}
+                      className={`flex-1 min-w-[200px] flex items-center gap-3 p-4 rounded-lg border-2 transition ${
+                        consultationTypeFilter === 'online' 
+                          ? 'border-teal-600 bg-teal-100 ring-2 ring-teal-400' 
+                          : 'border-teal-500 bg-teal-50 hover:bg-teal-100'
+                      }`}
+                    >
+                      <Video className="w-8 h-8 text-teal-600" />
+                      <div className="text-left">
+                        <div className="font-semibold text-teal-700">Online Consultation</div>
+                        <div className="text-sm text-teal-600">Telemedicine / Video Call</div>
+                        <div className="text-xs text-teal-500 mt-1">
+                          {queueEntries.filter(e => {
+                            const t = e.appointment?.type?.toLowerCase() || '';
+                            return t === 'telemedicine' || t === 'online' || t === 'video';
+                          }).length} patients
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setConsultationTypeFilter('physical')}
+                      className={`flex-1 min-w-[200px] flex items-center gap-3 p-4 rounded-lg border-2 transition ${
+                        consultationTypeFilter === 'physical' 
+                          ? 'border-blue-600 bg-blue-100 ring-2 ring-blue-400' 
+                          : 'border-blue-500 bg-blue-50 hover:bg-blue-100'
+                      }`}
+                    >
+                      <Users className="w-8 h-8 text-blue-600" />
+                      <div className="text-left">
+                        <div className="font-semibold text-blue-700">Physical Consultation</div>
+                        <div className="text-sm text-blue-600">In-Person Visit</div>
+                        <div className="text-xs text-blue-500 mt-1">
+                          {queueEntries.filter(e => {
+                            const t = e.appointment?.type?.toLowerCase() || '';
+                            return t !== 'telemedicine' && t !== 'online' && t !== 'video';
+                          }).length} patients
+                        </div>
+                      </div>
+                    </button>
+                    {consultationTypeFilter !== 'all' && (
+                      <button
+                        onClick={() => setConsultationTypeFilter('all')}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-300 bg-gray-50 hover:bg-gray-100 transition text-gray-600"
+                      >
+                        <X className="w-4 h-4" />
+                        <span className="text-sm">Show All</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Current Patient Card */}
                 {(() => {
-                  const currentPatient = queueEntries.find(e => e.status === 'in_consultation' || e.status === 'in_progress');
-                  const nextPatient = queueEntries.find(e => e.status === 'waiting');
+                  const currentPatient = filteredQueueEntries.find(e => e.status === 'in_consultation' || e.status === 'in_progress');
+                  const nextPatient = filteredQueueEntries.find(e => e.status === 'waiting');
                   
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1669,15 +2021,15 @@ const DoctorDashboardView: React.FC = () => {
                 {/* Queue Stats */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white p-4 rounded-lg shadow text-center">
-                    <p className="text-3xl font-bold text-yellow-600">{queueEntries.filter(e => e.status === 'waiting').length}</p>
+                    <p className="text-3xl font-bold text-yellow-600">{filteredQueueEntries.filter(e => e.status === 'waiting').length}</p>
                     <p className="text-sm text-gray-600">Waiting</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg shadow text-center">
-                    <p className="text-3xl font-bold text-teal-600">{queueEntries.filter(e => e.status === 'in_consultation' || e.status === 'in_progress').length}</p>
+                    <p className="text-3xl font-bold text-teal-600">{filteredQueueEntries.filter(e => e.status === 'in_consultation' || e.status === 'in_progress').length}</p>
                     <p className="text-sm text-gray-600">In Consultation</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg shadow text-center">
-                    <p className="text-3xl font-bold text-green-600">{queueEntries.filter(e => e.status === 'completed').length}</p>
+                    <p className="text-3xl font-bold text-green-600">{filteredQueueEntries.filter(e => e.status === 'completed').length}</p>
                     <p className="text-sm text-gray-600">Completed Today</p>
                   </div>
                 </div>
@@ -1687,8 +2039,11 @@ const DoctorDashboardView: React.FC = () => {
                 ) : (
                   <div className="bg-white rounded-lg shadow-lg overflow-hidden">
                     <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
-                      <h3 className="font-semibold text-gray-700">Waiting Queue</h3>
-                      <span className="text-sm text-gray-500">{queueEntries.filter(e => e.status === 'waiting' || e.status === 'in_consultation' || e.status === 'in_progress').length} patients</span>
+                      <h3 className="font-semibold text-gray-700">
+                        {consultationTypeFilter === 'online' ? 'Online Consultation Queue' : 
+                         consultationTypeFilter === 'physical' ? 'Physical Consultation Queue' : 'All Patients Queue'}
+                      </h3>
+                      <span className="text-sm text-gray-500">{filteredQueueEntries.filter(e => e.status === 'waiting' || e.status === 'in_consultation' || e.status === 'in_progress').length} patients</span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -1703,14 +2058,16 @@ const DoctorDashboardView: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {queueEntries.filter(e => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').length === 0 ? (
+                          {filteredQueueEntries.filter(e => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').length === 0 ? (
                             <tr>
                               <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
-                                No patients in queue.
+                                {consultationTypeFilter === 'all' 
+                                  ? 'No patients in queue.' 
+                                  : `No patients for ${consultationTypeFilter === 'online' ? 'online' : 'physical'} consultation.`}
                               </td>
                             </tr>
                           ) : (
-                            queueEntries.filter(e => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').map((entry, index) => (
+                            filteredQueueEntries.filter(e => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').map((entry, index) => (
                               <tr key={entry.id} className={`hover:bg-gray-50 ${entry.status === 'in_consultation' || entry.status === 'in_progress' ? 'bg-teal-50' : index === 0 && entry.status === 'waiting' ? 'bg-yellow-50' : ''}`}>
                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
                                   {entry.queue_number ?? '-'}

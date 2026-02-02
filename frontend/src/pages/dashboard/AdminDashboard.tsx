@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import axios from 'axios';
-// FIX: Removed unused 'LineChart' and 'Line'
+import api from '../../api/axiosConfig'; 
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area 
 } from 'recharts';
 import { 
-  Users, Stethoscope, Building2, UserCog, Activity, 
-  ArrowUpRight, Bell, Search 
+  Users, Stethoscope, Building2, UserCog, 
+  ArrowUpRight, Bell, Search, Menu, BarChart3 // <--- Added BarChart3 icon
 } from 'lucide-react';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 
@@ -33,6 +32,7 @@ interface ApiResponse {
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  // Determines if we are on the main dashboard page or a sub-page
   const isMainPage = location.pathname === '/admin' || location.pathname === '/admin/';
   
   // State for Counts
@@ -42,8 +42,8 @@ const AdminDashboard: React.FC = () => {
 
   // State for Chart
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(true); // For mobile responsiveness
 
   // Date Helper
   const today = new Date().toLocaleDateString('en-US', { 
@@ -51,18 +51,14 @@ const AdminDashboard: React.FC = () => {
   });
 
   useEffect(() => {
+    // Only fetch stats if we are actually looking at the dashboard widgets
     if (isMainPage) {
       const fetchStats = async () => {
         try {
-          const token = localStorage.getItem('authToken');
-          if (!token) return;
-
-          const response = await axios.get<ApiResponse>('http://localhost:8000/api/admin/stats', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const res = await api.get<ApiResponse>('/admin/dashboard-stats');
           
-          setStats(response.data.counts);
-          setChartData(response.data.chart_data);
+          setStats(res.data.counts);
+          setChartData(res.data.chart_data);
           setLoading(false);
         } catch (error) {
           console.error("Error loading stats:", error);
@@ -77,20 +73,29 @@ const AdminDashboard: React.FC = () => {
   const actions = [
     { title: 'Manage Users', icon: <Users size={20} />, path: '/admin/users', color: 'text-blue-600', bg: 'bg-blue-50' },
     { title: 'Inventory', icon: <Building2 size={20} />, path: '/admin/inventory', color: 'text-orange-600', bg: 'bg-orange-50' },
-    { title: 'Reports', icon: <Activity size={20} />, path: '/admin/reports', color: 'text-purple-600', bg: 'bg-purple-50' },
+    // --- NEW: Added Reports Button ---
+    { title: 'System Reports', icon: <BarChart3 size={20} />, path: '/admin/reports', color: 'text-purple-600', bg: 'bg-purple-50' },
+    // ---------------------------------
+    { title: 'Departments', icon: <Building2 size={20} />, path: '/admin/departments', color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { title: 'Add Staff', icon: <UserCog size={20} />, path: '/admin/users/new', color: 'text-teal-600', bg: 'bg-teal-50' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans">
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl border-r border-gray-100">
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl border-r border-gray-100 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <AdminSidebar />
       </div>
 
-      <div className="flex-1 ml-64 min-h-screen flex flex-col">
+      {/* Main Content Area */}
+      <div className={`flex-1 min-h-screen flex flex-col transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
+        
         {/* Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-4">
+             <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-500 hover:text-gray-700">
+                <Menu size={24} />
+             </button>
              <h2 className="text-xl font-bold text-gray-800 tracking-tight">Hospital Admin</h2>
              <span className="hidden md:inline px-3 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-500">{today}</span>
           </div>
@@ -110,6 +115,9 @@ const AdminDashboard: React.FC = () => {
         </header>
 
         <main className="p-8 flex-1 overflow-y-auto">
+          {/* LOGIC: If we are at "/admin", show the dashboard widgets.
+            If we are at "/admin/users", show the <Outlet /> which renders the UsersList component.
+          */}
           {isMainPage ? (
             <div className="space-y-8 animate-fade-in">
               
@@ -218,6 +226,7 @@ const AdminDashboard: React.FC = () => {
 
             </div>
           ) : (
+            // This displays UsersList, Departments, etc. when URL is /admin/users or /admin/departments
             <div className="animate-fade-in">
               <Outlet />
             </div>

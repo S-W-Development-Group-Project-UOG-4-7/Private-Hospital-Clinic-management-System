@@ -6,19 +6,25 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            $table->string('clinic', 100)->nullable()->after('doctor_id');
-            $table->index('clinic');
+            $table->unsignedBigInteger('department_id')->nullable()->after('doctor_id');
+            $table->foreign('department_id')->references('id')->on('departments')->onDelete('set null');
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            $table->dropIndex(['clinic']);
-            $table->dropColumn('clinic');
+            $table->dropForeign(['department_id']);
+            $table->dropColumn('department_id');
         });
     }
 };

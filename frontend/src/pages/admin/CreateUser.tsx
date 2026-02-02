@@ -1,45 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Save, ArrowLeft, User, Mail, Lock, Building, Stethoscope } from 'lucide-react';
-import api from '../../api/axiosConfig'; // This uses your new config file
+import api from '../../api/axiosConfig';
+
+interface Department {
+  id: number;
+  name: string;
+}
 
 const CreateUser: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Form State
+  // State for Form Data
   const [formData, setFormData] = useState({
-    name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     password: '',
-    role: 'patient', // Default role
-    department_id: '', // Only for doctors
+    role: 'patient', 
+    department_id: '', 
   });
 
-  // Hardcoded departments (In the future, you can fetch these from the DB)
-  const departments = [
-    { id: 1, name: 'OPD' },
-    { id: 2, name: 'General Medicine' },
-    { id: 3, name: 'Neurology' },
-    { id: 4, name: 'Cardiology' },
-    { id: 5, name: 'Pediatrics' },
-  ];
+  // State for Departments
+  const [departments, setDepartments] = useState<Department[]>([]);
+
+  // 1. Fetch Departments (Fixed Type Error)
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        // We use <Department[]> to tell TypeScript the expected result type
+        const res = await api.get<Department[]>('/admin/departments');
+        
+        // Ensure we set an array (handle potential undefined/null)
+        setDepartments(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error("Error fetching departments", err);
+        // Fallback data in case of error
+        setDepartments([
+            { id: 1, name: 'General Medicine' },
+            { id: 2, name: 'Cardiology' },
+            { id: 3, name: 'Pediatrics' },
+            { id: 4, name: 'Orthopedics' }
+        ]);
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     
-    // Create the payload to send to the backend
+    // Create the payload
     const payload: any = {
-      name: formData.name,
+      first_name: formData.first_name,
+      last_name: formData.last_name,
       email: formData.email,
       password: formData.password,
       role: formData.role,
     };
 
-    // Only add department_id if the role is 'doctor'
+    // Validation: Doctors need a department
     if (formData.role === 'doctor') {
       if (!formData.department_id) {
         setError("Please select a department for the doctor.");
@@ -50,10 +74,8 @@ const CreateUser: React.FC = () => {
     }
 
     try {
-      // Send POST request to create user
       await api.post('/admin/users', payload);
-      
-      // On success, redirect back to the list
+      alert('User created successfully!');
       navigate('/admin/users');
     } catch (err: any) {
       console.error(err);
@@ -64,7 +86,7 @@ const CreateUser: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 p-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button 
@@ -89,57 +111,75 @@ const CreateUser: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name & Email Row */}
+          
+          {/* Row 1: First Name & Last Name */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
               <div className="relative">
                 <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input 
                   type="text" 
                   required 
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition"
-                  placeholder="John Doe"
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  placeholder="e.g. John"
+                  value={formData.first_name}
+                  onChange={e => setFormData({...formData, first_name: e.target.value})}
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input 
-                  type="email" 
+                  type="text" 
                   required 
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition"
-                  placeholder="john@hospital.com"
-                  value={formData.email}
-                  onChange={e => setFormData({...formData, email: e.target.value})}
+                  placeholder="e.g. Doe"
+                  value={formData.last_name}
+                  onChange={e => setFormData({...formData, last_name: e.target.value})}
                 />
               </div>
             </div>
           </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              <input 
-                type="password" 
-                required 
-                minLength={8}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition"
-                placeholder="Minimum 8 characters"
-                value={formData.password}
-                onChange={e => setFormData({...formData, password: e.target.value})}
-              />
+          {/* Row 2: Email & Password */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <div className="relative">
+                <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input 
+                    type="email" 
+                    required 
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition"
+                    placeholder="john@hospital.com"
+                    value={formData.email}
+                    onChange={e => setFormData({...formData, email: e.target.value})}
+                />
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <div className="relative">
+                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input 
+                    type="password" 
+                    required 
+                    minLength={8}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition"
+                    placeholder="Minimum 8 characters"
+                    value={formData.password}
+                    onChange={e => setFormData({...formData, password: e.target.value})}
+                />
+                </div>
             </div>
           </div>
 
-          {/* Role Selection */}
+          {/* Row 3: Role & Department */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Assign Role</label>
@@ -152,8 +192,8 @@ const CreateUser: React.FC = () => {
                 >
                   <option value="patient">Patient</option>
                   <option value="doctor">Doctor</option>
-                  <option value="pharmacist">Pharmacist (Staff)</option>
-                  <option value="receptionist">Receptionist (Staff)</option>
+                  <option value="pharmacist">Pharmacist</option>
+                  <option value="receptionist">Receptionist</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

@@ -93,9 +93,22 @@ class ReceptionistQueueController extends Controller
         });
 
         // Merge checked-in entries first, then scheduled appointments
-        $combined = $entries->map(function ($e) {
-            return $e;
-        })->merge($appointmentItems);
+        // Convert $entries to plain objects to avoid getKey() issues when merging
+        $entriesAsObjects = $entries->map(function ($e) {
+            return (object) [
+                'id' => 'queue_' . $e->id,
+                'queue_number' => $e->queue_number,
+                'queue_date' => $e->queue_date,
+                'patient' => $e->patient ?? null,
+                'doctor' => $e->doctor ?? null,
+                'status' => $e->status ?? 'checked_in',
+                'appointment' => $e->appointment ?? null,
+                'queue_entry' => $e,
+            ];
+        });
+
+        // Now safely merge both collections of plain objects
+        $combined = collect($entriesAsObjects)->merge($appointmentItems);
 
         return response()->json([
             'data' => $combined->values()->all(),

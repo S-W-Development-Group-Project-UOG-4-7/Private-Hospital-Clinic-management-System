@@ -10,15 +10,27 @@ return new class extends Migration
     {
         Schema::create('ehr_records', function (Blueprint $table) {
             $table->id();
+
+            // Relationships
             $table->foreignId('patient_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('doctor_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->enum('type', ['diagnosis', 'lab_report']);
-            $table->string('title');
+
+            // --- NEW FIELDS (Required for the Reports Feature) ---
+            $table->text('diagnosis')->nullable();
+            $table->text('prescription')->nullable();
+            $table->text('notes')->nullable();
+            // -----------------------------------------------------
+
+            // Modified: Changed 'enum' to 'string' to allow more flexibility (e.g., "Consultation", "Surgery")
+            $table->string('type')->nullable();
+
+            $table->string('title')->nullable();
             $table->text('details')->nullable();
             $table->date('record_date')->nullable();
             $table->string('file_url')->nullable();
             $table->timestamps();
 
+            // Indexes for performance
             $table->index('patient_id');
             $table->index('doctor_id');
             $table->index('type');

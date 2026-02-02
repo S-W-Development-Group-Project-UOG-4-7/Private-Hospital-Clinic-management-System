@@ -1,74 +1,18 @@
-import { API_ENDPOINTS } from '../config/api';
-import { AuthResponse, AuthUser } from '../types/auth';
+import api from './axiosConfig';
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get('content-type') || '';
-
-  if (!contentType.includes('application/json')) {
-    const text = await response.text().catch(() => '');
-    if (!response.ok) {
-      throw new Error(text || `Request failed (${response.status})`);
-    }
-    throw new Error(`Unexpected response from server (expected JSON, got ${contentType || 'unknown content-type'})`);
-  }
-
-  const data = await response.json().catch(() => {
-    throw new Error('Invalid JSON response from server');
-  });
-
-  if (!response.ok) {
-    const validationMessage = data?.errors
-      ? Object.values<string[]>(data.errors).flat().join(' ')
-      : undefined;
-
-    const message = validationMessage || data?.message || data?.error || 'Request failed';
-    throw new Error(message);
-  }
-
-  return data as T;
+// --- TYPES ---
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  [key: string]: any;
 }
 
-function normalizeAuthResponse(raw: any): AuthResponse {
-  const token =
-    raw?.token ??
-    raw?.access_token ??
-    raw?.accessToken ??
-    raw?.plainTextToken ??
-    raw?.plain_text_token ??
-    raw?.data?.token ??
-    raw?.data?.access_token ??
-    raw?.data?.accessToken ??
-    raw?.data?.plainTextToken ??
-    raw?.data?.plain_text_token ??
-    raw?.data?.data?.token ??
-    raw?.data?.data?.access_token ??
-    raw?.data?.data?.accessToken ??
-    raw?.data?.data?.plainTextToken ??
-    raw?.data?.data?.plain_text_token;
-
-  const user = raw?.user ?? raw?.data?.user ?? raw?.data?.data?.user;
-  const message = raw?.message ?? raw?.data?.message ?? raw?.data?.data?.message;
-
-  if (!token || !user) {
-    throw new Error('Invalid login response from server (missing token or user)');
-  }
-
-  return {
-    message,
-    token,
-    user,
-  } as AuthResponse;
-}
-
-export async function login(login: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(API_ENDPOINTS.AUTH_LOGIN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ login, password }),
-  });
-
-  const raw = await handleResponse<any>(response);
-  return normalizeAuthResponse(raw);
+export interface AuthResponse {
+  message?: string;
+  token: string;
+  user: AuthUser;
 }
 
 export interface RegisterPayload {
@@ -78,36 +22,77 @@ export interface RegisterPayload {
   role?: string;
 }
 
+// --- ERROR HELPER ---
+const getErrorMessage = (error: any): string => {
+  if (error && error.response && error.response.data) {
+    const data = error.response.data;
+    if (data.errors) {
+      return Object.values(data.errors).flat().join(' ');
+    }
+    return data.message || data.error || `Request failed (${error.response.status})`;
+  }
+  return error.message || 'An unexpected error occurred';
+};
+
+// --- HELPER: NORMALIZE TOKEN ---
+function normalizeAuthResponse(data: any): AuthResponse {
+  const token =
+    data?.token ??
+    data?.access_token ??
+    data?.plainTextToken ??
+    data?.data?.token;
+
+  const user = data?.user ?? data?.data?.user;
+  const message = data?.message ?? data?.data?.message;
+
+  if (!token || !user) {
+    // Only warn, don't crash, in case the backend returns a different structure
+    console.warn('Login response missing token/user:', data);
+  }
+
+  return { message, token, user: user || {} };
+}
+
+// --- API FUNCTIONS ---
+
+export async function login(emailInput: string, password: string): Promise<AuthResponse> {
+  try {
+    // FIX: Send the key as 'login' instead of 'email'
+    // This satisfies the backend error: "The login field is required."
+    const response = await api.post('/auth/login', { 
+      login: emailInput, 
+      password 
+    });
+    
+    return normalizeAuthResponse(response.data);
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
 export async function register(payload: RegisterPayload): Promise<AuthResponse> {
-  const response = await fetch(API_ENDPOINTS.AUTH_REGISTER, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  const raw = await handleResponse<any>(response);
-  return normalizeAuthResponse(raw);
+  try {
+    const response = await api.post('/auth/register', payload);
+    return normalizeAuthResponse(response.data);
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }
 
-export async function logout(token: string): Promise<void> {
-  const response = await fetch(API_ENDPOINTS.AUTH_LOGOUT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  await handleResponse(response);
+export async function logout(): Promise<void> {
+  try {
+    await api.post('/auth/logout');
+  } catch (error) {
+    console.warn('Logout failed:', error);
+  }
 }
 
-export async function fetchCurrentUser(token: string): Promise<{ user: AuthUser }> {
-  const response = await fetch(API_ENDPOINTS.AUTH_ME, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return handleResponse<{ user: AuthUser }>(response);
+export async function fetchCurrentUser(): Promise<{ user: AuthUser }> {
+  try {
+    const response = await api.get('/user');
+    const user = (response.data as any).user || response.data;
+    return { user };
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }
-

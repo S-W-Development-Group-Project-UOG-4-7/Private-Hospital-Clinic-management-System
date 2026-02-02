@@ -12,9 +12,17 @@ This document contains all the default login credentials for the Hospital Clinic
 
 ### 1. Administrator Account
 - **Role**: Admin
+- **Email**: `newadmin@hospital.com`
+- **Username**: `newadmin`
+- **Password**: `password123`
+- **Full Name**: New Admin
+- **Access Level**: Full system access
+
+### 1a. Alternative Admin Account
+- **Role**: Admin
 - **Email**: `admin@example.com`
 - **Username**: `admin`
-- **Password**: `Admin@123`
+- **Password**: `password`
 - **Full Name**: System Admin
 - **Access Level**: Full system access
 

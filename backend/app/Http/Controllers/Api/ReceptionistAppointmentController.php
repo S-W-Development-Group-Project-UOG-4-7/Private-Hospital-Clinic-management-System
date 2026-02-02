@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\PatientProfile;
 use App\Models\QueueEntry;
 use App\Models\User;
+use App\Models\Department; // <--- ADDED IMPORT
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -19,6 +20,7 @@ class ReceptionistAppointmentController extends Controller
             ->with([
                 'patient:id,first_name,last_name,email,username,is_active',
                 'doctor:id,first_name,last_name,email,username,is_active',
+                'department' // <--- ADDED: Include department details
             ]);
 
         if ($request->has('date')) {
@@ -37,6 +39,11 @@ class ReceptionistAppointmentController extends Controller
             $query->where('doctor_id', (int) $request->get('doctor_id'));
         }
 
+        // <--- ADDED: Filter by Department if needed
+        if ($request->has('department_id')) {
+            $query->where('department_id', (int) $request->get('department_id'));
+        }
+
         $appointments = $query
             ->orderBy('appointment_date', 'desc')
             ->orderBy('appointment_time', 'desc')
@@ -51,18 +58,21 @@ class ReceptionistAppointmentController extends Controller
             'patient_id' => ['nullable', 'max:50', 'required_without:patient_code'],
             'patient_code' => ['nullable', 'string', 'max:50', 'required_without:patient_id'],
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'], // <--- ADDED VALIDATION
             'appointment_date' => ['required', 'date'],
             'appointment_time' => ['required'],
             'type' => ['nullable', Rule::in(['in_person', 'telemedicine'])],
             'status' => ['nullable', Rule::in(['scheduled', 'completed', 'cancelled'])],
             'is_walk_in' => ['nullable', 'boolean'],
+            'reason' => ['nullable', 'string'], // Added reason
+            'notes' => ['nullable', 'string'],   // Added notes
         ]);
 
         $patientId = null;
-
         $patientCode = trim((string) ($validated['patient_code'] ?? ''));
         $rawPatientIdOrCode = trim((string) ($validated['patient_id'] ?? ''));
 
+        // --- PATIENT LOOKUP LOGIC (Kept exactly as you had it) ---
         if ($patientCode !== '') {
             $profile = PatientProfile::query()
                 ->where('patient_id', $patientCode)
@@ -70,11 +80,8 @@ class ReceptionistAppointmentController extends Controller
                 ->first();
 
             if (! $profile || ! $profile->user) {
-                return response()->json([
-                    'message' => 'Patient not found for provided patient code.',
-                ], 422);
+                return response()->json(['message' => 'Patient not found for provided patient code.'], 422);
             }
-
             $patientId = $profile->user->id;
         } elseif ($rawPatientIdOrCode !== '') {
             $profile = PatientProfile::query()
@@ -87,16 +94,12 @@ class ReceptionistAppointmentController extends Controller
             } elseif (ctype_digit($rawPatientIdOrCode) && User::query()->whereKey((int) $rawPatientIdOrCode)->exists()) {
                 $patientId = (int) $rawPatientIdOrCode;
             } else {
-                return response()->json([
-                    'message' => 'Patient not found for provided patient id.',
-                ], 422);
+                return response()->json(['message' => 'Patient not found for provided patient id.'], 422);
             }
         }
 
         if (empty($patientId)) {
-            return response()->json([
-                'message' => 'Patient not found for provided patient id.',
-            ], 422);
+            return response()->json(['message' => 'Patient not found for provided patient id.'], 422);
         }
 
         $isWalkIn = (bool) ($validated['is_walk_in'] ?? false);
@@ -104,6 +107,7 @@ class ReceptionistAppointmentController extends Controller
         return DB::transaction(function () use ($validated, $patientId, $isWalkIn, $request) {
             $appointmentDate = $validated['appointment_date'];
 
+            // --- APPOINTMENT NUMBER LOCKING (Kept as is) ---
             $lastAppointmentNumber = Appointment::query()
                 ->whereDate('appointment_date', $appointmentDate)
                 ->orderByDesc('appointment_number')
@@ -112,9 +116,11 @@ class ReceptionistAppointmentController extends Controller
 
             $nextAppointmentNumber = ((int) ($lastAppointmentNumber ?? 0)) + 1;
 
+            // --- CREATE APPOINTMENT ---
             $appointment = Appointment::create([
                 'patient_id' => $patientId,
                 'doctor_id' => $validated['doctor_id'] ?? null,
+                'department_id' => $validated['department_id'] ?? null, // <--- ADDED THIS LINE
                 'clinic' => 'OPD',
                 'appointment_number' => $nextAppointmentNumber,
                 'appointment_date' => $appointmentDate,
@@ -122,11 +128,13 @@ class ReceptionistAppointmentController extends Controller
                 'type' => $validated['type'] ?? 'in_person',
                 'status' => $validated['status'] ?? 'scheduled',
                 'is_walk_in' => $isWalkIn,
+                'reason' => $validated['reason'] ?? null,
+                'notes' => $validated['notes'] ?? null,
                 'confirmed_at' => now(),
             ]);
 
+            // --- QUEUE GENERATION (Kept as is) ---
             $queueDate = $appointmentDate;
-
             $alreadyInQueue = QueueEntry::query()
                 ->where('appointment_id', $appointment->id)
                 ->whereDate('queue_date', $queueDate)
@@ -167,7 +175,7 @@ class ReceptionistAppointmentController extends Controller
             }
 
             return response()->json([
-                'appointment' => $appointment->load(['patient', 'doctor']),
+                'appointment' => $appointment->load(['patient', 'doctor', 'department']),
                 'queue_entry' => $queueEntry?->load(['patient', 'doctor', 'appointment']),
             ], 201);
         });
@@ -179,6 +187,7 @@ class ReceptionistAppointmentController extends Controller
             ->with([
                 'patient:id,first_name,last_name,email,username,is_active',
                 'doctor:id,first_name,last_name,email,username,is_active',
+                'department'
             ])
             ->findOrFail($id);
 
@@ -192,24 +201,26 @@ class ReceptionistAppointmentController extends Controller
         $validated = $request->validate([
             'patient_id' => ['sometimes', 'max:50'],
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'], // <--- ADDED VALIDATION
             'appointment_date' => ['sometimes', 'date'],
             'appointment_time' => ['sometimes'],
             'type' => ['sometimes', Rule::in(['in_person', 'telemedicine'])],
             'status' => ['sometimes', Rule::in(['scheduled', 'completed', 'cancelled'])],
+            'reason' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
         ]);
 
         if (empty($appointment->clinic)) {
             $appointment->clinic = 'OPD';
         }
 
+        // --- PATIENT ID UPDATE LOGIC (Kept as is) ---
         if (array_key_exists('patient_id', $validated)) {
             $patientId = null;
             $rawPatientIdOrCode = trim((string) ($validated['patient_id'] ?? ''));
 
             if ($rawPatientIdOrCode === '') {
-                return response()->json([
-                    'message' => 'Patient id is required.',
-                ], 422);
+                return response()->json(['message' => 'Patient id is required.'], 422);
             }
 
             if (ctype_digit($rawPatientIdOrCode) && User::query()->whereKey((int) $rawPatientIdOrCode)->exists()) {
@@ -221,19 +232,15 @@ class ReceptionistAppointmentController extends Controller
                     ->first();
 
                 if (! $profile || ! $profile->user) {
-                    return response()->json([
-                        'message' => 'Patient not found for provided patient id.',
-                    ], 422);
+                    return response()->json(['message' => 'Patient not found for provided patient id.'], 422);
                 }
-
                 $patientId = $profile->user->id;
             }
-
             $validated['patient_id'] = $patientId;
         }
 
+        // --- CONFLICT CHECK (Kept as is) ---
         $nextDoctorId = array_key_exists('doctor_id', $validated) ? $validated['doctor_id'] : $appointment->doctor_id;
-
         $nextDate = $validated['appointment_date'] ?? $appointment->appointment_date;
         $nextTime = $validated['appointment_time'] ?? $appointment->appointment_time;
         $nextStatus = $validated['status'] ?? $appointment->status;
@@ -256,7 +263,7 @@ class ReceptionistAppointmentController extends Controller
 
         $appointment->update($validated);
 
-        return response()->json($appointment->fresh()->load(['patient', 'doctor']));
+        return response()->json($appointment->fresh()->load(['patient', 'doctor', 'department']));
     }
 
     public function confirm(int $id)
@@ -270,13 +277,13 @@ class ReceptionistAppointmentController extends Controller
         }
 
         if ($appointment->confirmed_at !== null) {
-            return response()->json($appointment->load(['patient', 'doctor']));
+            return response()->json($appointment->load(['patient', 'doctor', 'department']));
         }
 
         $appointment->confirmed_at = now();
         $appointment->save();
 
-        return response()->json($appointment->fresh()->load(['patient', 'doctor']));
+        return response()->json($appointment->fresh()->load(['patient', 'doctor', 'department']));
     }
 
     public function destroy(int $id)

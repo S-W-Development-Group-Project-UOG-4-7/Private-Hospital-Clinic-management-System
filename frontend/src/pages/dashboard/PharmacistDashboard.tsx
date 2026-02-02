@@ -14,6 +14,14 @@ import type {
   PurchaseRequest,
   ReturnItem,
   AuditLog,
+  PharmacistPrescriptionItem,
+  PharmacistLowStockAlert,
+  PharmacistPatient,
+  MedicationHistoryPrescription,
+  DispensingReport,
+  InventoryReport,
+  SalesReport,
+  PatientActivityReport,
 } from '../../types/pharmacist';
 import {
   Bell,
@@ -39,16 +47,171 @@ import {
   Activity,
   Plus,
   TrendingUp,
+  Users,
+  Search,
+  DollarSign,
+  Download,
+  History,
 } from 'lucide-react';
 
 type SectionKey =
   | 'overview'
   | 'prescriptions'
   | 'inventory'
-  | 'controlled_substances'
-  | 'returns'
+  | 'patients'
   | 'reports'
   | 'notifications';
+
+const buildUserDisplayName = (user: any, fallback: string) => {
+  if (!user) {
+    return fallback;
+  }
+
+  if (typeof user === 'string') {
+    return user || fallback;
+  }
+
+  const parts = [user.first_name, user.last_name].filter(Boolean);
+  if (parts.length > 0) {
+    return parts.join(' ');
+  }
+
+  if (user.name && typeof user.name === 'string') {
+    return user.name;
+  }
+
+  if (user.username && typeof user.username === 'string') {
+    return user.username;
+  }
+
+  return fallback;
+};
+
+const parseNumber = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const formatDate = (value?: string | null) => {
+  if (!value) {
+    return '—';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return date.toLocaleDateString();
+};
+
+const mapPrescriptionFromApi = (prescription: any): PharmacistPrescription => {
+  const rawItems = Array.isArray(prescription?.items) ? prescription.items : [];
+
+  const mappedItems: PharmacistPrescriptionItem[] = rawItems.map((item: any) => {
+    const medicationName =
+      item?.medication_name ??
+      item?.inventory_item?.name ??
+      item?.inventoryItem?.name ??
+      'Medication';
+
+    const durationDays = parseNumber(
+      item?.duration_days ?? item?.durationDays,
+      0
+    );
+    const duration =
+      item?.duration ||
+      (durationDays > 0
+        ? `${durationDays} day${durationDays === 1 ? '' : 's'}`
+        : '');
+
+    const rawQuantity = parseNumber(item?.quantity, 0);
+    const calculatedQuantity = parseNumber(
+      item?.calculated_quantity ?? item?.calculatedQuantity,
+      rawQuantity
+    );
+    const quantity = calculatedQuantity > 0 ? calculatedQuantity : rawQuantity;
+    const unitPrice = parseNumber(
+      item?.unit_price ??
+        item?.unitPrice ??
+        item?.price_per_unit ??
+        item?.inventory_item?.selling_price ??
+        item?.inventoryItem?.selling_price,
+      0
+    );
+    const totalPrice = unitPrice * quantity;
+
+    return {
+      id: item?.id ?? 0,
+      medication_name: medicationName,
+      dosage: item?.dosage ?? '',
+      frequency: item?.frequency ?? '',
+      duration,
+      quantity,
+      instructions: item?.instructions ?? '',
+      unit_price: unitPrice,
+      total_price: totalPrice,
+    };
+  });
+
+  const patientName =
+    prescription?.patient_name ??
+    buildUserDisplayName(prescription?.patient, 'Unknown patient');
+
+  const doctorName =
+    prescription?.doctor_name ??
+    buildUserDisplayName(prescription?.doctor, 'Unassigned');
+
+  const invoiceSource =
+    prescription?.invoice ??
+    prescription?.latest_invoice ??
+    prescription?.billing ??
+    null;
+
+  const invoice = invoiceSource
+    ? {
+        id: invoiceSource?.id ?? 0,
+        invoice_number:
+          invoiceSource?.invoice_number ??
+          invoiceSource?.invoiceNumber ??
+          invoiceSource?.number ??
+          '',
+        amount: parseNumber(invoiceSource?.amount, 0),
+        status: invoiceSource?.status ?? 'unpaid',
+        issued_at: invoiceSource?.issued_at ?? invoiceSource?.issuedAt ?? '',
+        due_date: invoiceSource?.due_date ?? invoiceSource?.dueDate ?? '',
+        description: invoiceSource?.description ?? '',
+      }
+    : undefined;
+
+  const lowStockAlerts = Array.isArray(prescription?.low_stock_alerts)
+    ? prescription.low_stock_alerts.map((alert: any) => ({
+        inventory_item_id:
+          alert?.inventory_item_id ?? alert?.inventoryItemId ?? alert?.id ?? 0,
+        name: alert?.name ?? 'Inventory item',
+        quantity: parseNumber(alert?.quantity, 0),
+        reorder_level: parseNumber(alert?.reorder_level, 0),
+      }))
+    : undefined;
+
+  return {
+    id: prescription?.id ?? 0,
+    patient_id: prescription?.patient_id ?? prescription?.patient?.id ?? 0,
+    patient_name: patientName,
+    doctor_id: prescription?.doctor_id ?? prescription?.doctor?.id ?? 0,
+    doctor_name: doctorName,
+    status: prescription?.status ?? 'pending',
+    created_at: prescription?.created_at ?? new Date().toISOString(),
+    updated_at: prescription?.updated_at ?? prescription?.created_at ?? new Date().toISOString(),
+    items: mappedItems,
+    interaction_warnings:
+      prescription?.interaction_warnings ?? prescription?.warnings ?? [],
+    dispensed_at: prescription?.dispensed_at ?? prescription?.dispensedAt ?? undefined,
+    notes: prescription?.notes ?? prescription?.pharmacist_notes ?? null,
+    invoice,
+    low_stock_alerts: lowStockAlerts,
+  };
+};
 
 const PharmacistDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -72,6 +235,10 @@ const PharmacistDashboard: React.FC = () => {
   const [prescriptions, setPrescriptions] = useState<PharmacistPrescription[]>([]);
   const [selectedPrescription, setSelectedPrescription] = useState<PharmacistPrescription | null>(null);
   const [prescriptionDetailsLoading, setPrescriptionDetailsLoading] = useState(false);
+  const [dispenseNotes, setDispenseNotes] = useState('');
+  const [dispensing, setDispensing] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSuccess, setModalSuccess] = useState<string | null>(null);
 
   const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -176,6 +343,27 @@ const PharmacistDashboard: React.FC = () => {
     );
   }, [drugSearchTerm]);
 
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+      }),
+    []
+  );
+
+  const selectedPrescriptionTotal = useMemo(() => {
+    if (!selectedPrescription) {
+      return 0;
+    }
+
+    return selectedPrescription.items.reduce((sum, item) => {
+      const baseTotal = item.total_price ?? item.quantity * (item.unit_price ?? 0);
+      return sum + (Number.isFinite(baseTotal) ? baseTotal : 0);
+    }, 0);
+  }, [selectedPrescription]);
+
   // Handle drug selection
   const handleDrugSelect = (drug: typeof drugsList[0]) => {
     setInventoryForm(prev => ({
@@ -188,14 +376,6 @@ const PharmacistDashboard: React.FC = () => {
     setShowDrugDropdown(false);
   };
 
-  const [controlledDrugsLoaded, setControlledDrugsLoaded] = useState(false);
-  const [controlledDrugsLoading, setControlledDrugsLoading] = useState(false);
-  const [controlledDrugs, setControlledDrugs] = useState<ControlledDrugLog[]>([]);
-
-  const [returnsLoaded, setReturnsLoaded] = useState(false);
-  const [returnsLoading, setReturnsLoading] = useState(false);
-  const [returns, setReturns] = useState<ReturnItem[]>([]);
-
   const [notificationsLoaded, setNotificationsLoaded] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notifications, setNotifications] = useState<PharmacistNotification[]>([]);
@@ -203,6 +383,31 @@ const PharmacistDashboard: React.FC = () => {
   const [auditLogsLoaded, setAuditLogsLoaded] = useState(false);
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  // Patients state
+  const [patientsLoaded, setPatientsLoaded] = useState(false);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  const [patients, setPatients] = useState<PharmacistPatient[]>([]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState<PharmacistPatient | null>(null);
+  const [medicationHistory, setMedicationHistory] = useState<MedicationHistoryPrescription[]>([]);
+  const [medicationHistoryLoading, setMedicationHistoryLoading] = useState(false);
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+
+  // Reports state
+  const [reportsLoaded, setReportsLoaded] = useState(false);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [activeReportType, setActiveReportType] = useState<'dispensing' | 'inventory' | 'sales' | 'patient_activity'>('dispensing');
+  const [reportDateFrom, setReportDateFrom] = useState(() => {
+    const date = new Date();
+    date.setDate(1); // First day of current month
+    return date.toISOString().split('T')[0];
+  });
+  const [reportDateTo, setReportDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dispensingReport, setDispensingReport] = useState<DispensingReport | null>(null);
+  const [inventoryReport, setInventoryReport] = useState<InventoryReport | null>(null);
+  const [salesReport, setSalesReport] = useState<SalesReport | null>(null);
+  const [patientActivityReport, setPatientActivityReport] = useState<PatientActivityReport | null>(null);
 
   // Get user info from localStorage
   const user = useMemo(() => {
@@ -245,11 +450,11 @@ const PharmacistDashboard: React.FC = () => {
         await loadInventory();
         await loadInventoryStats();
       }
-      if (active === 'controlled_substances' && !controlledDrugsLoaded && !controlledDrugsLoading) {
-        await loadControlledDrugs();
+      if (active === 'patients' && !patientsLoaded && !patientsLoading) {
+        await loadPatients();
       }
-      if (active === 'returns' && !returnsLoaded && !returnsLoading) {
-        await loadReturns();
+      if (active === 'reports' && !reportsLoaded && !reportsLoading) {
+        await loadReport();
       }
       if (active === 'reports' && !auditLogsLoaded && !auditLogsLoading) {
         await loadAuditLogs();
@@ -264,17 +469,25 @@ const PharmacistDashboard: React.FC = () => {
     setPrescriptionsLoading(true);
     try {
       const resp = await pharmacistApi.prescriptions.list();
-      setPrescriptions(Array.isArray(resp.data) ? resp.data : []);
+      const rawPrescriptions = Array.isArray(resp?.data)
+        ? resp.data
+        : Array.isArray(resp)
+        ? resp
+        : Array.isArray(resp?.data?.data)
+        ? resp.data.data
+        : [];
+
+      const mapped = rawPrescriptions.map(mapPrescriptionFromApi);
+
+      setPrescriptions(mapped);
       setPrescriptionsLoaded(true);
 
       // Update stats
       const today = new Date().toISOString().slice(0, 10);
-      const todayPrescriptions = resp.data?.filter((p: PharmacistPrescription) =>
-        p.created_at.startsWith(today)
-      ).length || 0;
-      const dispensedCount = resp.data?.filter((p: PharmacistPrescription) =>
-        p.status === 'dispensed'
-      ).length || 0;
+      const todayPrescriptions = mapped.filter((p: PharmacistPrescription) =>
+        p.created_at?.startsWith(today)
+      ).length;
+      const dispensedCount = mapped.filter((p: PharmacistPrescription) => p.status === 'dispensed').length;
 
       setStats(prev => ({
         ...prev,
@@ -288,22 +501,118 @@ const PharmacistDashboard: React.FC = () => {
     }
   };
 
+  const handleViewPrescription = async (prescription: PharmacistPrescription) => {
+    setModalError(null);
+    setModalSuccess(null);
+    setDispenseNotes(prescription.notes ?? '');
+    setSelectedPrescription(prescription);
+    setPrescriptionDetailsLoading(true);
+    try {
+      const resp = await pharmacistApi.prescriptions.show(String(prescription.id));
+      const payload = resp?.data ?? resp;
+      const mapped = mapPrescriptionFromApi(payload);
+      setSelectedPrescription(mapped);
+      setDispenseNotes(mapped.notes ?? '');
+    } catch (e: any) {
+      setModalError(e?.message || 'Failed to load prescription details');
+    } finally {
+      setPrescriptionDetailsLoading(false);
+    }
+  };
+
+  const closePrescriptionModal = () => {
+    setSelectedPrescription(null);
+    setPrescriptionDetailsLoading(false);
+    setDispenseNotes('');
+    setModalError(null);
+    setModalSuccess(null);
+  };
+
+  const handleDispense = async () => {
+    if (!selectedPrescription) {
+      return;
+    }
+
+    setModalError(null);
+    setModalSuccess(null);
+    setDispensing(true);
+    try {
+      const resp = await pharmacistApi.prescriptions.dispense(String(selectedPrescription.id), {
+        notes: dispenseNotes.trim() || undefined,
+      });
+      const payload = resp?.data ?? resp;
+      const updated = mapPrescriptionFromApi(payload);
+      setSelectedPrescription(updated);
+      const alerts = Array.isArray(updated.low_stock_alerts) ? updated.low_stock_alerts : [];
+      const lowStockMessage =
+        alerts.length > 0
+          ? ` Low stock alert: ${alerts
+              .map((alert) => `${alert.name} (${alert.quantity} remaining${alert.reorder_level ? `, reorder level ${alert.reorder_level}` : ''})`)
+              .join(', ')}.`
+          : '';
+      setModalSuccess(
+        `Medication dispensed and invoice sent to reception.${lowStockMessage}`.trim()
+      );
+      setDispenseNotes(updated.notes ?? '');
+      await loadPrescriptions();
+      const latestInventory = await loadInventory();
+      await loadNotifications(latestInventory);
+    } catch (e: any) {
+      setModalError(e?.message || 'Failed to dispense prescription');
+    } finally {
+      setDispensing(false);
+    }
+  };
+
   const loadInventory = async (filters?: {
     search?: string;
     category?: string;
     low_stock?: boolean;
     expiring_soon?: boolean;
-  }) => {
+  }): Promise<InventoryItem[]> => {
     setError(null);
     setInventoryLoading(true);
+    let normalizedItems: InventoryItem[] = [];
     try {
       const resp = await inventoryApi.getAll(filters);
-      setInventory(Array.isArray(resp.data) ? resp.data : resp.data?.data || []);
+      const rawItems: InventoryItem[] = Array.isArray(resp.data)
+        ? resp.data
+        : Array.isArray(resp?.data?.data)
+        ? resp.data.data
+        : [];
+
+      const now = new Date();
+      const inThirtyDays = new Date(now.getTime());
+      inThirtyDays.setDate(inThirtyDays.getDate() + 30);
+
+      normalizedItems = rawItems.map((item: any) => {
+        const quantity = parseNumber(item?.quantity, 0);
+        const reorderLevel = parseNumber(item?.reorder_level, 0);
+        const expiryDate = item?.expiry_date ? new Date(item.expiry_date) : null;
+        const expiringSoon =
+          typeof item?.is_expiring_soon === 'boolean'
+            ? item.is_expiring_soon
+            : expiryDate
+            ? expiryDate <= inThirtyDays && expiryDate >= now
+            : false;
+
+        return {
+          ...item,
+          quantity,
+          reorder_level: reorderLevel,
+          is_low_stock:
+            typeof item?.is_low_stock === 'boolean'
+              ? item.is_low_stock
+              : quantity <= reorderLevel,
+          is_expiring_soon: expiringSoon,
+        } as InventoryItem;
+      });
+
+      setInventory(normalizedItems);
       setInventoryLoaded(true);
 
       // Update low stock alerts - calculate from the returned data
-      const items = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
-      const lowStockCount = items.filter((item: InventoryItem) => item.quantity <= item.reorder_level).length;
+      const lowStockCount = normalizedItems.filter((item) => item.quantity <= item.reorder_level).length;
       setStats(prev => ({
         ...prev,
         low_stock_alerts: lowStockCount,
@@ -313,6 +622,7 @@ const PharmacistDashboard: React.FC = () => {
     } finally {
       setInventoryLoading(false);
     }
+    return normalizedItems;
   };
 
   const loadInventoryStats = async () => {
@@ -463,60 +773,39 @@ const PharmacistDashboard: React.FC = () => {
     }
   };
 
-  const loadControlledDrugs = async () => {
-    setError(null);
-    setControlledDrugsLoading(true);
-    try {
-      const resp = await pharmacistApi.controlledDrugs.list();
-      setControlledDrugs(Array.isArray(resp.data) ? resp.data : []);
-      setControlledDrugsLoaded(true);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load controlled drugs');
-    } finally {
-      setControlledDrugsLoading(false);
-    }
-  };
-
-  const loadReturns = async () => {
-    setError(null);
-    setReturnsLoading(true);
-    try {
-      const resp = await pharmacistApi.returns.list();
-      setReturns(Array.isArray(resp.data) ? resp.data : []);
-      setReturnsLoaded(true);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load returns');
-    } finally {
-      setReturnsLoading(false);
-    }
-  };
-
-  const loadNotifications = async () => {
+  const loadNotifications = async (sourceInventory?: InventoryItem[]): Promise<PharmacistNotification[]> => {
     setError(null);
     setNotificationsLoading(true);
+    let nextNotifications: PharmacistNotification[] = [];
     try {
-      // For now, we'll simulate notifications based on inventory and prescriptions
+      // For now, we'll simulate notifications based on inventory state
+      const inventorySource = sourceInventory ?? inventory;
       const notifications: PharmacistNotification[] = [];
 
       // Low stock notifications
-      inventory.filter(item => item.is_low_stock).forEach((item, index) => {
+      inventorySource
+        .filter(item => item.is_low_stock)
+        .forEach((item, index) => {
         notifications.push({
-          id: index + 1,
-          type: 'low_stock',
-          title: 'Low Stock Alert',
-          message: `${item.name} is running low (${item.quantity} ${item.unit} remaining)`,
-          is_read: false,
-          created_at: new Date().toISOString(),
+            id: Number(`${Date.now()}${index}`),
+            type: 'low_stock',
+            title: 'Low Stock Alert',
+            message: `${item.name} is running low (${item.quantity} ${item.unit} remaining)` +
+              (item.reorder_level ? ` — reorder at ${item.reorder_level}` : ''),
+            is_read: false,
+            created_at: new Date().toISOString(),
         });
       });
 
       setNotifications(notifications);
+      nextNotifications = notifications;
       setNotificationsLoaded(true);
     } catch (e: any) {
       setError(e?.message || 'Failed to load notifications');
     } finally {
       setNotificationsLoading(false);
     }
+    return nextNotifications;
   };
 
   const loadAuditLogs = async () => {
@@ -531,6 +820,384 @@ const PharmacistDashboard: React.FC = () => {
     } finally {
       setAuditLogsLoading(false);
     }
+  };
+
+  // Patient functions
+  const loadPatients = async (search?: string) => {
+    setError(null);
+    setPatientsLoading(true);
+    try {
+      const resp = await pharmacistApi.patients.list({ search });
+      const data = resp?.data ?? resp;
+      const patientsList = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setPatients(patientsList);
+      setPatientsLoaded(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load patients');
+    } finally {
+      setPatientsLoading(false);
+    }
+  };
+
+  const handlePatientSearch = () => {
+    loadPatients(patientSearch.trim() || undefined);
+  };
+
+  const handleViewPatient = async (patient: PharmacistPatient) => {
+    setSelectedPatient(patient);
+    setPatientModalOpen(true);
+    setMedicationHistoryLoading(true);
+    setMedicationHistory([]);
+    try {
+      const resp = await pharmacistApi.patients.medicationHistory(String(patient.id));
+      const prescriptions = resp?.prescriptions?.data ?? resp?.prescriptions ?? [];
+      setMedicationHistory(Array.isArray(prescriptions) ? prescriptions : []);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load medication history');
+    } finally {
+      setMedicationHistoryLoading(false);
+    }
+  };
+
+  const closePatientModal = () => {
+    setPatientModalOpen(false);
+    setSelectedPatient(null);
+    setMedicationHistory([]);
+  };
+
+  // Report functions
+  const loadReport = async (reportType?: 'dispensing' | 'inventory' | 'sales' | 'patient_activity') => {
+    const type = reportType ?? activeReportType;
+    setReportsLoading(true);
+    setError(null);
+    try {
+      console.log(`Loading ${type} report...`);
+      if (type === 'dispensing') {
+        const resp = await pharmacistApi.reports.dispensing({ from_date: reportDateFrom, to_date: reportDateTo });
+        console.log('Dispensing report response:', resp);
+        // Handle both direct response and wrapped response
+        const reportData = resp?.data ?? resp;
+        if (reportData && reportData.summary) {
+          setDispensingReport(reportData);
+        } else {
+          console.warn('Invalid dispensing report structure:', reportData);
+          setError('Invalid report data received');
+        }
+      } else if (type === 'inventory') {
+        const resp = await pharmacistApi.reports.inventory();
+        console.log('Inventory report response:', resp);
+        // Handle both direct response and wrapped response
+        const reportData = resp?.data ?? resp;
+        if (reportData && reportData.summary) {
+          setInventoryReport(reportData);
+        } else {
+          console.warn('Invalid inventory report structure:', reportData);
+          setError('Invalid report data received');
+        }
+      } else if (type === 'sales') {
+        const resp = await pharmacistApi.reports.sales({ from_date: reportDateFrom, to_date: reportDateTo });
+        console.log('Sales report response:', resp);
+        // Handle both direct response and wrapped response
+        const reportData = resp?.data ?? resp;
+        if (reportData && reportData.summary) {
+          setSalesReport(reportData);
+        } else {
+          console.warn('Invalid sales report structure:', reportData);
+          setError('Invalid report data received');
+        }
+      } else if (type === 'patient_activity') {
+        const resp = await pharmacistApi.reports.patientActivity({ from_date: reportDateFrom, to_date: reportDateTo });
+        console.log('Patient activity report response:', resp);
+        // Handle both direct response and wrapped response
+        const reportData = resp?.data ?? resp;
+        if (reportData && reportData.summary) {
+          setPatientActivityReport(reportData);
+        } else {
+          console.warn('Invalid patient activity report structure:', reportData);
+          setError('Invalid report data received');
+        }
+      }
+      setReportsLoaded(true);
+    } catch (e: any) {
+      console.error('Error loading report:', e);
+      setError(e?.message || 'Failed to load report');
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  const handleReportTypeChange = (type: 'dispensing' | 'inventory' | 'sales' | 'patient_activity') => {
+    setActiveReportType(type);
+    loadReport(type);
+  };
+
+  // Print bill as PDF
+  const handlePrintBill = () => {
+    if (!selectedPrescription) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setModalError('Unable to open print window. Please allow popups.');
+      return;
+    }
+
+    const invoiceNumber = selectedPrescription.invoice?.invoice_number || `RX-${selectedPrescription.id}`;
+    const invoiceDate = selectedPrescription.dispensed_at 
+      ? new Date(selectedPrescription.dispensed_at).toLocaleDateString()
+      : new Date().toLocaleDateString();
+    const total = selectedPrescription.invoice?.amount ?? selectedPrescriptionTotal;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Bill - ${invoiceNumber}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            padding: 40px; 
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+          }
+          .header { 
+            text-align: center; 
+            border-bottom: 3px solid #0d9488; 
+            padding-bottom: 20px; 
+            margin-bottom: 30px; 
+          }
+          .header h1 { 
+            color: #0d9488; 
+            font-size: 28px; 
+            margin-bottom: 5px;
+          }
+          .header p { 
+            color: #666; 
+            font-size: 14px;
+          }
+          .invoice-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+          }
+          .invoice-info div { flex: 1; }
+          .invoice-info h3 { 
+            color: #0d9488; 
+            font-size: 12px; 
+            text-transform: uppercase; 
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+          }
+          .invoice-info p { 
+            font-size: 14px; 
+            margin: 4px 0; 
+          }
+          .invoice-number {
+            text-align: right;
+          }
+          .invoice-number .number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0d9488;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0; 
+          }
+          th { 
+            background: #0d9488; 
+            color: white; 
+            padding: 12px 15px; 
+            text-align: left;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          th:last-child { text-align: right; }
+          td { 
+            padding: 15px; 
+            border-bottom: 1px solid #e5e7eb; 
+            font-size: 14px;
+          }
+          td:last-child { text-align: right; font-weight: 600; }
+          .medication-name { font-weight: 600; color: #111; }
+          .medication-details { font-size: 12px; color: #666; margin-top: 4px; }
+          .totals { 
+            margin-top: 20px;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 20px;
+          }
+          .totals-row {
+            display: flex;
+            justify-content: flex-end;
+            margin: 8px 0;
+            font-size: 14px;
+          }
+          .totals-row span:first-child {
+            margin-right: 50px;
+            color: #666;
+          }
+          .totals-row.grand-total {
+            font-size: 20px;
+            font-weight: bold;
+            color: #0d9488;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #0d9488;
+          }
+          .notes {
+            margin-top: 30px;
+            padding: 15px;
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            border-radius: 4px;
+          }
+          .notes h4 { 
+            color: #92400e; 
+            margin-bottom: 8px;
+            font-size: 14px;
+          }
+          .notes p { 
+            font-size: 13px; 
+            color: #78350f; 
+          }
+          .footer { 
+            margin-top: 50px; 
+            text-align: center; 
+            color: #666; 
+            font-size: 12px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+          }
+          .footer p { margin: 3px 0; }
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+          }
+          .status-dispensed { background: #d1fae5; color: #065f46; }
+          .status-pending { background: #fef3c7; color: #92400e; }
+          .status-paid { background: #d1fae5; color: #065f46; }
+          .status-unpaid { background: #fee2e2; color: #991b1b; }
+          @media print {
+            body { padding: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🏥 Private Hospital & Clinic</h1>
+          <p>Pharmacy Department</p>
+          <p>123 Medical Center Drive, Healthcare City | Tel: (555) 123-4567</p>
+        </div>
+
+        <div class="invoice-info">
+          <div>
+            <h3>Bill To</h3>
+            <p><strong>${selectedPrescription.patient_name}</strong></p>
+            <p>Patient ID: ${selectedPrescription.patient_id}</p>
+          </div>
+          <div>
+            <h3>Prescribing Doctor</h3>
+            <p>Dr. ${selectedPrescription.doctor_name}</p>
+            <p>Date: ${new Date(selectedPrescription.created_at).toLocaleDateString()}</p>
+          </div>
+          <div class="invoice-number">
+            <h3>Invoice</h3>
+            <p class="number">${invoiceNumber}</p>
+            <p>Date: ${invoiceDate}</p>
+            <p>
+              <span class="status-badge ${selectedPrescription.status === 'dispensed' ? 'status-dispensed' : 'status-pending'}">
+                ${selectedPrescription.status}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50%">Medication</th>
+              <th style="width: 15%">Qty</th>
+              <th style="width: 15%">Unit Price</th>
+              <th style="width: 20%">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${selectedPrescription.items.map(item => `
+              <tr>
+                <td>
+                  <div class="medication-name">${item.medication_name}</div>
+                  <div class="medication-details">
+                    ${[item.dosage, item.frequency, item.duration].filter(Boolean).join(' • ')}
+                    ${item.instructions ? `<br/>Instructions: ${item.instructions}` : ''}
+                  </div>
+                </td>
+                <td>${item.quantity}</td>
+                <td>$${(item.unit_price ?? 0).toFixed(2)}</td>
+                <td>$${(item.total_price ?? item.quantity * (item.unit_price ?? 0)).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="totals-row">
+            <span>Subtotal:</span>
+            <span>$${selectedPrescriptionTotal.toFixed(2)}</span>
+          </div>
+          <div class="totals-row">
+            <span>Tax (0%):</span>
+            <span>$0.00</span>
+          </div>
+          <div class="totals-row grand-total">
+            <span>Total Amount:</span>
+            <span>$${total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        ${selectedPrescription.invoice ? `
+          <div style="margin-top: 20px; text-align: right;">
+            <span class="status-badge ${selectedPrescription.invoice.status === 'paid' ? 'status-paid' : 'status-unpaid'}">
+              Payment: ${selectedPrescription.invoice.status}
+            </span>
+          </div>
+        ` : ''}
+
+        ${selectedPrescription.notes ? `
+          <div class="notes">
+            <h4>Pharmacist Notes</h4>
+            <p>${selectedPrescription.notes}</p>
+          </div>
+        ` : ''}
+
+        <div class="footer">
+          <p><strong>Thank you for choosing Private Hospital & Clinic Pharmacy</strong></p>
+          <p>For questions about your medication, please contact our pharmacy at (555) 123-4567</p>
+          <p>Please present this bill at the reception for payment</p>
+          <p style="margin-top: 10px; color: #999;">Generated on ${new Date().toLocaleString()}</p>
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
   };
 
   const handleLogout = () => {
@@ -576,18 +1243,11 @@ const PharmacistDashboard: React.FC = () => {
           <span className="text-sm font-medium">Inventory</span>
         </button>
         <button
-          onClick={() => setActive('controlled_substances')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'controlled_substances' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+          onClick={() => setActive('patients')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'patients' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
         >
-          <Shield className="w-5 h-5" />
-          <span className="text-sm font-medium">Controlled Substances</span>
-        </button>
-        <button
-          onClick={() => setActive('returns')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'returns' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-        >
-          <RotateCcw className="w-5 h-5" />
-          <span className="text-sm font-medium">Returns</span>
+          <Users className="w-5 h-5" />
+          <span className="text-sm font-medium">Patients</span>
         </button>
         <button
           onClick={() => setActive('reports')}
@@ -687,23 +1347,13 @@ const PharmacistDashboard: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      setActive('controlled_substances');
+                      setActive('patients');
                       setMobileNavOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'controlled_substances' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'patients' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
                   >
-                    <Shield className="w-5 h-5" />
-                    <span className="text-sm font-medium">Controlled Substances</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActive('returns');
-                      setMobileNavOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'returns' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <RotateCcw className="w-5 h-5" />
-                    <span className="text-sm font-medium">Returns</span>
+                    <Users className="w-5 h-5" />
+                    <span className="text-sm font-medium">Patients</span>
                   </button>
                   <button
                     onClick={() => {
@@ -839,7 +1489,7 @@ const PharmacistDashboard: React.FC = () => {
                     </button>
                   </motion.div>
 
-                  {/* Controlled Substances */}
+                  {/* Patient History */}
                   <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -847,35 +1497,15 @@ const PharmacistDashboard: React.FC = () => {
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
-                      <Shield className="w-12 h-12 text-teal-500 mb-4" />
-                      <h2 className="text-xl font-bold text-gray-800 mb-3">Controlled Substances</h2>
-                      <p className="text-gray-600">Track and manage controlled drug inventory</p>
+                      <Users className="w-12 h-12 text-teal-500 mb-4" />
+                      <h2 className="text-xl font-bold text-gray-800 mb-3">Patient History</h2>
+                      <p className="text-gray-600">View patient medication history and records</p>
                     </div>
                     <button
-                      onClick={() => setActive('controlled_substances')}
+                      onClick={() => setActive('patients')}
                       className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
                     >
-                      View Logs
-                    </button>
-                  </motion.div>
-
-                  {/* Returns Management */}
-                  <motion.div 
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
-                  >
-                    <div className="mb-6">
-                      <RotateCcw className="w-12 h-12 text-teal-500 mb-4" />
-                      <h2 className="text-xl font-bold text-gray-800 mb-3">Returns Management</h2>
-                      <p className="text-gray-600">Handle medication returns and refunds</p>
-                    </div>
-                    <button
-                      onClick={() => setActive('returns')}
-                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
-                    >
-                      View Returns
+                      View Patients
                     </button>
                   </motion.div>
 
@@ -883,7 +1513,7 @@ const PharmacistDashboard: React.FC = () => {
                   <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.4 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
@@ -903,7 +1533,7 @@ const PharmacistDashboard: React.FC = () => {
                   <motion.div 
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.5 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
@@ -925,7 +1555,7 @@ const PharmacistDashboard: React.FC = () => {
                   <motion.div 
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.6 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
                     className="bg-white rounded-lg shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300"
                   >
                     <h3 className="text-4xl font-extrabold text-teal-500 mb-2">
@@ -974,11 +1604,6 @@ const PharmacistDashboard: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-800">Prescription Management</h2>
-                  <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition">
-                      New Prescription
-                    </button>
-                  </div>
                 </div>
 
                 {prescriptionsLoading ? (
@@ -1026,14 +1651,17 @@ const PharmacistDashboard: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <button
-                                  onClick={() => setSelectedPrescription(prescription)}
+                                  onClick={() => handleViewPrescription(prescription)}
                                   className="text-teal-600 hover:text-teal-900 mr-3"
                                 >
                                   View
                                 </button>
                                 {prescription.status === 'pending' && (
                                   <>
-                                    <button className="text-green-600 hover:text-green-900 mr-3">
+                                    <button
+                                      onClick={() => handleViewPrescription(prescription)}
+                                      className="text-green-600 hover:text-green-900 mr-3"
+                                    >
                                       Dispense
                                     </button>
                                     <button className="text-orange-600 hover:text-orange-900 mr-3">
@@ -1479,62 +2107,753 @@ const PharmacistDashboard: React.FC = () => {
               </div>
             )}
 
-            {active === 'controlled_substances' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Controlled Substances Log</h2>
-                {controlledDrugsLoading ? (
-                  <div className="text-center py-12">Loading controlled drugs...</div>
-                ) : controlledDrugs.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">No controlled drug logs found</div>
-                ) : (
-                  <div className="space-y-4">
-                    {controlledDrugs.map((log) => (
-                      <div key={log.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{log.drug_name}</h3>
-                            <p className="text-sm text-gray-600">Quantity: {log.quantity}</p>
-                            <p className="text-sm text-gray-600">Date: {new Date(log.timestamp).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {active === 'patients' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-gray-800">Patient Medication History</h2>
+                </div>
 
-            {active === 'returns' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Returns Management</h2>
-                {returnsLoading ? (
-                  <div className="text-center py-12">Loading returns...</div>
-                ) : returns.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">No returns found</div>
-                ) : (
-                  <div className="space-y-4">
-                    {returns.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{item.drug_name}</h3>
-                            <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
-                            <p className="text-sm text-gray-600">Reason: {item.reason}</p>
+                {/* Search */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        placeholder="Search patients by name or email..."
+                        value={patientSearch}
+                        onChange={(e) => setPatientSearch(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handlePatientSearch()}
+                        className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      />
+                      <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
+                    </div>
+                    <button
+                      onClick={handlePatientSearch}
+                      className="bg-teal-500 hover:bg-teal-600 text-white px-6 py-2 rounded-lg transition duration-300 flex items-center gap-2"
+                    >
+                      <Search className="w-4 h-4" />
+                      Search
+                    </button>
+                  </div>
+                </div>
+
+                {/* Patients Table */}
+                <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                  <div className="px-6 py-4 border-b">
+                    <h3 className="text-lg font-semibold text-gray-800">Patients with Prescriptions</h3>
+                  </div>
+                  {patientsLoading ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto"></div>
+                      <p className="text-gray-500 mt-4">Loading patients...</p>
+                    </div>
+                  ) : patients.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p>No patients found</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Demographics</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prescriptions</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {patients.map((patient) => (
+                            <tr key={patient.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
+                                    <UserCircle className="w-6 h-6 text-teal-600" />
+                                  </div>
+                                  <div className="ml-3">
+                                    <div className="text-sm font-medium text-gray-900">{patient.name}</div>
+                                    <div className="text-xs text-gray-500">ID: {patient.id}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">{patient.email}</div>
+                                <div className="text-xs text-gray-500">{patient.phone || '—'}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {patient.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : '—'}
+                                  {patient.age ? `, ${patient.age} yrs` : ''}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Blood: {patient.blood_type || '—'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">Total: {patient.total_prescriptions}</div>
+                                {patient.pending_prescriptions > 0 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    {patient.pending_prescriptions} pending
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button
+                                  onClick={() => handleViewPatient(patient)}
+                                  className="text-teal-600 hover:text-teal-900 flex items-center gap-1"
+                                >
+                                  <History className="w-4 h-4" />
+                                  View History
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Patient Modal */}
+                {patientModalOpen && selectedPatient && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                      <div className="flex items-start justify-between border-b px-6 py-4">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900">
+                            {selectedPatient.name}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            Medication History
+                          </p>
+                        </div>
+                        <button
+                          onClick={closePatientModal}
+                          className="text-gray-500 hover:text-gray-700"
+                          aria-label="Close"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="p-6">
+                        {/* Patient Info */}
+                        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                            <div className="min-w-0">
+                              <span className="text-gray-500">Email:</span>
+                              <p className="font-medium truncate" title={selectedPatient.email}>{selectedPatient.email}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-gray-500">Phone:</span>
+                              <p className="font-medium">{selectedPatient.phone || '—'}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-gray-500">Blood Type:</span>
+                              <p className="font-medium">{selectedPatient.blood_type || '—'}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-gray-500">Allergies:</span>
+                              <p className="font-medium break-words">{selectedPatient.allergies || 'None recorded'}</p>
+                            </div>
                           </div>
                         </div>
+
+                        {/* Medication History */}
+                        {medicationHistoryLoading ? (
+                          <div className="text-center py-12">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto"></div>
+                            <p className="text-gray-500 mt-4">Loading medication history...</p>
+                          </div>
+                        ) : medicationHistory.length === 0 ? (
+                          <div className="text-center py-12 text-gray-500">
+                            <Pill className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                            <p>No medication history found</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {medicationHistory.map((prescription) => (
+                              <div key={prescription.id} className="border rounded-lg overflow-hidden">
+                                <div className="bg-gray-50 px-4 py-3 flex justify-between items-center">
+                                  <div>
+                                    <span className="font-medium text-gray-900">
+                                      {prescription.prescription_number}
+                                    </span>
+                                    <span className="mx-2 text-gray-400">•</span>
+                                    <span className="text-sm text-gray-600">
+                                      Dr. {prescription.doctor_name}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${
+                                      prescription.status === 'dispensed'
+                                        ? 'bg-green-100 text-green-700'
+                                        : prescription.status === 'pending'
+                                        ? 'bg-yellow-100 text-yellow-700'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {prescription.status}
+                                    </span>
+                                    <span className="text-sm text-gray-500">
+                                      {new Date(prescription.prescription_date).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="p-4">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="text-left text-gray-500">
+                                        <th className="pb-2">Medication</th>
+                                        <th className="pb-2">Dosage</th>
+                                        <th className="pb-2">Frequency</th>
+                                        <th className="pb-2">Qty</th>
+                                        <th className="pb-2 text-right">Price</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {prescription.medications.map((med) => (
+                                        <tr key={med.id} className="border-t">
+                                          <td className="py-2 font-medium">{med.medication_name}</td>
+                                          <td className="py-2">{med.dosage || '—'}</td>
+                                          <td className="py-2">{med.frequency || '—'}</td>
+                                          <td className="py-2">{med.quantity}</td>
+                                          <td className="py-2 text-right">
+                                            {currencyFormatter.format(med.total_price || 0)}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr className="border-t font-semibold">
+                                        <td colSpan={4} className="pt-2 text-right">Total:</td>
+                                        <td className="pt-2 text-right text-teal-600">
+                                          {currencyFormatter.format(prescription.total_amount)}
+                                        </td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
             {active === 'reports' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Reports & Analytics</h2>
-                <div className="text-center py-12 text-gray-500">
-                  Reports functionality coming soon...
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-gray-800">Reports & Analytics</h2>
                 </div>
+
+                {/* Report Type Tabs */}
+                <div className="bg-white rounded-lg shadow p-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleReportTypeChange('dispensing')}
+                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                        activeReportType === 'dispensing'
+                          ? 'bg-teal-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Pill className="w-4 h-4 inline mr-2" />
+                      Dispensing Report
+                    </button>
+                    <button
+                      onClick={() => handleReportTypeChange('inventory')}
+                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                        activeReportType === 'inventory'
+                          ? 'bg-teal-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Package className="w-4 h-4 inline mr-2" />
+                      Inventory Report
+                    </button>
+                    <button
+                      onClick={() => handleReportTypeChange('sales')}
+                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                        activeReportType === 'sales'
+                          ? 'bg-teal-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4 inline mr-2" />
+                      Sales Report
+                    </button>
+                    <button
+                      onClick={() => handleReportTypeChange('patient_activity')}
+                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                        activeReportType === 'patient_activity'
+                          ? 'bg-teal-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 inline mr-2" />
+                      Patient Activity
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                {activeReportType !== 'inventory' && (
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">From Date</label>
+                        <input
+                          type="date"
+                          value={reportDateFrom}
+                          onChange={(e) => setReportDateFrom(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">To Date</label>
+                        <input
+                          type="date"
+                          value={reportDateTo}
+                          onChange={(e) => setReportDateTo(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div className="pt-6">
+                        <button
+                          onClick={() => loadReport()}
+                          className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                          Generate Report
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Report Content */}
+                {reportsLoading ? (
+                  <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto"></div>
+                    <p className="text-gray-500 mt-4">Loading report...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Dispensing Report */}
+                    {activeReportType === 'dispensing' && dispensingReport && (
+                      <div className="space-y-6">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <FileText className="w-8 h-8 text-teal-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Prescriptions</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {dispensingReport.summary.total_prescriptions}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <Pill className="w-8 h-8 text-blue-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Medications</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {dispensingReport.summary.total_medications_dispensed}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <Package className="w-8 h-8 text-purple-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Units Dispensed</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {dispensingReport.summary.total_units_dispensed}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <DollarSign className="w-8 h-8 text-green-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Revenue</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {currencyFormatter.format(dispensingReport.summary.total_revenue)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Top Medications */}
+                        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                          <div className="px-6 py-4 border-b">
+                            <h3 className="text-lg font-semibold text-gray-800">Top Dispensed Medications</h3>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medication</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Times Dispensed</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Qty</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {dispensingReport.top_medications.map((med, idx) => (
+                                  <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{med.medication_name}</td>
+                                    <td className="px-6 py-4 text-gray-600">{med.category}</td>
+                                    <td className="px-6 py-4 text-gray-600">{med.times_dispensed}</td>
+                                    <td className="px-6 py-4 text-gray-600">{med.total_quantity}</td>
+                                    <td className="px-6 py-4 text-gray-600">{currencyFormatter.format(med.total_revenue)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Inventory Report */}
+                    {activeReportType === 'inventory' && inventoryReport && inventoryReport.summary && (
+                      <div className="space-y-6">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <Package className="w-8 h-8 text-teal-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Total Items</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {inventoryReport.summary.total_items ?? 0}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <DollarSign className="w-8 h-8 text-green-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Total Value</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {currencyFormatter.format(inventoryReport.summary.total_value ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <AlertTriangle className="w-8 h-8 text-orange-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Low Stock</p>
+                                <p className="text-2xl font-bold text-orange-600">
+                                  {inventoryReport.summary.low_stock_count ?? 0}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <Clock className="w-8 h-8 text-yellow-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Expiring Soon</p>
+                                <p className="text-2xl font-bold text-yellow-600">
+                                  {inventoryReport.summary.expiring_soon_count ?? 0}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <XCircle className="w-8 h-8 text-red-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Expired</p>
+                                <p className="text-2xl font-bold text-red-600">
+                                  {inventoryReport.summary.expired_count ?? 0}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stock Levels */}
+                        {inventoryReport.stock_levels && (
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-4">Stock Level Distribution</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            <div className="text-center p-4 bg-red-50 rounded-lg">
+                              <p className="text-2xl font-bold text-red-600">{inventoryReport.stock_levels.out_of_stock ?? 0}</p>
+                              <p className="text-sm text-gray-600">Out of Stock</p>
+                            </div>
+                            <div className="text-center p-4 bg-orange-50 rounded-lg">
+                              <p className="text-2xl font-bold text-orange-600">{inventoryReport.stock_levels.critical ?? 0}</p>
+                              <p className="text-sm text-gray-600">Critical</p>
+                            </div>
+                            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                              <p className="text-2xl font-bold text-yellow-600">{inventoryReport.stock_levels.low ?? 0}</p>
+                              <p className="text-sm text-gray-600">Low</p>
+                            </div>
+                            <div className="text-center p-4 bg-green-50 rounded-lg">
+                              <p className="text-2xl font-bold text-green-600">{inventoryReport.stock_levels.adequate ?? 0}</p>
+                              <p className="text-sm text-gray-600">Adequate</p>
+                            </div>
+                            <div className="text-center p-4 bg-blue-50 rounded-lg">
+                              <p className="text-2xl font-bold text-blue-600">{inventoryReport.stock_levels.overstocked ?? 0}</p>
+                              <p className="text-sm text-gray-600">Overstocked</p>
+                            </div>
+                          </div>
+                        </div>
+                        )}
+
+                        {/* Category Breakdown */}
+                        {inventoryReport.category_breakdown && inventoryReport.category_breakdown.length > 0 && (
+                        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                          <div className="px-6 py-4 border-b">
+                            <h3 className="text-lg font-semibold text-gray-800">Category Breakdown</h3>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Qty</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Low Stock</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {inventoryReport.category_breakdown.map((cat, idx) => (
+                                  <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{cat.category}</td>
+                                    <td className="px-6 py-4 text-gray-600">{cat.item_count}</td>
+                                    <td className="px-6 py-4 text-gray-600">{cat.total_quantity}</td>
+                                    <td className="px-6 py-4 text-gray-600">{currencyFormatter.format(cat.total_value)}</td>
+                                    <td className="px-6 py-4">
+                                      {cat.low_stock_count > 0 ? (
+                                        <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                          {cat.low_stock_count}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400">0</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Sales Report */}
+                    {activeReportType === 'sales' && salesReport && (
+                      <div className="space-y-6">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <FileText className="w-8 h-8 text-teal-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Total Invoices</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {salesReport.summary.total_invoices}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <DollarSign className="w-8 h-8 text-green-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Total Amount</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {currencyFormatter.format(salesReport.summary.total_amount)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <CheckCircle className="w-8 h-8 text-green-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Collected</p>
+                                <p className="text-2xl font-bold text-green-600">
+                                  {currencyFormatter.format(salesReport.summary.paid_amount)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <AlertTriangle className="w-8 h-8 text-red-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Outstanding</p>
+                                <p className="text-2xl font-bold text-red-600">
+                                  {currencyFormatter.format(salesReport.summary.unpaid_amount)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Collection Rate */}
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-4">Collection Rate</h3>
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1 bg-gray-200 rounded-full h-4">
+                              <div 
+                                className="bg-teal-500 h-4 rounded-full transition-all"
+                                style={{ width: `${salesReport.summary.collection_rate}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-2xl font-bold text-teal-600">
+                              {salesReport.summary.collection_rate}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Payment Status */}
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Status Breakdown</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="text-center p-4 bg-green-50 rounded-lg">
+                              <p className="text-2xl font-bold text-green-600">{salesReport.status_breakdown.paid.count}</p>
+                              <p className="text-sm text-gray-600">Paid</p>
+                              <p className="text-xs text-gray-500">{currencyFormatter.format(salesReport.status_breakdown.paid.amount)}</p>
+                            </div>
+                            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                              <p className="text-2xl font-bold text-yellow-600">{salesReport.status_breakdown.unpaid.count}</p>
+                              <p className="text-sm text-gray-600">Unpaid</p>
+                              <p className="text-xs text-gray-500">{currencyFormatter.format(salesReport.status_breakdown.unpaid.amount)}</p>
+                            </div>
+                            <div className="text-center p-4 bg-blue-50 rounded-lg">
+                              <p className="text-2xl font-bold text-blue-600">{salesReport.status_breakdown.partial.count}</p>
+                              <p className="text-sm text-gray-600">Partial</p>
+                              <p className="text-xs text-gray-500">{currencyFormatter.format(salesReport.status_breakdown.partial.amount)}</p>
+                            </div>
+                            <div className="text-center p-4 bg-red-50 rounded-lg">
+                              <p className="text-2xl font-bold text-red-600">{salesReport.status_breakdown.overdue.count}</p>
+                              <p className="text-sm text-gray-600">Overdue</p>
+                              <p className="text-xs text-gray-500">{currencyFormatter.format(salesReport.status_breakdown.overdue.amount)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Patient Activity Report */}
+                    {activeReportType === 'patient_activity' && patientActivityReport && (
+                      <div className="space-y-6">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <Users className="w-8 h-8 text-teal-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Unique Patients</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {patientActivityReport.summary.unique_patients}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <UserCircle className="w-8 h-8 text-green-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">New Patients</p>
+                                <p className="text-2xl font-bold text-green-600">
+                                  {patientActivityReport.summary.new_patients}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <Activity className="w-8 h-8 text-blue-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Returning</p>
+                                <p className="text-2xl font-bold text-blue-600">
+                                  {patientActivityReport.summary.returning_patients}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center">
+                              <FileText className="w-8 h-8 text-purple-500 mr-3" />
+                              <div>
+                                <p className="text-sm text-gray-600">Prescriptions</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {patientActivityReport.summary.total_prescriptions}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Top Patients */}
+                        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                          <div className="px-6 py-4 border-b">
+                            <h3 className="text-lg font-semibold text-gray-800">Top Patients by Activity</h3>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prescriptions</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Spent</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {patientActivityReport.top_patients.map((patient, idx) => (
+                                  <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{patient.patient_name}</td>
+                                    <td className="px-6 py-4 text-gray-600">{patient.prescription_count}</td>
+                                    <td className="px-6 py-4 text-gray-600">{currencyFormatter.format(patient.total_spent)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No report loaded */}
+                    {!dispensingReport && !inventoryReport && !salesReport && !patientActivityReport && (
+                      <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+                        <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                        <p className="text-gray-500 mb-4">Select a report type and click Generate Report</p>
+                        <button
+                          onClick={() => loadReport()}
+                          className="bg-teal-500 hover:bg-teal-600 text-white px-6 py-2 rounded-lg transition"
+                        >
+                          Generate Report
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -1560,6 +2879,251 @@ const PharmacistDashboard: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {selectedPrescription && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-start justify-between border-b px-6 py-4">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        Prescription #{selectedPrescription.id}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Patient: {selectedPrescription.patient_name}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${
+                          selectedPrescription.status === 'dispensed'
+                            ? 'bg-green-100 text-green-700'
+                            : selectedPrescription.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : selectedPrescription.status === 'held'
+                            ? 'bg-orange-100 text-orange-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {selectedPrescription.status}
+                      </span>
+                      <button
+                        onClick={closePrescriptionModal}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Close prescription details"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {prescriptionDetailsLoading ? (
+                    <div className="p-6 text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto"></div>
+                      <p className="text-gray-500 mt-4">Loading prescription details...</p>
+                    </div>
+                  ) : (
+                    <div className="px-6 py-5 space-y-6">
+                      {modalError && (
+                        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+                          <AlertTriangle className="w-5 h-5 mt-0.5" />
+                          <p className="text-sm">{modalError}</p>
+                        </div>
+                      )}
+
+                      {modalSuccess && (
+                        <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+                          <CheckCircle className="w-5 h-5 mt-0.5" />
+                          <p className="text-sm">{modalSuccess}</p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                        <div>
+                          <p className="font-semibold text-gray-800">Patient</p>
+                          <p>{selectedPrescription.patient_name}</p>
+                          <p className="mt-3 font-semibold text-gray-800">Doctor</p>
+                          <p>Dr. {selectedPrescription.doctor_name}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-800">Created</p>
+                          <p>{formatDate(selectedPrescription.created_at)}</p>
+                          <p className="mt-3 font-semibold text-gray-800">Updated</p>
+                          <p>{formatDate(selectedPrescription.updated_at)}</p>
+                        </div>
+                      </div>
+
+                      {selectedPrescription.interaction_warnings &&
+                        selectedPrescription.interaction_warnings.length > 0 && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-orange-700">
+                            <div className="flex items-start gap-3">
+                              <AlertTriangle className="w-5 h-5 mt-0.5" />
+                              <div>
+                                <p className="font-semibold text-sm">Potential drug interactions detected</p>
+                                <ul className="mt-2 space-y-1 text-xs">
+                                  {selectedPrescription.interaction_warnings.map((warning, index) => (
+                                    <li key={index}>• {warning}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                      {selectedPrescription.low_stock_alerts &&
+                        selectedPrescription.low_stock_alerts.length > 0 && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+                            <div className="flex items-start gap-3">
+                              <AlertTriangle className="w-5 h-5 mt-0.5" />
+                              <div>
+                                <p className="font-semibold text-sm">Inventory alert</p>
+                                <ul className="mt-2 space-y-1 text-xs">
+                                  {selectedPrescription.low_stock_alerts.map((alert) => (
+                                    <li key={alert.inventory_item_id}>
+                                      • {alert.name} has {alert.quantity} remaining
+                                      {alert.reorder_level ? ` (reorder at ${alert.reorder_level})` : ''}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                      <div>
+                        <h4 className="text-base font-semibold text-gray-900 mb-3">Medications</h4>
+                        <div className="space-y-3">
+                          {selectedPrescription.items.map((item) => (
+                            <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                <div>
+                                  <p className="font-semibold text-gray-900">{item.medication_name}</p>
+                                  <div className="mt-2 space-y-1 text-xs text-gray-500">
+                                    {item.dosage && <p>Dosage: {item.dosage}</p>}
+                                    {item.frequency && <p>Frequency: {item.frequency}</p>}
+                                    {item.duration && <p>Duration: {item.duration}</p>}
+                                    {item.instructions && <p>Instructions: {item.instructions}</p>}
+                                  </div>
+                                </div>
+                                <div className="text-right text-sm text-gray-600">
+                                  <p>Qty: <span className="font-medium text-gray-900">{item.quantity}</span></p>
+                                  <p className="mt-1">Unit price: {currencyFormatter.format(item.unit_price ?? 0)}</p>
+                                  <p className="mt-1 text-base font-semibold text-gray-900">
+                                    {currencyFormatter.format(item.total_price ?? item.quantity * (item.unit_price ?? 0))}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <p className="text-sm text-gray-600">Prescription Total</p>
+                          <p className="text-2xl font-semibold text-gray-900 mt-1">
+                            {currencyFormatter.format(
+                              selectedPrescription.invoice?.amount ?? selectedPrescriptionTotal
+                            )}
+                          </p>
+                          {selectedPrescription.dispensed_at && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              Dispensed on {new Date(selectedPrescription.dispensed_at).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+
+                        {selectedPrescription.invoice && (
+                          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-teal-700">
+                                  Invoice {selectedPrescription.invoice.invoice_number || selectedPrescription.invoice.id}
+                                </p>
+                                <p className="text-xs text-teal-600 mt-1 capitalize">
+                                  Status: {selectedPrescription.invoice.status}
+                                </p>
+                                {selectedPrescription.invoice.description && (
+                                  <p className="text-xs text-gray-600 mt-2">
+                                    {selectedPrescription.invoice.description}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-teal-700">
+                                  {currencyFormatter.format(selectedPrescription.invoice.amount ?? 0)}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Due {formatDate(selectedPrescription.invoice.due_date)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedPrescription.notes && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <p className="text-sm font-semibold text-gray-800 mb-2">Existing Notes</p>
+                          <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                            {selectedPrescription.notes}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedPrescription.status === 'pending' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Notes to include with invoice (optional)
+                          </label>
+                          <textarea
+                            value={dispenseNotes}
+                            onChange={(e) => setDispenseNotes(e.target.value)}
+                            rows={3}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="Add pharmacist guidance for the patient or receptionist"
+                          />
+                          <p className="text-xs text-gray-500 mt-2">
+                            This note will be stored with the prescription record for receptionist billing.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-t px-6 py-4 bg-gray-50">
+                    <div className="text-xs text-gray-500">
+                      {selectedPrescription.dispensed_at
+                        ? `Dispensed on ${new Date(selectedPrescription.dispensed_at).toLocaleString()}`
+                        : 'Awaiting pharmacist action'}
+                    </div>
+                    <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={handlePrintBill}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Bill
+                      </button>
+                      <button
+                        onClick={closePrescriptionModal}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"
+                      >
+                        Close
+                      </button>
+                      {selectedPrescription.status === 'pending' && (
+                        <button
+                          onClick={handleDispense}
+                          disabled={dispensing}
+                          className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {dispensing ? 'Dispensing...' : 'Dispense & Create Invoice'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

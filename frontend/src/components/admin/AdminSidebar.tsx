@@ -1,12 +1,11 @@
 import React from 'react';
-// FIX: Removed 'Link' from this line
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
   Calendar, 
   Building2, 
-  Pill, 
+  Package, // Changed Pill to Package for generic Inventory
   CreditCard, 
   BarChart3, 
   Settings, 
@@ -14,8 +13,8 @@ import {
 } from 'lucide-react';
 
 const AdminSidebar: React.FC = () => {
-  const location = useLocation();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
@@ -23,22 +22,16 @@ const AdminSidebar: React.FC = () => {
     navigate('/login');
   };
 
-  const isActive = (path: string) => {
-    if (path === '/admin') {
-      return location.pathname === '/admin';
-    }
-    return location.pathname.startsWith(path);
-  };
-
   const menuItems = [
-    { title: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
-    { title: 'User Management', icon: <Users size={20} />, path: '/admin/users' },
-    { title: 'Appointments', icon: <Calendar size={20} />, path: '/admin/appointments' }, 
-    { title: 'Departments', icon: <Building2 size={20} />, path: '/admin/departments' }, 
-    { title: 'Pharmacy', icon: <Pill size={20} />, path: '/admin/inventory' },
-    { title: 'Billing', icon: <CreditCard size={20} />, path: '/admin/billing' }, 
-    { title: 'Reports', icon: <BarChart3 size={20} />, path: '/admin/reports' },
-    { title: 'Settings', icon: <Settings size={20} />, path: '/admin/settings' },
+    { title: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin', end: true },
+    { title: 'User Management', icon: <Users size={20} />, path: '/admin/users', end: false },
+    { title: 'Departments', icon: <Building2 size={20} />, path: '/admin/departments', end: false },
+    { title: 'Appointments', icon: <Calendar size={20} />, path: '/admin/appointments', end: false }, 
+    { title: 'Inventory', icon: <Package size={20} />, path: '/admin/inventory', end: false },
+    { title: 'Reports', icon: <BarChart3 size={20} />, path: '/admin/reports', end: false },
+    // Placeholders
+    { title: 'Billing', icon: <CreditCard size={20} />, path: '/admin/billing', end: false }, 
+    { title: 'Settings', icon: <Settings size={20} />, path: '/admin/settings', end: false },
   ];
 
   return (
@@ -54,20 +47,27 @@ const AdminSidebar: React.FC = () => {
       {/* Navigation Links */}
       <nav className="flex-1 py-6 space-y-1 overflow-y-auto">
         {menuItems.map((item) => (
-          <button
+          <NavLink
             key={item.path}
-            onClick={() => navigate(item.path)}
-            className={`w-full flex items-center px-8 py-3 transition-all duration-200 group ${
-              isActive(item.path)
-                ? 'bg-teal-50 text-teal-700 border-r-4 border-teal-600'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
+            to={item.path}
+            end={item.end} // Ensures /admin doesn't stay active when on /admin/users
+            className={({ isActive }) =>
+              `w-full flex items-center px-8 py-3 transition-all duration-200 group border-r-4 ${
+                isActive
+                  ? 'bg-teal-50 text-teal-700 border-teal-600'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-transparent'
+              }`
+            }
           >
-            <span className={`mr-3 transition-colors ${isActive(item.path) ? 'text-teal-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
-              {item.icon}
-            </span>
-            <span className="font-medium">{item.title}</span>
-          </button>
+            {({ isActive }) => (
+              <>
+                <span className={`mr-3 transition-colors ${isActive ? 'text-teal-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                  {item.icon}
+                </span>
+                <span className="font-medium">{item.title}</span>
+              </>
+            )}
+          </NavLink>
         ))}
       </nav>
 

@@ -1,23 +1,19 @@
-// src/api/axiosConfig.ts
 import axios from 'axios';
 
-// 1. Create a configured instance of axios
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api', // Your Laravel Backend URL
+  baseURL: `${API_BASE_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
-// 2. Add an "Interceptor" to attach the Token to every request automatically
 api.interceptors.request.use(
-  // We use 'any' here to prevent the "InternalAxiosRequestConfig" version error
   (config: any) => {
     const token = localStorage.getItem('authToken');
-    
     if (token) {
-      // Ensure headers object exists, then assign the token
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -28,4 +24,5 @@ api.interceptors.request.use(
   }
 );
 
+// CRITICAL LINE: You were likely missing this!
 export default api;

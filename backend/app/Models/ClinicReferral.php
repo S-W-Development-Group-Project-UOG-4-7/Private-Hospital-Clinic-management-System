@@ -14,12 +14,14 @@ class ClinicReferral extends Model
 
     protected $fillable = [
         'patient_id',
-        'doctor_id',
+        'referring_doctor_id',
         'clinic_id',
         'reason',
+        'clinical_summary',
         'priority',
         'status',
         'preferred_appointment_date',
+        'scheduled_appointment_date',
         'notes',
     ];
 
@@ -42,7 +44,7 @@ class ClinicReferral extends Model
      */
     public function doctor(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'doctor_id');
+        return $this->belongsTo(User::class, 'referring_doctor_id');
     }
 
     /**

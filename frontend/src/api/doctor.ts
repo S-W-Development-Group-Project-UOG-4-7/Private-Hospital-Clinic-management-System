@@ -30,9 +30,19 @@ import type {
   ClinicsResponse,
   CreateClinicReferralPayload,
   PatientRecord,
+  DailySummaryResponse,
 } from '../types/doctor';
 
 export const doctorApi = {
+  dashboard: {
+    getDailySummary: async (date?: string): Promise<DailySummaryResponse> => {
+      const response = await http.get<DailySummaryResponse>(API_ENDPOINTS.DOCTOR_DAILY_SUMMARY, {
+        params: date ? { date } : undefined,
+      });
+      return response.data;
+    },
+  },
+
   appointments: {
     list: async (params?: { date?: string; status?: string; patient_name?: string }): Promise<DoctorAppointmentsResponse> => {
       const response = await http.get<DoctorAppointmentsResponse>(API_ENDPOINTS.DOCTOR_APPOINTMENTS, { params });

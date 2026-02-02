@@ -1,15 +1,21 @@
 import React, { useEffect, useState } from 'react';
+import { 
+  Users, Search, Edit, UserPlus, 
+  CheckCircle, Shield, Ban, XCircle 
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Search, ArrowLeft, Ban, CheckCircle, Edit } from 'lucide-react';
 import api from '../../api/axiosConfig';
 
-// Define the shape that MATCHES your AdminController backend
+// 1. Interface matching AdminController.php output exactly
 interface User {
   id: number;
-  name: string;      // Backend sends 'name', NOT 'first_name'
+  name: string;        // Backend sends "First Last" combined as 'name'
+  username: string;
   email: string;
-  role: string;      // Backend sends string (e.g., 'doctor')
-  is_active: boolean;
+  role: string;        // Backend sends "doctor", "admin", etc.
+  department: string;  // Backend sends "General Medicine" or "-"
+  is_active: boolean;  // Backend sends true/false (1/0)
+  created_at: string;
 }
 
 const UsersList: React.FC = () => {
@@ -18,14 +24,27 @@ const UsersList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // --- Fetch Users ---
+  // 2. Fetch Users Data
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await api.get<User[]>('/admin/users');
-      setUsers(response.data);
+      const res = await api.get('/admin/users');
+      
+      // Cast to 'any' to safely check for Laravel's pagination structure
+      const responseData = res.data as any;
+
+      if (Array.isArray(responseData)) {
+        // Direct array response
+        setUsers(responseData);
+      } else if (responseData && Array.isArray(responseData.data)) {
+        // Laravel Paginated response (data is inside .data)
+        setUsers(responseData.data);
+      } else {
+        console.warn("Unexpected API response structure:", responseData);
+        setUsers([]); 
+      }
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Failed to load users", error);
     } finally {
       setLoading(false);
     }
@@ -35,160 +54,158 @@ const UsersList: React.FC = () => {
     fetchUsers();
   }, []);
 
-  // --- Toggle Active Status ---
-  const toggleStatus = async (user: User) => {
+  // 3. Toggle User Status
+  const handleToggleStatus = async (user: User) => {
     const action = user.is_active ? "deactivate" : "activate";
-    if (!window.confirm(`Are you sure you want to ${action} ${user.name}?`)) return;
-
+    if(!window.confirm(`Are you sure you want to ${action} ${user.name}?`)) return;
+    
     try {
       await api.patch(`/admin/users/${user.id}/toggle-status`);
-      fetchUsers(); // Refresh list to show new status
+      fetchUsers(); // Refresh list
     } catch (error) {
-      alert("Failed to update status.");
+      alert("Failed to update status");
     }
   };
 
-  // --- Filter Logic ---
+  // 4. Helper for Badge Colors
+  const getRoleBadgeColor = (role: string) => {
+    switch (role?.toLowerCase()) {
+      case 'admin': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'doctor': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'pharmacist': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'receptionist': return 'bg-pink-100 text-pink-800 border-pink-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  // 5. Filter Logic
   const filteredUsers = users.filter(user => 
     (user.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (user.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (user.role?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
-  // --- Helper for Badge Colors ---
-  const getRoleBadge = (role: string) => {
-    // Safety check if role is missing
-    const safeRole = role ? role.toLowerCase() : 'patient';
-    
-    switch (safeRole) {
-        case 'admin': return 'bg-purple-100 text-purple-800 border-purple-200';
-        case 'doctor': return 'bg-green-100 text-green-800 border-green-200';
-        case 'pharmacist': return 'bg-orange-100 text-orange-800 border-orange-200';
-        case 'receptionist': return 'bg-pink-100 text-pink-800 border-pink-200';
-        default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  // --- Safe Initial Extraction ---
-  const getInitials = (name: string) => {
-    return name && name.length > 0 ? name.charAt(0).toUpperCase() : 'U';
-  };
-
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="p-6 space-y-6 animate-fade-in min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-4">
-            <button 
-                onClick={() => navigate('/admin')} 
-                className="p-2 hover:bg-gray-100 rounded-full transition lg:hidden"
-            >
-                <ArrowLeft className="w-5 h-5 text-gray-500" />
-            </button>
+            <div className="p-3 bg-teal-50 rounded-lg hidden md:block">
+                <Users className="w-6 h-6 text-teal-600" />
+            </div>
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Staff Management</h1>
-                <p className="text-sm text-gray-500">View and manage all hospital users</p>
+                <h1 className="text-2xl font-bold text-gray-800">Staff Management</h1>
+                <p className="text-gray-500 text-sm">View and manage doctors, pharmacists, and staff.</p>
             </div>
         </div>
-        <button
-          onClick={() => navigate('/admin/users/new')}
-          className="flex items-center gap-2 bg-teal-600 text-white px-5 py-2.5 rounded-lg hover:bg-teal-700 transition shadow-sm font-medium"
+        
+        {/* --- FIXED: Button now points to /admin/users/new --- */}
+        <button 
+          onClick={() => navigate('/admin/users/new')} 
+          className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm font-medium"
         >
-          <UserPlus className="w-5 h-5" />
+          <UserPlus size={18} />
           Add Staff Member
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-gray-400" />
+      {/* Table Container */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Search */}
+        <div className="p-5 border-b border-gray-100 bg-gray-50/50">
+            <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+            <input 
+                type="text" 
+                placeholder="Search by name, email, or role..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
+            />
+            </div>
         </div>
-        <input
-          type="text"
-          placeholder="Search by name, email, or role..."
-          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
 
-      {/* Table Section */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        {/* List */}
         <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User Details</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <table className="w-full text-left border-collapse">
+            <thead className="bg-gray-50 text-gray-600 font-semibold text-xs uppercase tracking-wider">
+                <tr>
+                <th className="p-5 border-b border-gray-200">User Details</th>
+                <th className="p-5 border-b border-gray-200">Role</th>
+                <th className="p-5 border-b border-gray-200">Status</th>
+                <th className="p-5 border-b border-gray-200 text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                <tr><td colSpan={4} className="p-10 text-center text-gray-500 italic">Loading users...</td></tr>
+                ) : filteredUsers.length === 0 ? (
+                <tr><td colSpan={4} className="p-10 text-center text-gray-500">No users found matching your search.</td></tr>
+                ) : (
+                filteredUsers.map((user) => (
+                    <tr key={user.id} className="hover:bg-gray-50/80 transition-colors group">
+                    <td className="p-5">
+                        <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm text-sm
+                            ${user.role === 'admin' ? 'bg-purple-600' : 
+                            user.role === 'doctor' ? 'bg-blue-600' : 
+                            user.role === 'pharmacist' ? 'bg-orange-500' : 'bg-teal-600'}`}>
+                            {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <div>
+                            <p className="font-semibold text-gray-900">{user.name || 'Unknown Name'}</p>
+                            <p className="text-xs text-gray-500">{user.email}</p>
+                            {user.department && user.department !== '-' && (
+                                <span className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                                    • {user.department}
+                                </span>
+                            )}
+                        </div>
+                        </div>
+                    </td>
+                    <td className="p-5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${getRoleBadgeColor(user.role)}`}>
+                        <Shield size={12} />
+                        {user.role.toUpperCase()}
+                        </span>
+                    </td>
+                    <td className="p-5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+                        ${user.is_active 
+                            ? 'bg-green-50 text-green-700 border border-green-100' 
+                            : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                        {user.is_active ? <CheckCircle size={12} /> : <Ban size={12} />}
+                        {user.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </td>
+                    <td className="p-5 text-right">
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* --- EDIT BUTTON --- */}
+                            <button 
+                                onClick={() => navigate(`/admin/users/${user.id}/edit`)}
+                                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit User"
+                            >
+                                <Edit size={18} />
+                            </button>
+                            
+                            {/* --- TOGGLE STATUS BUTTON --- */}
+                            <button 
+                                onClick={() => handleToggleStatus(user)}
+                                className={`p-2 rounded-lg transition-colors 
+                                    ${user.is_active 
+                                    ? 'text-gray-500 hover:text-red-600 hover:bg-red-50' 
+                                    : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}`}
+                                title={user.is_active ? "Deactivate User" : "Activate User"}
+                            >
+                                {user.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                            </button>
+                        </div>
+                    </td>
                     </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {loading ? (
-                        <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Loading staff data...</td></tr>
-                    ) : filteredUsers.length === 0 ? (
-                        <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">No users found.</td></tr>
-                    ) : (
-                        filteredUsers.map((user) => (
-                            <tr key={user.id} className="hover:bg-gray-50 transition">
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center">
-                                        <div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold">
-                                            {/* SAFE INITIALS CHECK */}
-                                            {getInitials(user.name)}
-                                        </div>
-                                        <div className="ml-4">
-                                            <div className="text-sm font-medium text-gray-900">{user.name || 'Unknown Name'}</div>
-                                            <div className="text-sm text-gray-500">{user.email}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRoleBadge(user.role)}`}>
-                                        {(user.role || 'Unknown').toUpperCase()}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {user.is_active ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            <CheckCircle className="w-3 h-3" /> Active
-                                        </span>
-                                    ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                            <Ban className="w-3 h-3" /> Inactive
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <div className="flex justify-end gap-2">
-                                        {/* Edit Button */}
-                                        <button 
-                                            onClick={() => navigate(`/admin/users/${user.id}/edit`)}
-                                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                            title="Edit"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </button>
-                                        
-                                        {/* Status Toggle */}
-                                        <button 
-                                            onClick={() => toggleStatus(user)}
-                                            className={`px-3 py-1 rounded-md text-xs font-semibold border transition ${
-                                                user.is_active 
-                                                ? 'text-red-700 border-red-200 hover:bg-red-50' 
-                                                : 'text-green-700 border-green-200 hover:bg-green-50'
-                                            }`}
-                                        >
-                                            {user.is_active ? 'Deactivate' : 'Activate'}
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
+                ))
+                )}
+            </tbody>
             </table>
         </div>
       </div>

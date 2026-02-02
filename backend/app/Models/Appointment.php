@@ -13,8 +13,8 @@ class Appointment extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
-        'department_id', // Added this so the Admin Panel can track departments
-        'clinic_id',     // Kept this for your clinic logic
+        'department_id',
+        'clinic_id',
         'appointment_number',
         'appointment_date',
         'appointment_time',
@@ -32,6 +32,10 @@ class Appointment extends Model
         'is_walk_in' => 'boolean',
     ];
 
+    // ==========================================
+    // RELATIONSHIPS
+    // ==========================================
+
     public function patient(): BelongsTo
     {
         return $this->belongsTo(User::class, 'patient_id');
@@ -42,13 +46,11 @@ class Appointment extends Model
         return $this->belongsTo(User::class, 'doctor_id');
     }
 
-    // --- NEW: Added Department Relationship ---
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
     }
 
-    // Kept your existing Clinic relationship
     public function clinic(): BelongsTo
     {
         return $this->belongsTo(Clinic::class, 'clinic_id');

@@ -13,6 +13,11 @@ class EhrRecord extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
+        // --- Added these specific medical fields ---
+        'diagnosis',
+        'prescription',
+        'notes',
+        // -------------------------------------------
         'type',
         'title',
         'details',

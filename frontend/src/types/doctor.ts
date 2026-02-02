@@ -498,3 +498,57 @@ export interface PatientRecord {
     created_at: string;
   }>;
 }
+
+// Daily Summary Types
+export interface DailySummaryStats {
+  total_appointments: number;
+  completed_consultations: number;
+  pending_appointments: number;
+  cancelled_appointments: number;
+  prescriptions_issued: number;
+  lab_orders_placed: number;
+  referrals_made: number;
+  in_person_consultations: number;
+  telemedicine_consultations: number;
+}
+
+export interface ConsultedPatient {
+  appointment_id: number;
+  patient_id: number;
+  patient_name: string;
+  patient_email: string | null;
+  patient_phone: string;
+  patient_gender: string;
+  appointment_time: string;
+  consultation_type: 'in_person' | 'telemedicine';
+  reason: string | null;
+  notes: string | null;
+  prescriptions_count: number;
+  lab_orders_count: number;
+  referrals_count: number;
+  prescriptions: Array<{
+    id: number;
+    prescription_number: string;
+    items_count: number;
+    status: string;
+  }>;
+  lab_orders: Array<{
+    id: number;
+    test_type: string;
+    status: string;
+  }>;
+  referrals: Array<{
+    id: number;
+    clinic_name: string;
+    priority: string;
+    status: string;
+  }>;
+}
+
+export interface DailySummaryResponse {
+  date: string;
+  doctor_id: number;
+  doctor_name: string;
+  stats: DailySummaryStats;
+  consulted_patients: ConsultedPatient[];
+}

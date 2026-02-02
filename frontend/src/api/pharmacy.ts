@@ -120,6 +120,17 @@ export const inventoryApi = {
     }).then(handleApiResponse);
   },
 
+  // --- ADDED THIS METHOD ---
+  dispense: (id: string, data: { quantity: number }) => {
+    // Assuming PHARMACIST_INVENTORY base URL is like '/api/pharmacist/inventory'
+    // This constructs: /api/pharmacist/inventory/{id}/dispense
+    return fetch(`${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}/dispense`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+
   getLowStock: () => {
     return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_LOW_STOCK, {
       headers: getAuthHeaders(),
@@ -244,20 +255,20 @@ export const pharmacistApi = {
     list: () => {
       return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS, {
         headers: getAuthHeaders(),
-      }).then(res => res.json());
+      }).then(handleApiResponse);
     },
 
     show: (id: string) => {
       return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_SHOW(id), {
         headers: getAuthHeaders(),
-      }).then(res => res.json());
+      }).then(handleApiResponse);
     },
 
     checkInteractions: (id: string) => {
       return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_INTERACTION_CHECK(id), {
         method: 'POST',
         headers: getAuthHeaders(),
-      }).then(res => res.json());
+      }).then(handleApiResponse);
     },
 
     dispense: (id: string, data: any) => {
@@ -265,7 +276,7 @@ export const pharmacistApi = {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(data),
-      }).then(res => res.json());
+      }).then(handleApiResponse);
     },
   },
 
@@ -355,13 +366,97 @@ export const pharmacistApi = {
     inventory: () => {
       return fetch(API_ENDPOINTS.PHARMACIST_REPORTS_INVENTORY, {
         headers: getAuthHeaders(),
-      }).then(res => res.json());
+      }).then(handleApiResponse);
     },
 
     storage: () => {
       return fetch(API_ENDPOINTS.PHARMACIST_REPORTS_STORAGE, {
         headers: getAuthHeaders(),
-      }).then(res => res.json());
+      }).then(handleApiResponse);
+    },
+
+    dispensing: (params?: { from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_REPORTS_DISPENSING}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_REPORTS_DISPENSING;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    sales: (params?: { from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_REPORTS_SALES}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_REPORTS_SALES;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    patientActivity: (params?: { from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_REPORTS_PATIENT_ACTIVITY}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_REPORTS_PATIENT_ACTIVITY;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+  },
+
+  patients: {
+    list: (params?: { search?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.search) queryParams.append('search', params.search);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_PATIENTS}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_PATIENTS;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    show: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PATIENT_SHOW(id), {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    medicationHistory: (id: string, params?: { status?: string; from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_PATIENT_MEDICATION_HISTORY(id)}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_PATIENT_MEDICATION_HISTORY(id);
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    medicationSummary: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PATIENT_MEDICATION_SUMMARY(id), {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
     },
   },
 
@@ -373,4 +468,3 @@ export const pharmacistApi = {
     },
   },
 };
-

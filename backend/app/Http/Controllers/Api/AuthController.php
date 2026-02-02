@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\PatientProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -17,7 +18,9 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        \Log::info('Registration attempt', $request->all());
+        // Now using Log::info cleanly
+        Log::info('Registration attempt', $request->all());
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -95,7 +98,7 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        \Log::info('Registration successful for user', ['id' => $user->id, 'email' => $user->email]);
+        Log::info('Registration successful for user', ['id' => $user->id, 'email' => $user->email]);
 
         return response()->json([
             'message' => 'Registration successful.',
@@ -106,28 +109,42 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'login' => ['required', 'string'], // email
-            'password' => ['required', 'string'],
-        ]);
-
-        // Search by email only
-        $user = User::where('email', $credentials['login'])->first();
-
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'login' => ['The provided credentials are incorrect.'],
+        try {
+            $credentials = $request->validate([
+                'login' => ['required', 'string'], // email
+                'password' => ['required', 'string'],
             ]);
+
+            // Search by email only
+            $user = User::where('email', $credentials['login'])->first();
+
+            if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+                throw ValidationException::withMessages([
+                    'login' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            $user->tokens()->delete();
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            Log::debug('AuthController@login success', [
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'message' => 'Login successful.',
+                'token' => $token,
+                'user' => $this->formatUserData($user),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('AuthController@login error', [
+                'login' => $request->input('login'),
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
         }
-
-        $user->tokens()->delete();
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Login successful.',
-            'token' => $token,
-            'user' => $this->formatUserData($user),
-        ]);
     }
 
     public function logout(Request $request)
@@ -150,18 +167,19 @@ class AuthController extends Controller
 
     /**
      * Helper to format user data consistently.
-     * Checks both 'role_id' relation and Spatie roles to find the correct role name.
+     * Checks both 'legacyRole' relation and Spatie roles to find the correct role name.
      */
     private function formatUserData($user)
     {
-        // Load the role relationship if it exists (for role_id)
-        $user->load('role');
+        // FIX: Load 'legacyRole' instead of 'role' (which is now a scope)
+        $user->load('legacyRole');
 
         // Determine role: Check role_id relation first, then Spatie, then default to patient
         $roleName = 'patient';
-        
-        if ($user->role) {
-            $roleName = $user->role->name;
+
+        // FIX: Check 'legacyRole' property
+        if ($user->legacyRole) {
+            $roleName = $user->legacyRole->name;
         } elseif ($user->roles && $user->roles->first()) {
             $roleName = $user->roles->first()->name;
         }

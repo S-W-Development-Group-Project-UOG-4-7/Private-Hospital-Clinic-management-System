@@ -23,8 +23,12 @@ return new class extends Migration
         if (Schema::hasTable('users') && !Schema::hasColumn('users', 'department_id')) {
             Schema::table('users', function (Blueprint $table) {
                 $table->unsignedBigInteger('department_id')->nullable()->after('id');
-                // Optional: Add foreign key constraint for safety
-                // $table->foreign('department_id')->references('id')->on('departments')->nullOnDelete();
+                
+                // ENABLED: Foreign key constraint for data integrity
+                $table->foreign('department_id')
+                      ->references('id')
+                      ->on('departments')
+                      ->nullOnDelete(); 
             });
         }
     }
@@ -32,9 +36,13 @@ return new class extends Migration
     public function down(): void
     {
         // Reverse operations
-        if (Schema::hasColumn('users', 'department_id')) {
+        if (Schema::hasTable('users')) {
             Schema::table('users', function (Blueprint $table) {
-                $table->dropColumn('department_id');
+                if (Schema::hasColumn('users', 'department_id')) {
+                    // Drop foreign key first (array syntax uses standard naming convention)
+                    $table->dropForeign(['department_id']); 
+                    $table->dropColumn('department_id');
+                }
             });
         }
         
