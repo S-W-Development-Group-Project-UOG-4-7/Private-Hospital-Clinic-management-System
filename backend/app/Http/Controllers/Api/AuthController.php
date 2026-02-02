@@ -7,11 +7,11 @@ use App\Models\User;
 use App\Models\PatientProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Log; // <--- ADDED THIS IMPORT
 use Spatie\Permission\Models\Role as SpatieRole;
 
 class AuthController extends Controller
@@ -109,28 +109,42 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'login' => ['required', 'string'], // email
-            'password' => ['required', 'string'],
-        ]);
-
-        // Search by email only
-        $user = User::where('email', $credentials['login'])->first();
-
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'login' => ['The provided credentials are incorrect.'],
+        try {
+            $credentials = $request->validate([
+                'login' => ['required', 'string'], // email
+                'password' => ['required', 'string'],
             ]);
+
+            // Search by email only
+            $user = User::where('email', $credentials['login'])->first();
+
+            if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+                throw ValidationException::withMessages([
+                    'login' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            $user->tokens()->delete();
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            Log::debug('AuthController@login success', [
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'message' => 'Login successful.',
+                'token' => $token,
+                'user' => $this->formatUserData($user),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('AuthController@login error', [
+                'login' => $request->input('login'),
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
         }
-
-        $user->tokens()->delete();
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Login successful.',
-            'token' => $token,
-            'user' => $this->formatUserData($user),
-        ]);
     }
 
     public function logout(Request $request)

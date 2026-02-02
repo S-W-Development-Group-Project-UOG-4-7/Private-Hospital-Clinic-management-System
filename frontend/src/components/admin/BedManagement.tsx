@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 // Simple interface for our data
 interface Bed {
     id: number;
@@ -16,7 +18,7 @@ const BedManagement: React.FC = () => {
     // Fetch from your Laravel Backend
     const fetchBeds = async () => {
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/beds');
+            const response = await fetch(`${API_BASE_URL}/api/beds`);
             const data = await response.json();
             if (data.success) {
                 setBeds(data.data);
@@ -30,7 +32,7 @@ const BedManagement: React.FC = () => {
 
     const toggleBed = async (id: number) => {
         try {
-            await fetch(`http://127.0.0.1:8000/api/beds/${id}/toggle`, { method: 'POST' });
+            await fetch(`${API_BASE_URL}/api/beds/${id}/toggle`, { method: 'POST' });
             fetchBeds(); // Reload the list instantly
         } catch (error) {
             alert("Failed to update status");

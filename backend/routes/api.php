@@ -43,6 +43,8 @@ use App\Http\Controllers\Api\ClinicController;
 use App\Http\Controllers\Api\PharmacistController;
 use App\Http\Controllers\Api\PatientController;
 use App\Http\Controllers\Api\AIController;
+use App\Http\Controllers\Api\PharmacistPatientController;
+use App\Http\Controllers\Api\PharmacistReportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -148,8 +150,20 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->gr
     Route::post('returns', [InventoryController::class, 'processReturn']);
     Route::get('returns', [InventoryController::class, 'getReturns']);
 
-    // Reports & Audit
-    Route::get('reports/inventory', [InventoryController::class, 'inventoryReport']);
+
+    // Patients (view basic patient info and medication history)
+    Route::get('patients', [PharmacistPatientController::class, 'index']);
+    Route::get('patients/{id}', [PharmacistPatientController::class, 'show']);
+    Route::get('patients/{id}/medication-history', [PharmacistPatientController::class, 'medicationHistory']);
+    Route::get('patients/{id}/medication-summary', [PharmacistPatientController::class, 'medicationSummary']);
+    
+    // Reports & Analytics
+    Route::get('reports/dispensing', [PharmacistReportController::class, 'dispensingReport']);
+    Route::get('reports/inventory', [PharmacistReportController::class, 'inventoryReport']);
+    Route::get('reports/sales', [PharmacistReportController::class, 'salesReport']);
+    Route::get('reports/patient-activity', [PharmacistReportController::class, 'patientActivityReport']);
+    
+    // Storage Report & Audit
     Route::get('reports/storage', [InventoryController::class, 'storageReport']);
     Route::get('audit-logs', [InventoryController::class, 'auditLogs']);
 });
@@ -297,6 +311,7 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(func
     Route::post('queue/call-next', [DoctorQueueController::class, 'callNext']);
     Route::put('queue/{id}/status', [DoctorQueueController::class, 'updateStatus']);
 });
+
 
 // Patient API (for doctors and staff to search patients)
 Route::middleware('auth:sanctum')->group(function () {
