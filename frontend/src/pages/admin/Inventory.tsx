@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, AlertTriangle, ArrowLeft, Search, CheckCircle, Plus, X, Edit2, Trash2 } from 'lucide-react';
+import { 
+  Package, 
+  AlertTriangle, 
+  ArrowLeft, 
+  Search, 
+  CheckCircle, 
+  Plus, 
+  X, 
+  Edit2, 
+  Trash2 
+} from 'lucide-react';
 import api from '../../api/axiosConfig';
 
 interface Drug {
@@ -30,9 +40,12 @@ const Inventory: React.FC = () => {
   const fetchInventory = async () => {
     try {
       const response = await api.get<Drug[]>('/admin/inventory');
-      setDrugs(response.data);
+      // Ensure we handle different response structures if necessary
+      const data = Array.isArray(response.data) ? response.data : (response.data as any).data || [];
+      setDrugs(data);
     } catch (error) {
       console.error("Failed to load inventory", error);
+      setDrugs([]); // Fallback to empty array
     } finally {
       setLoading(false);
     }
@@ -100,7 +113,7 @@ const Inventory: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in relative">
+    <div className="space-y-6 animate-fade-in relative p-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button onClick={() => navigate('/admin')} className="p-2 hover:bg-gray-200 rounded-full transition">
@@ -112,7 +125,7 @@ const Inventory: React.FC = () => {
         </div>
         <button 
           onClick={handleAddClick}
-          className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition flex items-center gap-2 shadow-sm"
+          className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition flex items-center gap-2 shadow-sm font-medium"
         >
           <Plus className="w-5 h-5" /> Add Medicine
         </button>
@@ -125,18 +138,18 @@ const Inventory: React.FC = () => {
           <input 
             type="text" 
             placeholder="Search medical supplies..." 
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
         
-        <div className="flex gap-4">
-            <div className="bg-red-50 text-red-800 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border border-red-100">
+        <div className="flex gap-4 w-full md:w-auto">
+            <div className="flex-1 md:flex-none bg-red-50 text-red-800 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 border border-red-100">
                 <AlertTriangle className="w-4 h-4" />
                 Low Stock: {drugs.filter(d => d.stock < 10).length}
             </div>
-            <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border border-blue-100">
+            <div className="flex-1 md:flex-none bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 border border-blue-100">
                 <Package className="w-4 h-4" />
                 Total Items: {drugs.length}
             </div>
@@ -145,27 +158,28 @@ const Inventory: React.FC = () => {
 
       {/* Inventory Table */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Level</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expiry Date</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-               <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">Loading inventory...</td></tr>
-            ) : filteredDrugs.length === 0 ? (
-               <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">No items found. Click "Add Medicine" to start.</td></tr>
-            ) : (
-                filteredDrugs.map((item) => (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Level</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                 <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500 italic">Loading inventory...</td></tr>
+              ) : filteredDrugs.length === 0 ? (
+                 <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">No items found matching your search.</td></tr>
+              ) : (
+                 filteredDrugs.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition">
-                        <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                        <td className="px-6 py-4 text-gray-700">{item.stock} units</td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{item.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">{item.stock} units</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                             {item.stock < 10 ? (
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
                                     <AlertTriangle className="w-3 h-3" /> Low Stock
@@ -176,48 +190,53 @@ const Inventory: React.FC = () => {
                                 </span>
                             )}
                         </td>
-                        <td className="px-6 py-4 text-gray-500 text-sm">{item.expiry}</td>
-                        <td className="px-6 py-4 text-right flex justify-end gap-2">
-                            <button 
-                                onClick={() => handleEditClick(item)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition"
-                                title="Edit Item"
-                            >
-                                <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button 
-                                onClick={() => handleDelete(item.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-full transition"
-                                title="Delete Item"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm">{item.expiry}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex justify-end gap-2">
+                                <button 
+                                    onClick={() => handleEditClick(item)}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                    title="Edit Item"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                    onClick={() => handleDelete(item.id)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                    title="Delete Item"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </td>
                     </tr>
-                ))
-            )}
-          </tbody>
-        </table>
+                 ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* --- ADD / EDIT MODAL --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="font-bold text-gray-800">
+              <h3 className="font-bold text-lg text-gray-800">
                 {editingId ? 'Edit Medicine' : 'Add New Medicine'}
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Medicine Name</label>
                 <input 
                   type="text" 
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition"
                   placeholder="e.g. Paracetamol 500mg"
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
@@ -230,7 +249,7 @@ const Inventory: React.FC = () => {
                   type="number" 
                   required
                   min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition"
                   placeholder="e.g. 100"
                   value={formData.stock_quantity}
                   onChange={e => setFormData({...formData, stock_quantity: e.target.value})}
@@ -242,23 +261,23 @@ const Inventory: React.FC = () => {
                 <input 
                   type="date" 
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition"
                   value={formData.expiry_date}
                   onChange={e => setFormData({...formData, expiry_date: e.target.value})}
                 />
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-2 flex gap-3">
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium"
+                  className="flex-1 px-4 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition shadow-sm"
                 >
                   {editingId ? 'Update Item' : 'Save Item'}
                 </button>

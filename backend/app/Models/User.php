@@ -10,12 +10,12 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
-use App\Models\Role;
-use App\Models\PatientProfile;
 
+// --- Imports ---
+use App\Models\PatientProfile;
 use App\Models\Prescription;
-use App\Models\ClinicReferral;
 use App\Models\Clinic;
+use Spatie\Permission\Models\Role as SpatieRole;
 
 class User extends Authenticatable
 {
@@ -81,7 +81,7 @@ class User extends Authenticatable
      */
     public function legacyRole(): BelongsTo
     {
-        return $this->belongsTo(\Spatie\Permission\Models\Role::class, 'role_id');
+        return $this->belongsTo(SpatieRole::class, 'role_id');
     }
 
     /**
@@ -97,10 +97,7 @@ class User extends Authenticatable
         return $this->hasMany(Prescription::class, 'patient_id');
     }
 
-    public function clinicReferrals(): HasMany
-    {
-        return $this->hasMany(ClinicReferral::class, 'patient_id');
-    }
+    // REMOVED: clinicReferrals() to prevent errors until the Model is created.
 
     /**
      * Get the clinic associated with the user.
