@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\InventoryItem;
+use App\Services\MedicationQuantityCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +32,7 @@ class DoctorPrescriptionController extends Controller
             'instructions' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.inventory_item_id' => ['required', 'integer', 'exists:inventory_items,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
             'items.*.dosage' => ['nullable', 'string', 'max:100'],
             'items.*.frequency' => ['nullable', 'string', 'max:100'],
             'items.*.meal_timing' => ['nullable', 'string', 'max:100'],
@@ -59,17 +60,25 @@ class DoctorPrescriptionController extends Controller
             foreach ($validated['items'] as $item) {
                 $inventoryItem = InventoryItem::findOrFail($item['inventory_item_id']);
                 
+                $calculatedQuantity = MedicationQuantityCalculator::calculate(
+                    $item['dosage'] ?? null,
+                    $item['frequency'] ?? null,
+                    $item['duration_days'] ?? null,
+                    $item['quantity'] ?? null
+                );
+                $resolvedQuantity = (int) max(1, $calculatedQuantity ?? ($item['quantity'] ?? 1));
+
                 PrescriptionItem::create([
                     'prescription_id' => $prescription->id,
                     'inventory_item_id' => $item['inventory_item_id'],
-                    'quantity' => $item['quantity'],
+                    'quantity' => $resolvedQuantity,
                     'dosage' => $item['dosage'] ?? null,
                     'frequency' => $item['frequency'] ?? null,
                     'meal_timing' => $item['meal_timing'] ?? null,
                     'duration_days' => $item['duration_days'] ?? null,
                     'instructions' => $item['instructions'] ?? null,
                     'unit_price' => $inventoryItem->unit_price ?? 0,
-                    'total_price' => ($inventoryItem->unit_price ?? 0) * $item['quantity'],
+                    'total_price' => ($inventoryItem->unit_price ?? 0) * $resolvedQuantity,
                 ]);
             }
 
@@ -149,7 +158,7 @@ class DoctorPrescriptionController extends Controller
             'instructions' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.inventory_item_id' => ['required', 'integer', 'exists:inventory_items,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
             'items.*.dosage' => ['nullable', 'string', 'max:100'],
             'items.*.frequency' => ['nullable', 'string', 'max:100'],
             'items.*.meal_timing' => ['nullable', 'string', 'max:100'],
@@ -173,17 +182,25 @@ class DoctorPrescriptionController extends Controller
             foreach ($validated['items'] as $item) {
                 $inventoryItem = InventoryItem::findOrFail($item['inventory_item_id']);
                 
+                $calculatedQuantity = MedicationQuantityCalculator::calculate(
+                    $item['dosage'] ?? null,
+                    $item['frequency'] ?? null,
+                    $item['duration_days'] ?? null,
+                    $item['quantity'] ?? null
+                );
+                $resolvedQuantity = (int) max(1, $calculatedQuantity ?? ($item['quantity'] ?? 1));
+
                 PrescriptionItem::create([
                     'prescription_id' => $prescription->id,
                     'inventory_item_id' => $item['inventory_item_id'],
-                    'quantity' => $item['quantity'],
+                    'quantity' => $resolvedQuantity,
                     'dosage' => $item['dosage'] ?? null,
                     'frequency' => $item['frequency'] ?? null,
                     'meal_timing' => $item['meal_timing'] ?? null,
                     'duration_days' => $item['duration_days'] ?? null,
                     'instructions' => $item['instructions'] ?? null,
                     'unit_price' => $inventoryItem->unit_price ?? 0,
-                    'total_price' => ($inventoryItem->unit_price ?? 0) * $item['quantity'],
+                    'total_price' => ($inventoryItem->unit_price ?? 0) * $resolvedQuantity,
                 ]);
             }
 

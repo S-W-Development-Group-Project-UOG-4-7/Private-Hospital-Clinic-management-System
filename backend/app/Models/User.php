@@ -140,6 +140,14 @@ class User extends Authenticatable
     // ==========================================
 
     /**
+     * Get prescriptions where the user is the patient.
+     */
+    public function prescriptionsAsPatient(): HasMany
+    {
+        return $this->hasMany(Prescription::class, 'patient_id');
+    }
+
+    /**
      * Virtual Attribute: 'name'
      * Allows you to call $user->name even though the column doesn't exist.
      */

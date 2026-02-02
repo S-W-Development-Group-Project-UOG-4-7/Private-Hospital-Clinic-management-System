@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Services\MedicationQuantityCalculator;
 
 class PrescriptionItem extends Model
 {
@@ -32,6 +33,10 @@ class PrescriptionItem extends Model
         'is_dispensed' => 'boolean',
     ];
 
+    protected $appends = [
+        'calculated_quantity',
+    ];
+
     public function prescription(): BelongsTo
     {
         return $this->belongsTo(Prescription::class);
@@ -40,6 +45,11 @@ class PrescriptionItem extends Model
     public function inventoryItem(): BelongsTo
     {
         return $this->belongsTo(InventoryItem::class);
+    }
+
+    public function getCalculatedQuantityAttribute(): int
+    {
+        return MedicationQuantityCalculator::fromPrescriptionItem($this);
     }
 }
 
