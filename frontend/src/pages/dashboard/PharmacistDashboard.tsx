@@ -931,6 +931,213 @@ const PharmacistDashboard: React.FC = () => {
     loadReport(type);
   };
 
+  // Print Report as PDF
+  const handlePrintReport = () => {
+    const reportTitle = {
+      dispensing: 'Dispensing Report',
+      inventory: 'Inventory Report',
+      sales: 'Sales Report',
+      patient_activity: 'Patient Activity Report'
+    }[activeReportType];
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Unable to open print window. Please allow popups.');
+      return;
+    }
+
+    const currentDate = new Date().toLocaleDateString();
+    const dateRange = activeReportType !== 'inventory' 
+      ? `${reportDateFrom} to ${reportDateTo}` 
+      : currentDate;
+
+    let reportContent = '';
+
+    // Generate content based on report type
+    if (activeReportType === 'dispensing' && dispensingReport) {
+      reportContent = `
+        <div class="summary-cards">
+          <div class="card"><h3>Prescriptions</h3><p class="value">${dispensingReport.summary.total_prescriptions}</p></div>
+          <div class="card"><h3>Medications</h3><p class="value">${dispensingReport.summary.total_medications_dispensed}</p></div>
+          <div class="card"><h3>Units Dispensed</h3><p class="value">${dispensingReport.summary.total_units_dispensed}</p></div>
+          <div class="card"><h3>Revenue</h3><p class="value">$${dispensingReport.summary.total_revenue.toFixed(2)}</p></div>
+        </div>
+        <h3 class="section-title">Top Dispensed Medications</h3>
+        <table>
+          <thead><tr><th>Medication</th><th>Category</th><th>Times Dispensed</th><th>Total Qty</th><th>Revenue</th></tr></thead>
+          <tbody>
+            ${dispensingReport.top_medications.map(med => `
+              <tr>
+                <td>${med.medication_name}</td>
+                <td>${med.category}</td>
+                <td>${med.times_dispensed}</td>
+                <td>${med.total_quantity}</td>
+                <td>$${med.total_revenue.toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } else if (activeReportType === 'inventory' && inventoryReport) {
+      reportContent = `
+        <div class="summary-cards">
+          <div class="card"><h3>Total Items</h3><p class="value">${inventoryReport.summary.total_items ?? 0}</p></div>
+          <div class="card"><h3>Total Value</h3><p class="value">$${(inventoryReport.summary.total_value ?? 0).toFixed(2)}</p></div>
+          <div class="card warning"><h3>Low Stock</h3><p class="value">${inventoryReport.summary.low_stock_count ?? 0}</p></div>
+          <div class="card warning"><h3>Expiring Soon</h3><p class="value">${inventoryReport.summary.expiring_soon_count ?? 0}</p></div>
+          <div class="card danger"><h3>Expired</h3><p class="value">${inventoryReport.summary.expired_count ?? 0}</p></div>
+        </div>
+        ${inventoryReport.low_stock_items && inventoryReport.low_stock_items.length > 0 ? `
+          <h3 class="section-title">Low Stock Items</h3>
+          <table>
+            <thead><tr><th>Item</th><th>Category</th><th>Quantity</th><th>Reorder Level</th><th>Unit</th></tr></thead>
+            <tbody>
+              ${inventoryReport.low_stock_items.map((item: { id: number; name: string; category: string; quantity: number; reorder_level: number; unit: string }) => `
+                <tr>
+                  <td>${item.name}</td>
+                  <td>${item.category || '-'}</td>
+                  <td>${item.quantity}</td>
+                  <td>${item.reorder_level}</td>
+                  <td>${item.unit}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
+        ${inventoryReport.category_breakdown && inventoryReport.category_breakdown.length > 0 ? `
+          <h3 class="section-title">Category Breakdown</h3>
+          <table>
+            <thead><tr><th>Category</th><th>Items</th><th>Total Qty</th><th>Value</th><th>Low Stock</th></tr></thead>
+            <tbody>
+              ${inventoryReport.category_breakdown.map((cat: { category: string; item_count: number; total_quantity: number; total_value: number; low_stock_count: number }) => `
+                <tr>
+                  <td>${cat.category}</td>
+                  <td>${cat.item_count}</td>
+                  <td>${cat.total_quantity}</td>
+                  <td>$${cat.total_value.toFixed(2)}</td>
+                  <td>${cat.low_stock_count}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
+      `;
+    } else if (activeReportType === 'sales' && salesReport) {
+      reportContent = `
+        <div class="summary-cards">
+          <div class="card"><h3>Total Invoices</h3><p class="value">${salesReport.summary.total_invoices ?? 0}</p></div>
+          <div class="card"><h3>Total Amount</h3><p class="value">$${(salesReport.summary.total_amount ?? 0).toFixed(2)}</p></div>
+          <div class="card"><h3>Paid Amount</h3><p class="value">$${(salesReport.summary.paid_amount ?? 0).toFixed(2)}</p></div>
+          <div class="card"><h3>Collection Rate</h3><p class="value">${(salesReport.summary.collection_rate ?? 0).toFixed(1)}%</p></div>
+        </div>
+        ${salesReport.daily_revenue && salesReport.daily_revenue.length > 0 ? `
+          <h3 class="section-title">Daily Revenue</h3>
+          <table>
+            <thead><tr><th>Date</th><th>Invoices</th><th>Total</th><th>Paid</th><th>Unpaid</th></tr></thead>
+            <tbody>
+              ${salesReport.daily_revenue.map((day: { date: string; invoices_count: number; total_amount: number; paid_amount: number; unpaid_amount: number }) => `
+                <tr>
+                  <td>${day.date}</td>
+                  <td>${day.invoices_count}</td>
+                  <td>$${(day.total_amount ?? 0).toFixed(2)}</td>
+                  <td>$${(day.paid_amount ?? 0).toFixed(2)}</td>
+                  <td>$${(day.unpaid_amount ?? 0).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
+      `;
+    } else if (activeReportType === 'patient_activity' && patientActivityReport) {
+      reportContent = `
+        <div class="summary-cards">
+          <div class="card"><h3>Unique Patients</h3><p class="value">${patientActivityReport.summary.unique_patients ?? 0}</p></div>
+          <div class="card"><h3>Prescriptions</h3><p class="value">${patientActivityReport.summary.total_prescriptions ?? 0}</p></div>
+          <div class="card"><h3>New Patients</h3><p class="value">${patientActivityReport.summary.new_patients ?? 0}</p></div>
+          <div class="card"><h3>Returning</h3><p class="value">${patientActivityReport.summary.returning_patients ?? 0}</p></div>
+        </div>
+        ${patientActivityReport.top_patients && patientActivityReport.top_patients.length > 0 ? `
+          <h3 class="section-title">Top Patients by Prescriptions</h3>
+          <table>
+            <thead><tr><th>Patient</th><th>Total Prescriptions</th><th>Total Spent</th></tr></thead>
+            <tbody>
+              ${patientActivityReport.top_patients.map((p: { patient_id: number; patient_name: string; prescription_count: number; total_spent: number }) => `
+                <tr>
+                  <td>${p.patient_name}</td>
+                  <td>${p.prescription_count}</td>
+                  <td>$${(p.total_spent ?? 0).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
+      `;
+    }
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${reportTitle} - ${dateRange}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; max-width: 1000px; margin: 0 auto; }
+          .header { text-align: center; border-bottom: 3px solid #0d9488; padding-bottom: 20px; margin-bottom: 30px; }
+          .header h1 { color: #0d9488; font-size: 28px; margin-bottom: 5px; }
+          .header p { color: #666; font-size: 14px; }
+          .report-info { background: #f0fdfa; padding: 15px 20px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: space-between; }
+          .report-info div { }
+          .report-info h2 { color: #0d9488; font-size: 20px; }
+          .report-info p { color: #666; font-size: 14px; margin-top: 5px; }
+          .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px; }
+          .card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid #0d9488; }
+          .card.warning { border-left-color: #f59e0b; }
+          .card.danger { border-left-color: #ef4444; }
+          .card h3 { font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px; }
+          .card .value { font-size: 24px; font-weight: bold; color: #111; }
+          .section-title { font-size: 16px; color: #0d9488; margin: 25px 0 15px 0; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th { background: #0d9488; color: white; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; }
+          td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+          tr:hover { background: #f9fafb; }
+          .status { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+          .status.ok { background: #d1fae5; color: #065f46; }
+          .status.low { background: #fee2e2; color: #991b1b; }
+          .footer { margin-top: 40px; text-align: center; color: #666; font-size: 11px; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🏥 Private Hospital & Clinic</h1>
+          <p>Pharmacy Department - Reports & Analytics</p>
+        </div>
+        <div class="report-info">
+          <div>
+            <h2>${reportTitle}</h2>
+            <p>Date Range: ${dateRange}</p>
+          </div>
+          <div style="text-align: right;">
+            <p>Generated: ${currentDate}</p>
+            <p>Generated by: Pharmacy System</p>
+          </div>
+        </div>
+        ${reportContent}
+        <div class="footer">
+          <p>This report was generated automatically by the Pharmacy Management System</p>
+          <p>Private Hospital & Clinic - Confidential</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
+  };
+
   // Print bill as PDF
   const handlePrintBill = () => {
     if (!selectedPrescription) return;
@@ -2119,7 +2326,7 @@ const PharmacistDashboard: React.FC = () => {
                     <div className="flex-1 relative">
                       <input
                         type="text"
-                        placeholder="Search patients by name or email..."
+                        placeholder="Search patients by name, email, or phone..."
                         value={patientSearch}
                         onChange={(e) => setPatientSearch(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handlePatientSearch()}
@@ -2433,6 +2640,39 @@ const PharmacistDashboard: React.FC = () => {
                           Generate Report
                         </button>
                       </div>
+                      <div className="pt-6">
+                        <button
+                          onClick={handlePrintReport}
+                          className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                          disabled={!dispensingReport && !salesReport && !patientActivityReport}
+                        >
+                          <Printer className="w-4 h-4" />
+                          Print Report
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Print Button for Inventory Report (no date filter) */}
+                {activeReportType === 'inventory' && (
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <button
+                        onClick={() => loadReport()}
+                        className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        Refresh Report
+                      </button>
+                      <button
+                        onClick={handlePrintReport}
+                        className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                        disabled={!inventoryReport}
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Report
+                      </button>
                     </div>
                   </div>
                 )}
