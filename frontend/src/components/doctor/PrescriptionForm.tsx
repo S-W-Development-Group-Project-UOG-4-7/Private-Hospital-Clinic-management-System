@@ -191,6 +191,97 @@ const MEAL_TIMING_OPTIONS = [
   { value: 'Independent of meals', label: 'Independent of meals' },
 ];
 
+// Default common medicines list (used when inventory is empty or as additional options)
+const DEFAULT_MEDICINES: InventoryOption[] = [
+  // Analgesics & Antipyretics
+  { id: -1, name: 'Paracetamol 500mg', generic_name: 'Acetaminophen', brand_name: 'Panadol', category: 'Analgesics' },
+  { id: -2, name: 'Paracetamol 650mg', generic_name: 'Acetaminophen', brand_name: 'Calpol', category: 'Analgesics' },
+  { id: -3, name: 'Ibuprofen 400mg', generic_name: 'Ibuprofen', brand_name: 'Brufen', category: 'Analgesics' },
+  { id: -4, name: 'Ibuprofen 200mg', generic_name: 'Ibuprofen', brand_name: 'Advil', category: 'Analgesics' },
+  { id: -5, name: 'Aspirin 75mg', generic_name: 'Acetylsalicylic Acid', brand_name: 'Disprin', category: 'Analgesics' },
+  { id: -6, name: 'Diclofenac 50mg', generic_name: 'Diclofenac Sodium', brand_name: 'Voltaren', category: 'Analgesics' },
+  { id: -7, name: 'Naproxen 500mg', generic_name: 'Naproxen', brand_name: 'Naprosyn', category: 'Analgesics' },
+  
+  // Antibiotics
+  { id: -10, name: 'Amoxicillin 500mg', generic_name: 'Amoxicillin', brand_name: 'Amoxil', category: 'Antibiotics' },
+  { id: -11, name: 'Amoxicillin 250mg', generic_name: 'Amoxicillin', brand_name: 'Amoxil', category: 'Antibiotics' },
+  { id: -12, name: 'Azithromycin 500mg', generic_name: 'Azithromycin', brand_name: 'Zithromax', category: 'Antibiotics' },
+  { id: -13, name: 'Azithromycin 250mg', generic_name: 'Azithromycin', brand_name: 'Z-Pack', category: 'Antibiotics' },
+  { id: -14, name: 'Ciprofloxacin 500mg', generic_name: 'Ciprofloxacin', brand_name: 'Cipro', category: 'Antibiotics' },
+  { id: -15, name: 'Metronidazole 400mg', generic_name: 'Metronidazole', brand_name: 'Flagyl', category: 'Antibiotics' },
+  { id: -16, name: 'Cephalexin 500mg', generic_name: 'Cefalexin', brand_name: 'Keflex', category: 'Antibiotics' },
+  { id: -17, name: 'Doxycycline 100mg', generic_name: 'Doxycycline', brand_name: 'Vibramycin', category: 'Antibiotics' },
+  { id: -18, name: 'Augmentin 625mg', generic_name: 'Amoxicillin/Clavulanate', brand_name: 'Augmentin', category: 'Antibiotics' },
+  
+  // Antihypertensives
+  { id: -20, name: 'Amlodipine 5mg', generic_name: 'Amlodipine', brand_name: 'Norvasc', category: 'Cardiovascular' },
+  { id: -21, name: 'Amlodipine 10mg', generic_name: 'Amlodipine', brand_name: 'Norvasc', category: 'Cardiovascular' },
+  { id: -22, name: 'Losartan 50mg', generic_name: 'Losartan', brand_name: 'Cozaar', category: 'Cardiovascular' },
+  { id: -23, name: 'Atenolol 50mg', generic_name: 'Atenolol', brand_name: 'Tenormin', category: 'Cardiovascular' },
+  { id: -24, name: 'Metoprolol 25mg', generic_name: 'Metoprolol', brand_name: 'Lopressor', category: 'Cardiovascular' },
+  { id: -25, name: 'Lisinopril 10mg', generic_name: 'Lisinopril', brand_name: 'Zestril', category: 'Cardiovascular' },
+  { id: -26, name: 'Enalapril 5mg', generic_name: 'Enalapril', brand_name: 'Vasotec', category: 'Cardiovascular' },
+  
+  // Diabetes Medications
+  { id: -30, name: 'Metformin 500mg', generic_name: 'Metformin', brand_name: 'Glucophage', category: 'Diabetes' },
+  { id: -31, name: 'Metformin 850mg', generic_name: 'Metformin', brand_name: 'Glucophage', category: 'Diabetes' },
+  { id: -32, name: 'Glimepiride 2mg', generic_name: 'Glimepiride', brand_name: 'Amaryl', category: 'Diabetes' },
+  { id: -33, name: 'Glibenclamide 5mg', generic_name: 'Glyburide', brand_name: 'Daonil', category: 'Diabetes' },
+  { id: -34, name: 'Sitagliptin 100mg', generic_name: 'Sitagliptin', brand_name: 'Januvia', category: 'Diabetes' },
+  
+  // Gastrointestinal
+  { id: -40, name: 'Omeprazole 20mg', generic_name: 'Omeprazole', brand_name: 'Prilosec', category: 'Gastrointestinal' },
+  { id: -41, name: 'Pantoprazole 40mg', generic_name: 'Pantoprazole', brand_name: 'Protonix', category: 'Gastrointestinal' },
+  { id: -42, name: 'Ranitidine 150mg', generic_name: 'Ranitidine', brand_name: 'Zantac', category: 'Gastrointestinal' },
+  { id: -43, name: 'Domperidone 10mg', generic_name: 'Domperidone', brand_name: 'Motilium', category: 'Gastrointestinal' },
+  { id: -44, name: 'Ondansetron 4mg', generic_name: 'Ondansetron', brand_name: 'Zofran', category: 'Gastrointestinal' },
+  { id: -45, name: 'Loperamide 2mg', generic_name: 'Loperamide', brand_name: 'Imodium', category: 'Gastrointestinal' },
+  { id: -46, name: 'Antacid Suspension', generic_name: 'Aluminium/Magnesium Hydroxide', brand_name: 'Maalox', category: 'Gastrointestinal' },
+  
+  // Respiratory
+  { id: -50, name: 'Salbutamol Inhaler 100mcg', generic_name: 'Albuterol', brand_name: 'Ventolin', category: 'Respiratory' },
+  { id: -51, name: 'Montelukast 10mg', generic_name: 'Montelukast', brand_name: 'Singulair', category: 'Respiratory' },
+  { id: -52, name: 'Cetirizine 10mg', generic_name: 'Cetirizine', brand_name: 'Zyrtec', category: 'Antihistamines' },
+  { id: -53, name: 'Loratadine 10mg', generic_name: 'Loratadine', brand_name: 'Claritin', category: 'Antihistamines' },
+  { id: -54, name: 'Fexofenadine 180mg', generic_name: 'Fexofenadine', brand_name: 'Allegra', category: 'Antihistamines' },
+  { id: -55, name: 'Chlorpheniramine 4mg', generic_name: 'Chlorpheniramine', brand_name: 'Piriton', category: 'Antihistamines' },
+  
+  // Cough & Cold
+  { id: -60, name: 'Dextromethorphan Syrup', generic_name: 'Dextromethorphan', brand_name: 'Robitussin', category: 'Cough & Cold' },
+  { id: -61, name: 'Guaifenesin 100mg/5ml', generic_name: 'Guaifenesin', brand_name: 'Mucinex', category: 'Cough & Cold' },
+  { id: -62, name: 'Ambroxol 30mg', generic_name: 'Ambroxol', brand_name: 'Mucosolvan', category: 'Cough & Cold' },
+  { id: -63, name: 'Pseudoephedrine 60mg', generic_name: 'Pseudoephedrine', brand_name: 'Sudafed', category: 'Cough & Cold' },
+  
+  // Vitamins & Supplements
+  { id: -70, name: 'Vitamin D3 1000IU', generic_name: 'Cholecalciferol', brand_name: 'Calcirol', category: 'Vitamins' },
+  { id: -71, name: 'Vitamin B Complex', generic_name: 'B Vitamins', brand_name: 'Becosules', category: 'Vitamins' },
+  { id: -72, name: 'Vitamin C 500mg', generic_name: 'Ascorbic Acid', brand_name: 'Celin', category: 'Vitamins' },
+  { id: -73, name: 'Iron + Folic Acid', generic_name: 'Ferrous Sulfate/Folic Acid', brand_name: 'Fefol', category: 'Vitamins' },
+  { id: -74, name: 'Calcium + Vitamin D', generic_name: 'Calcium Carbonate/D3', brand_name: 'Shelcal', category: 'Vitamins' },
+  { id: -75, name: 'Multivitamin Tablet', generic_name: 'Multivitamins', brand_name: 'Supradyn', category: 'Vitamins' },
+  
+  // Steroids & Anti-inflammatory
+  { id: -80, name: 'Prednisolone 5mg', generic_name: 'Prednisolone', brand_name: 'Wysolone', category: 'Steroids' },
+  { id: -81, name: 'Dexamethasone 0.5mg', generic_name: 'Dexamethasone', brand_name: 'Decadron', category: 'Steroids' },
+  { id: -82, name: 'Hydrocortisone Cream 1%', generic_name: 'Hydrocortisone', brand_name: 'Cortaid', category: 'Topical' },
+  
+  // Antifungals
+  { id: -85, name: 'Fluconazole 150mg', generic_name: 'Fluconazole', brand_name: 'Diflucan', category: 'Antifungals' },
+  { id: -86, name: 'Clotrimazole Cream 1%', generic_name: 'Clotrimazole', brand_name: 'Canesten', category: 'Antifungals' },
+  
+  // Muscle Relaxants
+  { id: -90, name: 'Cyclobenzaprine 10mg', generic_name: 'Cyclobenzaprine', brand_name: 'Flexeril', category: 'Muscle Relaxants' },
+  { id: -91, name: 'Thiocolchicoside 4mg', generic_name: 'Thiocolchicoside', brand_name: 'Myoril', category: 'Muscle Relaxants' },
+  
+  // Sedatives & Sleep Aids
+  { id: -95, name: 'Alprazolam 0.25mg', generic_name: 'Alprazolam', brand_name: 'Xanax', category: 'Anxiolytics' },
+  { id: -96, name: 'Zolpidem 10mg', generic_name: 'Zolpidem', brand_name: 'Ambien', category: 'Sleep Aids' },
+  
+  // Eye/Ear Drops
+  { id: -100, name: 'Ciprofloxacin Eye Drops 0.3%', generic_name: 'Ciprofloxacin', brand_name: 'Ciloxan', category: 'Ophthalmics' },
+  { id: -101, name: 'Artificial Tears', generic_name: 'Carboxymethylcellulose', brand_name: 'Refresh Tears', category: 'Ophthalmics' },
+];
+
 export interface PrescriptionFormProps {
   open: boolean;
   saving: boolean;
@@ -262,11 +353,25 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
     }
   }, [open, initialPatientId, initialAppointmentId, initialPrescription]);
 
+  // Combine inventory with default medicines (inventory items take priority)
+  const combinedMedicines = useMemo(() => {
+    if (inventory.length > 0) {
+      // If inventory has items, use inventory first, then add default medicines that don't conflict
+      const inventoryNames = new Set(inventory.map(i => i.name.toLowerCase()));
+      const additionalDefaults = DEFAULT_MEDICINES.filter(
+        dm => !inventoryNames.has(dm.name.toLowerCase())
+      );
+      return [...inventory, ...additionalDefaults];
+    }
+    // If no inventory, use default medicines
+    return DEFAULT_MEDICINES;
+  }, [inventory]);
+
   const inventoryMap = useMemo(() => {
     const map = new Map<number, InventoryOption>();
-    inventory.forEach((i) => map.set(i.id, i));
+    combinedMedicines.forEach((i) => map.set(i.id, i));
     return map;
-  }, [inventory]);
+  }, [combinedMedicines]);
 
   if (!open) return null;
 
@@ -312,12 +417,17 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
         const quantity = Number(row.quantity);
         const durationDays = row.duration_days.trim() === '' ? null : Number(row.duration_days);
 
-        if (!Number.isFinite(inventoryId) || inventoryId <= 0) return null;
+        // Allow negative IDs for default medicines (they start with negative IDs)
+        if (!Number.isFinite(inventoryId) || inventoryId === 0) return null;
         if (!Number.isFinite(quantity) || quantity <= 0) return null;
         if (durationDays !== null && (!Number.isFinite(durationDays) || durationDays <= 0)) return null;
 
+        // Get the medicine name for default medicines (negative IDs)
+        const medicine = inventoryMap.get(inventoryId);
+        
         return {
-          inventory_item_id: inventoryId,
+          inventory_item_id: inventoryId > 0 ? inventoryId : null, // Set to null for default medicines
+          medicine_name: medicine?.name || null, // Include medicine name for reference
           quantity,
           dosage: row.dosage.trim() === '' ? null : row.dosage.trim(),
           frequency: row.frequency.trim() === '' ? null : row.frequency.trim(),
@@ -455,7 +565,7 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
                         <MedicineSelect
                           value={row.inventory_item_id}
                           onChange={(val) => handleMedicineChange(index, val)}
-                          options={inventory}
+                          options={combinedMedicines}
                           required
                         />
                         {selected ? (

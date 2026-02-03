@@ -18,16 +18,34 @@ export interface PharmacistPrescription {
   updated_at: string;
   items: PharmacistPrescriptionItem[];
   interaction_warnings?: string[];
+  // Additional fields from API
+  patient?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+  };
+  doctor?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+  };
 }
 
 export interface PharmacistPrescriptionItem {
   id: number;
   medication_name: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  duration_days?: number;
   quantity: number;
   instructions?: string;
+  // Additional fields from API
+  inventory_item?: {
+    id: number;
+    name: string;
+  };
+  medicine_name?: string;
 }
 
 export interface InventoryItem {

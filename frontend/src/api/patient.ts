@@ -16,6 +16,8 @@ import type {
   PatientPrescriptionsResponse,
   PatientTeleconsultationsResponse,
   UpdateAppointmentPayload,
+  QueueStatusResponse,
+  ClinicQueueResponse,
 } from '../types/patient';
 
 const getAuthHeaders = () => {
@@ -184,6 +186,22 @@ export const patientApi = {
         headers: getAuthHeaders(),
       });
       return handleJson<PatientPrescription>(response);
+    },
+  },
+
+  queue: {
+    status: async (): Promise<QueueStatusResponse> => {
+      const response = await fetch(`${API_ENDPOINTS.PATIENT_QUEUE_STATUS}`, {
+        headers: getAuthHeaders(),
+      });
+      return handleJson<QueueStatusResponse>(response);
+    },
+
+    clinicQueue: async (clinicId: number): Promise<ClinicQueueResponse> => {
+      const response = await fetch(`${API_ENDPOINTS.PATIENT_QUEUE_CLINIC}/${clinicId}`, {
+        headers: getAuthHeaders(),
+      });
+      return handleJson<ClinicQueueResponse>(response);
     },
   },
 };

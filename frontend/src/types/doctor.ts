@@ -291,7 +291,8 @@ export interface CreatePrescriptionPayload {
   notes?: string | null;
   instructions?: string | null;
   items: Array<{
-    inventory_item_id: number;
+    inventory_item_id?: number | null;
+    medicine_name?: string | null;
     quantity: number;
     dosage?: string | null;
     frequency?: string | null;

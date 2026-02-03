@@ -75,7 +75,7 @@ class DoctorQueueController extends Controller
 
         // Transform appointments into queue-like items (not yet checked in)
         $appointmentItems = $appointments->map(function ($a) {
-            return (object) [
+            return [
                 'id' => 'appt_' . $a->id,
                 'queue_number' => null,
                 'queue_date' => $a->appointment_date,
@@ -87,11 +87,24 @@ class DoctorQueueController extends Controller
             ];
         });
 
+        // Transform queue entries to arrays for consistent merging
+        $queueItems = $entries->map(function ($e) {
+            return [
+                'id' => $e->id,
+                'queue_number' => $e->queue_number,
+                'queue_date' => $e->queue_date,
+                'patient' => $e->patient ?? null,
+                'doctor' => $e->doctor ?? null,
+                'status' => $e->status,
+                'appointment' => $e->appointment,
+                'checked_in' => true,
+                'checked_in_at' => $e->checked_in_at ?? null,
+                'called_at' => $e->called_at ?? null,
+            ];
+        });
+
         // Merge checked-in entries first, then scheduled appointments
-        $combined = $entries->map(function ($e) {
-            $e->checked_in = true;
-            return $e;
-        })->merge($appointmentItems);
+        $combined = $queueItems->concat($appointmentItems);
 
         return response()->json([
             'data' => $combined->values()->all(),
