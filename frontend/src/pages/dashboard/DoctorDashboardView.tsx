@@ -751,25 +751,26 @@ const DoctorDashboardView: React.FC = () => {
     if (active === 'daily_summary' && !dailySummaryLoaded && !dailySummaryLoading) {
       loadDailySummary(dailySummaryDate);
     }
-    // Auto-load lab results when switching to labs tab with a current consultation patient
-    if (active === 'labs' && currentPatientInConsultation && !labsLoading) {
+  }, [active, initialReferralFilters, loadPrescriptions, loadReferrals, loadQueue, loadDailySummary, prescriptionsLoaded, prescriptionsLoading, referralsLoaded, referralsLoading, queueLoaded, queueLoading, dailySummaryLoaded, dailySummaryLoading, dailySummaryDate]);
+
+  // Separate effect for auto-loading lab results
+  useEffect(() => {
+    if (active === 'labs' && currentPatientInConsultation && !labsLoading && !labData) {
       const patientId = String(currentPatientInConsultation.patient_id);
       if (labsPatientId !== patientId) {
         setLabsPatientId(patientId);
       }
-      // Load lab data for the current patient
-      if (labsPatientId.trim() !== '' || patientId) {
-        const pid = Number(patientId || labsPatientId);
-        if (Number.isFinite(pid) && pid > 0 && !labData) {
-          setLabsLoading(true);
-          doctorApi.labs.getPatientResults(pid)
-            .then(data => setLabData(data))
-            .catch(e => setError(e?.message || 'Failed to load lab results'))
-            .finally(() => setLabsLoading(false));
-        }
+      const pid = Number(patientId || labsPatientId);
+      if (Number.isFinite(pid) && pid > 0) {
+        setLabsLoading(true);
+        doctorApi.labs.getPatientResults(pid)
+          .then(data => setLabData(data))
+          .catch(e => setError(e?.message || 'Failed to load lab results'))
+          .finally(() => setLabsLoading(false));
       }
     }
-  }, [active, initialReferralFilters, loadPrescriptions, loadReferrals, loadQueue, loadDailySummary, prescriptionsLoaded, prescriptionsLoading, referralsLoaded, referralsLoading, queueLoaded, queueLoading, dailySummaryLoaded, dailySummaryLoading, dailySummaryDate, currentPatientInConsultation, labsPatientId, labsLoading, labData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, currentPatientInConsultation?.patient_id]);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const todaysAppointments = useMemo(

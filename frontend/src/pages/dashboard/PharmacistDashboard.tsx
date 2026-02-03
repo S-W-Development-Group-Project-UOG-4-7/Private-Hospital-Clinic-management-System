@@ -469,6 +469,19 @@ const PharmacistDashboard: React.FC = () => {
     setPrescriptionsLoading(true);
     try {
       const resp = await pharmacistApi.prescriptions.list();
+      // Transform API data to match expected format
+      const rawData = Array.isArray(resp.data) ? resp.data : [];
+      const transformedData = rawData.map((p: any) => ({
+        ...p,
+        patient_name: p.patient ? `${p.patient.first_name || ''} ${p.patient.last_name || ''}`.trim() : 'Unknown Patient',
+        doctor_name: p.doctor ? `${p.doctor.first_name || ''} ${p.doctor.last_name || ''}`.trim() : 'Unknown Doctor',
+        items: p.items?.map((item: any) => ({
+          ...item,
+          medication_name: item.inventory_item?.name || item.medicine_name || 'Unknown Medication',
+        })) || [],
+      }));
+      setPrescriptions(transformedData);
+=======
       const rawPrescriptions = Array.isArray(resp?.data)
         ? resp.data
         : Array.isArray(resp)
@@ -3129,6 +3142,118 @@ const PharmacistDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Prescription Details Modal */}
+      {selectedPrescription && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Prescription Details</h2>
+                <button
+                  onClick={() => setSelectedPrescription(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Patient & Doctor Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500">Patient</p>
+                    <p className="text-lg font-semibold text-gray-900">{selectedPrescription.patient_name}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500">Doctor</p>
+                    <p className="text-lg font-semibold text-gray-900">Dr. {selectedPrescription.doctor_name}</p>
+                  </div>
+                </div>
+
+                {/* Status & Date */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Status</p>
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedPrescription.status === 'dispensed' ? 'bg-green-100 text-green-800' :
+                      selectedPrescription.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      selectedPrescription.status === 'held' ? 'bg-orange-100 text-orange-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedPrescription.status}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Date</p>
+                    <p className="text-gray-900">{new Date(selectedPrescription.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                {/* Medications */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Medications</h3>
+                  {selectedPrescription.items && selectedPrescription.items.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedPrescription.items.map((item, index) => (
+                        <div key={item.id || index} className="border rounded-lg p-4 bg-gray-50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-semibold text-gray-900">{item.medication_name}</p>
+                              <div className="text-sm text-gray-600 mt-1 space-y-1">
+                                {item.dosage && <p>Dosage: {item.dosage}</p>}
+                                {item.frequency && <p>Frequency: {item.frequency}</p>}
+                                {item.duration && <p>Duration: {item.duration}</p>}
+                                {item.quantity && <p>Quantity: {item.quantity}</p>}
+                                {item.instructions && <p>Instructions: {item.instructions}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500">No medications listed</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                {selectedPrescription.status === 'pending' && (
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      onClick={() => {
+                        // TODO: Implement dispense functionality
+                        setSuccess('Prescription dispensed successfully');
+                        setSelectedPrescription(null);
+                        loadPrescriptions();
+                      }}
+                      className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      Dispense
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedPrescription(null);
+                      }}
+                      className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                      Hold
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedPrescription(null);
+                      }}
+                      className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -233,3 +233,50 @@ export interface PatientPrescription {
 export interface PatientPrescriptionsResponse {
   data: PatientPrescription[];
 }
+
+// Queue related types
+export interface QueueEntry {
+  id: number;
+  queue_number: number | null;
+  status: string;
+  checked_in_at: string | null;
+  appointment: {
+    id: number;
+    time: string;
+    type: string;
+    doctor: {
+      name: string;
+    } | null;
+  } | null;
+}
+
+export interface QueueStats {
+  total_waiting: number;
+  my_position: number | null;
+  estimated_wait_minutes: number | null;
+  people_ahead: number;
+}
+
+export interface TodaysAppointment {
+  id: number;
+  time: string;
+  type: string;
+  status: string;
+  doctor: string;
+  clinic: string;
+}
+
+export interface QueueStatusResponse {
+  queue_entry: QueueEntry | null;
+  queue_stats: QueueStats;
+  todays_appointments: TodaysAppointment[];
+}
+
+export interface ClinicQueueResponse {
+  clinic_id: number;
+  date: string;
+  total_waiting: number;
+  in_consultation: number;
+  estimated_wait_minutes_for_new: number;
+  current_queue_number: number | null;
+}

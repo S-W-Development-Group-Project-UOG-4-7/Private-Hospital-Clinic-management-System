@@ -43,6 +43,15 @@ function extractErrorMessage(error: any): string {
 http.interceptors.response.use(
   (response: any) => response,
   (error: any) => {
+    // Handle 401 Unauthorized - redirect to login
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      // Only redirect if not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(new Error(extractErrorMessage(error)));
   }
 );

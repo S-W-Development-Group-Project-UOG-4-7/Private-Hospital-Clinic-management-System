@@ -15,8 +15,9 @@ import type {
   PatientAppointment,
   PatientProfileResponse,
   UpdateAppointmentPayload,
+  QueueStatusResponse,
 } from '../../types/patient';
-import { Bell, Calendar, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Video, X } from 'lucide-react';
+import { Bell, Calendar, Clock, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Users, Video, X } from 'lucide-react';
 import ClinicAppointmentForm from '../../components/ClinicAppointmentForm';
 
 type SectionKey =
@@ -81,6 +82,10 @@ const PatientDashboard: React.FC = () => {
   const [prescriptions, setPrescriptions] = useState<PatientPrescription[]>([]);
   const [selectedPrescription, setSelectedPrescription] = useState<PatientPrescription | null>(null);
   const [prescriptionDetailsLoading, setPrescriptionDetailsLoading] = useState(false);
+
+  // Queue status state
+  const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(null);
+  const [queueStatusLoading, setQueueStatusLoading] = useState(false);
 
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [profileForm, setProfileForm] = useState({
@@ -264,6 +269,26 @@ const PatientDashboard: React.FC = () => {
       setPrescriptionsLoading(false);
     }
   }, [prescriptionsLoaded, prescriptionsLoading]);
+
+  const loadQueueStatus = useCallback(async () => {
+    setQueueStatusLoading(true);
+    try {
+      const resp = await patientApi.queue.status();
+      setQueueStatus(resp);
+    } catch (e: any) {
+      // Non-blocking - queue status is optional info
+      console.warn('Failed to load queue status:', e?.message);
+    } finally {
+      setQueueStatusLoading(false);
+    }
+  }, []);
+
+  // Load queue status on mount and periodically
+  useEffect(() => {
+    loadQueueStatus();
+    const interval = setInterval(loadQueueStatus, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [loadQueueStatus]);
 
   useEffect(() => {
     if (active === 'telemedicine') {
@@ -940,6 +965,90 @@ const PatientDashboard: React.FC = () => {
                   </button>
                 </motion.div>
               </div>
+
+              {/* Queue Status Section - Shows when patient has an appointment today */}
+              {queueStatus && (queueStatus.queue_entry || queueStatus.todays_appointments.length > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg shadow-lg p-6 text-white"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <Users className="w-6 h-6" />
+                    <h2 className="text-xl font-bold">Today's Queue Status</h2>
+                  </div>
+                  
+                  {queueStatus.queue_entry && (
+                    <div className="bg-white/20 rounded-lg p-4 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div>
+                          <p className="text-3xl font-bold">#{queueStatus.queue_entry.queue_number || '-'}</p>
+                          <p className="text-sm opacity-90">Your Queue Number</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold">{queueStatus.queue_stats.my_position || '-'}</p>
+                          <p className="text-sm opacity-90">Your Position</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold">{queueStatus.queue_stats.people_ahead}</p>
+                          <p className="text-sm opacity-90">People Ahead</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold">
+                            {queueStatus.queue_stats.estimated_wait_minutes != null 
+                              ? `~${queueStatus.queue_stats.estimated_wait_minutes}m`
+                              : '-'}
+                          </p>
+                          <p className="text-sm opacity-90">Est. Wait Time</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-white/30 flex items-center justify-between">
+                        <span className="text-sm">
+                          Status: <span className="font-semibold capitalize">{queueStatus.queue_entry.status.replace('_', ' ')}</span>
+                        </span>
+                        {queueStatus.queue_entry.appointment?.doctor && (
+                          <span className="text-sm">
+                            Doctor: <span className="font-semibold">Dr. {queueStatus.queue_entry.appointment.doctor.name}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {queueStatus.todays_appointments.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2 flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        Today's Appointments
+                      </h3>
+                      <div className="space-y-2">
+                        {queueStatus.todays_appointments.map((appt) => (
+                          <div key={appt.id} className="bg-white/20 rounded-lg px-4 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-bold">{appt.time.slice(0, 5)}</span>
+                              <span className="text-sm capitalize px-2 py-0.5 bg-white/20 rounded">
+                                {appt.type === 'in_person' ? 'Physical' : 'Online'}
+                              </span>
+                            </div>
+                            <div className="text-sm">
+                              <span className="mr-3">{appt.clinic}</span>
+                              <span className="capitalize font-semibold px-2 py-0.5 rounded bg-white/20">{appt.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!queueStatus.queue_entry && queueStatus.todays_appointments.length > 0 && (
+                    <p className="text-sm opacity-90 mt-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Please check in at the reception to get your queue number
+                    </p>
+                  )}
+                </motion.div>
+              )}
 
               {/* Quick Stats */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

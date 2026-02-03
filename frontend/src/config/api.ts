@@ -30,6 +30,8 @@ export const API_ENDPOINTS = {
   PATIENT_FEEDBACK: `${API_BASE_URL}/api/patient/feedback`,
   PATIENT_NOTIFICATIONS: `${API_BASE_URL}/api/patient/notifications`,
   PATIENT_PRESCRIPTIONS: `${API_BASE_URL}/api/patient/prescriptions`,
+  PATIENT_QUEUE_STATUS: `${API_BASE_URL}/api/patient/queue/status`,
+  PATIENT_QUEUE_CLINIC: `${API_BASE_URL}/api/patient/queue/clinic`,
 
   RECEPTIONIST_DASHBOARD_STATS: `${API_BASE_URL}/api/receptionist/dashboard/stats`,
   RECEPTIONIST_PATIENTS: `${API_BASE_URL}/api/receptionist/patients`,

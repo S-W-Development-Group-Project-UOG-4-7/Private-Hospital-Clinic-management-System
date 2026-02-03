@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\PatientNotificationController;
 use App\Http\Controllers\Api\PatientProfileController;
 use App\Http\Controllers\Api\PatientPrescriptionController;
 use App\Http\Controllers\Api\PatientTeleconsultationController;
+use App\Http\Controllers\Api\PatientQueueController;
 use App\Http\Controllers\Api\ReceptionistAppointmentController;
 use App\Http\Controllers\Api\ReceptionistDashboardController;
 use App\Http\Controllers\Api\ReceptionistDoctorController;
@@ -199,6 +200,9 @@ Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(fu
 
     Route::get('prescriptions', [PatientPrescriptionController::class, 'index']);
     Route::get('prescriptions/{id}', [PatientPrescriptionController::class, 'show']);
+
+    Route::get('queue/status', [PatientQueueController::class, 'status']);
+    Route::get('queue/clinic/{clinicId}', [PatientQueueController::class, 'clinicQueue']);
 });
 
 // ==========================================
