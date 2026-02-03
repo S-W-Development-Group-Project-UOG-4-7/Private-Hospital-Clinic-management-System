@@ -37,6 +37,11 @@ class InventoryItem extends Model
         'is_active' => 'boolean',
     ];
 
+    protected $appends = [
+        'is_low_stock',
+        'is_expiring_soon',
+    ];
+
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
@@ -63,6 +68,16 @@ class InventoryItem extends Model
             return false;
         }
         return $this->expiry_date->isBefore(now()->addDays($days));
+    }
+
+    public function getIsLowStockAttribute(): bool
+    {
+        return $this->isLowStock();
+    }
+
+    public function getIsExpiringSoonAttribute(): bool
+    {
+        return $this->isExpiringSoon();
     }
 }
 

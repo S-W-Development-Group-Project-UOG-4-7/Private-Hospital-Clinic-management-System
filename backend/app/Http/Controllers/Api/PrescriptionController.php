@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\InventoryItem;
+use App\Models\Invoice;
+use App\Services\MedicationQuantityCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -39,7 +41,7 @@ class PrescriptionController extends Controller
             'instructions' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.inventory_item_id' => 'required|exists:inventory_items,id',
-            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.quantity' => 'nullable|integer|min:1',
             'items.*.dosage' => 'nullable|string',
             'items.*.frequency' => 'nullable|string',
             'items.*.duration_days' => 'nullable|integer',
@@ -60,18 +62,26 @@ class PrescriptionController extends Controller
 
             foreach ($validated['items'] as $item) {
                 $inventoryItem = InventoryItem::findOrFail($item['inventory_item_id']);
-                $unitPrice = $inventoryItem->selling_price;
+                $unitPrice = $inventoryItem->selling_price ?? $inventoryItem->unit_price ?? 0;
+
+                $calculatedQuantity = MedicationQuantityCalculator::calculate(
+                    $item['dosage'] ?? null,
+                    $item['frequency'] ?? null,
+                    $item['duration_days'] ?? null,
+                    $item['quantity'] ?? null
+                );
+                $resolvedQuantity = (int) max(1, $calculatedQuantity ?? ($item['quantity'] ?? 1));
 
                 PrescriptionItem::create([
                     'prescription_id' => $prescription->id,
                     'inventory_item_id' => $item['inventory_item_id'],
-                    'quantity' => $item['quantity'],
+                    'quantity' => $resolvedQuantity,
                     'dosage' => $item['dosage'] ?? null,
                     'frequency' => $item['frequency'] ?? null,
                     'duration_days' => $item['duration_days'] ?? null,
                     'instructions' => $item['instructions'] ?? null,
                     'unit_price' => $unitPrice,
-                    'total_price' => $unitPrice * $item['quantity'],
+                    'total_price' => $unitPrice * $resolvedQuantity,
                 ]);
             }
 
@@ -115,18 +125,33 @@ class PrescriptionController extends Controller
 
         DB::beginTransaction();
         try {
+            $lowStockAlerts = [];
+
             foreach ($prescription->items as $item) {
                 $inventoryItem = $item->inventoryItem;
+                $dispenseQuantity = $this->resolveItemQuantity($item);
+                $unitPrice = (float) ($item->unit_price ?: ($inventoryItem->selling_price ?? $inventoryItem->unit_price ?? 0));
 
-                if ($inventoryItem->quantity < $item->quantity) {
+                if ($inventoryItem->quantity < $dispenseQuantity) {
                     DB::rollBack();
                     return response()->json([
-                        'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$item->quantity}"
+                        'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$dispenseQuantity}"
                     ], 400);
                 }
 
-                $inventoryItem->decrement('quantity', $item->quantity);
-                $item->update(['is_dispensed' => true]);
+                $inventoryItem->decrement('quantity', $dispenseQuantity);
+                $inventoryItem->refresh();
+
+                if ($inventoryItem->quantity <= $inventoryItem->reorder_level) {
+                    $lowStockAlerts[] = $this->formatLowStockAlert($inventoryItem);
+                }
+
+                $item->update([
+                    'is_dispensed' => true,
+                    'quantity' => $dispenseQuantity,
+                    'unit_price' => $unitPrice,
+                    'total_price' => $unitPrice * $dispenseQuantity,
+                ]);
             }
 
             $prescription->update([
@@ -136,8 +161,13 @@ class PrescriptionController extends Controller
             ]);
 
             DB::commit();
+            $prescription = $prescription->fresh()->load(['patient', 'doctor', 'pharmacist', 'items.inventoryItem']);
 
-            return response()->json($prescription->load(['patient', 'doctor', 'pharmacist', 'items.inventoryItem']));
+            if (!empty($lowStockAlerts)) {
+                $prescription->setAttribute('low_stock_alerts', $lowStockAlerts);
+            }
+
+            return response()->json($prescription);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => $e->getMessage()], 500);
@@ -191,18 +221,38 @@ class PrescriptionController extends Controller
 
         DB::beginTransaction();
         try {
+            $totalAmount = 0;
+            $lowStockAlerts = [];
+
             foreach ($prescription->items as $item) {
                 $inventoryItem = $item->inventoryItem;
+                $dispenseQuantity = $this->resolveItemQuantity($item);
 
-                if ($inventoryItem->quantity < $item->quantity) {
+                if ($inventoryItem->quantity < $dispenseQuantity) {
                     DB::rollBack();
                     return response()->json([
-                        'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$item->quantity}"
+                        'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$dispenseQuantity}"
                     ], 400);
                 }
 
-                $inventoryItem->decrement('quantity', $item->quantity);
-                $item->update(['is_dispensed' => true]);
+                $inventoryItem->decrement('quantity', $dispenseQuantity);
+                $inventoryItem->refresh();
+
+                if ($inventoryItem->quantity <= $inventoryItem->reorder_level) {
+                    $lowStockAlerts[] = $this->formatLowStockAlert($inventoryItem);
+                }
+
+                $unitPrice = (float) ($item->unit_price ?: ($inventoryItem->selling_price ?? $inventoryItem->unit_price ?? 0));
+                $totalPrice = $unitPrice * $dispenseQuantity;
+
+                $item->update([
+                    'is_dispensed' => true,
+                    'quantity' => $dispenseQuantity,
+                    'unit_price' => $unitPrice,
+                    'total_price' => $totalPrice,
+                ]);
+
+                $totalAmount += $totalPrice;
             }
 
             $prescription->update([
@@ -212,9 +262,35 @@ class PrescriptionController extends Controller
                 'notes' => $validated['notes'] ?? $prescription->notes,
             ]);
 
+            $invoice = null;
+            if ($totalAmount > 0) {
+                $invoice = Invoice::create([
+                    'invoice_number' => 'INV-' . Str::upper(Str::random(10)),
+                    'patient_id' => $prescription->patient_id,
+                    'amount' => $totalAmount,
+                    'status' => 'unpaid',
+                    'issued_at' => now()->toDateString(),
+                    'due_date' => now()->addDays(7)->toDateString(),
+                    'description' => sprintf(
+                        'Prescription %s dispensed by pharmacy',
+                        $prescription->prescription_number ?? $prescription->id
+                    ),
+                ]);
+            }
+
+            $prescription = $prescription->fresh()->load(['patient', 'doctor', 'pharmacist', 'items.inventoryItem']);
+
+            if ($invoice) {
+                $prescription->setAttribute('invoice', $invoice);
+            }
+
+            if (!empty($lowStockAlerts)) {
+                $prescription->setAttribute('low_stock_alerts', $lowStockAlerts);
+            }
+
             DB::commit();
 
-            return response()->json($prescription->load(['patient', 'doctor', 'pharmacist', 'items.inventoryItem']));
+            return response()->json($prescription);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => $e->getMessage()], 500);
@@ -273,6 +349,21 @@ class PrescriptionController extends Controller
             'message' => 'Label printed successfully',
             'label_data' => $labelData
         ]);
+    }
+
+    protected function resolveItemQuantity(PrescriptionItem $item): int
+    {
+        return MedicationQuantityCalculator::fromPrescriptionItem($item);
+    }
+
+    protected function formatLowStockAlert(InventoryItem $inventoryItem): array
+    {
+        return [
+            'inventory_item_id' => $inventoryItem->id,
+            'name' => $inventoryItem->name,
+            'quantity' => $inventoryItem->quantity,
+            'reorder_level' => $inventoryItem->reorder_level,
+        ];
     }
 }
 
