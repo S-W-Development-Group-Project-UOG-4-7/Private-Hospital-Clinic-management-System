@@ -481,7 +481,17 @@ const PharmacistDashboard: React.FC = () => {
         })) || [],
       }));
       setPrescriptions(transformedData);
-=======
+    } catch (e: any) {
+      console.error('Failed to load prescriptions:', e);
+    }
+  };
+
+  // Alternative prescription loading with more robust parsing
+  const loadPrescriptionsAlt = async () => {
+    setPrescriptionsLoading(true);
+    setError(null);
+    try {
+      const resp = await pharmacistApi.prescriptions.list();
       const rawPrescriptions = Array.isArray(resp?.data)
         ? resp.data
         : Array.isArray(resp)

@@ -97,6 +97,11 @@ export const doctorApi = {
   },
 
   patients: {
+    list: async (): Promise<any> => {
+      const response = await http.get(API_ENDPOINTS.DOCTOR_PATIENTS);
+      return response.data;
+    },
+
     create: async (payload: any): Promise<any> => {
       const response = await http.post<any>(API_ENDPOINTS.DOCTOR_PATIENTS, payload);
       return response.data;
@@ -199,9 +204,26 @@ export const doctorApi = {
       const response = await http.get<ClinicsResponse>(API_ENDPOINTS.CLINICS);
       return response.data;
     },
+    createReferral: async (payload: CreateClinicReferralPayload): Promise<void> => {
+      await http.post(API_ENDPOINTS.CLINIC_REFERRAL, payload);
+    },
+  },
 
-    referPatient: async (payload: CreateClinicReferralPayload): Promise<any> => {
-      const response = await http.post(API_ENDPOINTS.CLINIC_REFERRAL, payload);
+  queue: {
+    list: async (): Promise<any> => {
+      const response = await http.get(API_ENDPOINTS.DOCTOR_QUEUE);
+      return response.data;
+    },
+    next: async (): Promise<any> => {
+      const response = await http.get(API_ENDPOINTS.DOCTOR_QUEUE_NEXT);
+      return response.data;
+    },
+    callNext: async (): Promise<any> => {
+      const response = await http.post(API_ENDPOINTS.DOCTOR_QUEUE_CALL_NEXT, {});
+      return response.data;
+    },
+    updateStatus: async (id: number, status: string): Promise<any> => {
+      const response = await http.put(API_ENDPOINTS.DOCTOR_QUEUE_STATUS(String(id)), { status });
       return response.data;
     },
   },

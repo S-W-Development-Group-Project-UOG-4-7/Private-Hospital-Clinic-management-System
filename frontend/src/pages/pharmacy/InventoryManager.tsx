@@ -48,7 +48,7 @@ const StatusBadge = ({ quantity, reorderLevel, expiryDate }: { quantity: number,
   return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold border border-green-200">In Stock</span>;
 };
 
-const InventoryManagement: React.FC = () => {
+const InventoryManager: React.FC = () => {
   const navigate = useNavigate();
   
   // --- State ---
@@ -1193,4 +1193,4 @@ const InventoryManagement: React.FC = () => {
   );
 };
 
-export default InventoryManagement;
+export default InventoryManager;

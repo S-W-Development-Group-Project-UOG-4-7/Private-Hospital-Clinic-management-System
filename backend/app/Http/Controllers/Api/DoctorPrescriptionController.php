@@ -31,12 +31,8 @@ class DoctorPrescriptionController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'instructions' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.inventory_item_id' => ['nullable', 'integer', 'exists:inventory_items,id'],
-            'items.*.medicine_name' => ['nullable', 'string', 'max:255'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
-=======
             'items.*.inventory_item_id' => ['required', 'integer', 'exists:inventory_items,id'],
-            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.dosage' => ['nullable', 'string', 'max:100'],
             'items.*.frequency' => ['nullable', 'string', 'max:100'],
             'items.*.meal_timing' => ['nullable', 'string', 'max:100'],
@@ -44,15 +40,15 @@ class DoctorPrescriptionController extends Controller
             'items.*.instructions' => ['nullable', 'string', 'max:500'],
         ]);
 
-        // Validate that each item has either inventory_item_id or medicine_name
-        foreach ($validated['items'] as $index => $item) {
-            if (empty($item['inventory_item_id']) && empty($item['medicine_name'])) {
-                return response()->json([
-                    'message' => 'Each item must have either an inventory_item_id or a medicine_name.',
-                    'errors' => ["items.{$index}" => ['Either inventory_item_id or medicine_name is required.']]
-                ], 422);
-            }
-        }
+        // Custom validation logic can be removed if not needed
+        // foreach ($validated['items'] as $index => $item) {
+        //     if (empty($item['inventory_item_id']) && empty($item['medicine_name'])) {
+        //         return response()->json([
+        //             'message' => 'Each item must have either an inventory_item_id or a medicine_name.',
+        //             'errors' => ["items.{$index}" => ['Either inventory_item_id or medicine_name is required.']]
+        //         ], 422);
+        //     }
+        // }
 
         DB::beginTransaction();
         try {
@@ -99,21 +95,19 @@ class DoctorPrescriptionController extends Controller
                     'prescription_id' => $prescription->id,
                     'inventory_item_id' => $item['inventory_item_id'] ?? null,
                     'medicine_name' => $medicineName,
-                    'quantity' => $item['quantity'],
-=======
-                    'inventory_item_id' => $item['inventory_item_id'],
                     'quantity' => $resolvedQuantity,
                     'dosage' => $item['dosage'] ?? null,
                     'frequency' => $item['frequency'] ?? null,
-                    'meal_timing' => $item['meal_timing'] ?? null,
                     'duration_days' => $item['duration_days'] ?? null,
                     'instructions' => $item['instructions'] ?? null,
-                    'unit_price' => $unitPrice,
-                    'total_price' => $unitPrice * $item['quantity'],
-=======
+                    'meal_timing' => $item['meal_timing'] ?? null,
                     'unit_price' => $inventoryItem->unit_price ?? 0,
                     'total_price' => ($inventoryItem->unit_price ?? 0) * $resolvedQuantity,
                 ]);
+
+                if ($inventoryItem) {
+                    $inventoryItem->decrement('quantity', $resolvedQuantity);
+                }
             }
 
             DB::commit();
@@ -192,7 +186,7 @@ class DoctorPrescriptionController extends Controller
             'instructions' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.inventory_item_id' => ['required', 'integer', 'exists:inventory_items,id'],
-            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.dosage' => ['nullable', 'string', 'max:100'],
             'items.*.frequency' => ['nullable', 'string', 'max:100'],
             'items.*.meal_timing' => ['nullable', 'string', 'max:100'],
@@ -236,6 +230,10 @@ class DoctorPrescriptionController extends Controller
                     'unit_price' => $inventoryItem->unit_price ?? 0,
                     'total_price' => ($inventoryItem->unit_price ?? 0) * $resolvedQuantity,
                 ]);
+
+                if ($inventoryItem) {
+                    $inventoryItem->decrement('quantity', $resolvedQuantity);
+                }
             }
 
             DB::commit();
