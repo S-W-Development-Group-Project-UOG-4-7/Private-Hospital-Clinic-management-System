@@ -23,6 +23,7 @@ export interface PatientOption {
 
 interface ItemRow {
   inventory_item_id: string;
+  medicine_name: string;
   quantity: string;
   dosage: string;
   frequency: string;
@@ -51,7 +52,7 @@ const MedicineSelect: React.FC<MedicineSelectProps> = ({ value, onChange, option
     if (!search.trim()) return options;
     const term = search.toLowerCase();
     return options.filter(o => 
-      o.name.toLowerCase().includes(term) ||
+      (o.name && o.name.toLowerCase().includes(term)) ||
       (o.generic_name && o.generic_name.toLowerCase().includes(term)) ||
       (o.brand_name && o.brand_name.toLowerCase().includes(term)) ||
       (o.category && o.category.toLowerCase().includes(term))
@@ -296,6 +297,7 @@ export interface PrescriptionFormProps {
   patients: PatientOption[]; // Add patients prop
   initialPatientId?: number | null;
   initialAppointmentId?: number | null;
+  initialPatient?: PatientOption | null; // Add initial patient object
   initialPrescription?: any | null; // DoctorPrescription for editing
   onClose: () => void;
   onSubmit: (payload: CreatePrescriptionPayload) => void;
@@ -309,6 +311,7 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
   patients,
   initialPatientId,
   initialAppointmentId,
+  initialPatient,
   initialPrescription,
   onClose,
   onSubmit,
@@ -348,18 +351,26 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Combine patients with initialPatient if it exists and isn't already in the list
+  const allPatients = useMemo(() => {
+    if (initialPatient && !patients.find(p => p.id === initialPatient.id)) {
+      return [initialPatient, ...patients];
+    }
+    return patients;
+  }, [patients, initialPatient]);
+
   const filteredPatients = useMemo(() => {
-    if (!patientSearch) return patients;
+    if (!patientSearch) return allPatients;
     const searchLower = patientSearch.toLowerCase();
-    return patients.filter(p =>
-      p.name.toLowerCase().includes(searchLower) ||
-      p.phone_number.includes(patientSearch)
+    return allPatients.filter(p =>
+      (p.name && p.name.toLowerCase().includes(searchLower)) ||
+      (p.phone_number && p.phone_number.includes(patientSearch))
     );
-  }, [patients, patientSearch]);
+  }, [allPatients, patientSearch]);
 
   const selectedPatient = useMemo(() => {
-    return patients.find(p => String(p.id) === form.patient_id);
-  }, [patients, form.patient_id]);
+    return allPatients.find(p => String(p.id) === form.patient_id);
+  }, [allPatients, form.patient_id]);
 
   useEffect(() => {
     if (open) {
@@ -371,21 +382,56 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
         meal_timing: item.meal_timing || '',
         duration_days: item.duration_days ? String(item.duration_days) : '',
         instructions: item.instructions || '',
-      })) || [];
+      })) || [{ inventory_item_id: '', medicine_name: '', quantity: '1', dosage: '', frequency: '', duration_days: '', instructions: '', meal_timing: '' }];
       
-      setForm({
-        patient_id: initialPrescription?.patient_id || '',
-        appointment_id: initialPrescription?.appointment_id || '',
-        diagnosis: initialPrescription?.diagnosis || '',
-        notes: initialPrescription?.notes || '',
-        items: initialItems,
-        is_external: initialPrescription?.is_external || false,
-        external_doctor: initialPrescription?.external_doctor || '',
-        external_clinic: initialPrescription?.external_clinic || '',
-        referral_clinic_id: initialPrescription?.referral_clinic_id || '',
-        referral_notes: initialPrescription?.referral?.notes || '',
-      });
-      setPatientSearch('');
+      // If editing an existing prescription, use its data
+      if (initialPrescription) {
+        setForm({
+          patient_id: String(initialPrescription.patient_id) || '',
+          appointment_id: String(initialPrescription.appointment_id) || '',
+          diagnosis: initialPrescription.diagnosis || '',
+          notes: initialPrescription.notes || '',
+          items: initialItems,
+          is_external: initialPrescription.is_external || false,
+          external_doctor: initialPrescription.external_doctor || '',
+          external_clinic: initialPrescription.external_clinic || '',
+          referral_clinic_id: initialPrescription.referral_clinic_id || '',
+          referral_notes: initialPrescription.referral?.notes || '',
+        });
+        // Set patient search to the patient's name for editing
+        const patient = patients.find(p => p.id === initialPrescription.patient_id);
+        setPatientSearch(patient?.name || '');
+      } else {
+        // For new prescriptions, use initialPatientId and initialAppointmentId
+        const patientId = initialPatientId ? String(initialPatientId) : '';
+        const appointmentId = initialAppointmentId ? String(initialAppointmentId) : '';
+        
+        setForm({
+          patient_id: patientId,
+          appointment_id: appointmentId,
+          diagnosis: '',
+          notes: '',
+          items: initialItems,
+          is_external: false,
+          external_doctor: '',
+          external_clinic: '',
+          referral_clinic_id: '',
+          referral_notes: '',
+        });
+        
+        // Set patient search to the patient's name for new prescription
+        if (initialPatient) {
+          // Use the provided patient object and ensure patient_id is set
+          setPatientSearch(initialPatient.name || '');
+          setForm(prev => ({ ...prev, patient_id: String(initialPatient.id) }));
+        } else if (initialPatientId) {
+          // Fallback to finding in patients list
+          const patient = allPatients.find(p => p.id === initialPatientId);
+          setPatientSearch(patient?.name || '');
+        } else {
+          setPatientSearch('');
+        }
+      }
     } else {
       // Reset form when closed
       setForm({
@@ -393,7 +439,7 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
         appointment_id: '',
         diagnosis: '',
         notes: '',
-        items: [{ inventory_item_id: '', quantity: '1', dosage: '', frequency: '', duration_days: '', instructions: '', meal_timing: '' }],
+        items: [{ inventory_item_id: '', medicine_name: '', quantity: '1', dosage: '', frequency: '', duration_days: '', instructions: '', meal_timing: '' }],
         is_external: false,
         external_doctor: '',
         external_clinic: '',
@@ -402,17 +448,17 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
       });
       setPatientSearch('');
     }
-  }, [open, initialPrescription, initialPatientId, initialAppointmentId]);
+  }, [open, initialPrescription, initialPatientId, initialAppointmentId, initialPatient, allPatients]);
 
   const handleItemChange = (index: number, field: keyof ItemRow, value: string) => {
     const newItems = [...form.items];
-    const selectedId = Number(value);
-    const selected = Number.isFinite(selectedId) ? inventoryMap.get(selectedId) : undefined;
+    newItems[index] = { ...newItems[index], [field]: value };
 
     if (field === 'inventory_item_id') {
       const selectedMedicine = combinedInventory.find(inv => String(inv.id) === value);
       if (selectedMedicine) {
         newItems[index].dosage = extractDosageFromName(selectedMedicine.name);
+        newItems[index].medicine_name = selectedMedicine.name;
       }
     }
     setForm({ ...form, items: newItems });
@@ -430,7 +476,7 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
       appointment_id: form.appointment_id,
       diagnosis: form.diagnosis,
       notes: form.notes,
-      items: [...form.items, { inventory_item_id: '', quantity: '1', dosage: '', frequency: '', duration_days: '', instructions: '', meal_timing: '' }],
+      items: [...form.items, { inventory_item_id: '', medicine_name: '', quantity: '1', dosage: '', frequency: '', duration_days: '', instructions: '', meal_timing: '' }],
       is_external: form.is_external,
       external_doctor: form.external_doctor,
       external_clinic: form.external_clinic,
@@ -453,7 +499,8 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
       prescription_date: new Date().toISOString().slice(0, 10),
       items: form.items.map(item => ({
         ...item,
-        inventory_item_id: Number(item.inventory_item_id),
+        inventory_item_id: item.inventory_item_id ? Number(item.inventory_item_id) : null,
+        medicine_name: item.medicine_name,
         quantity: Number(item.quantity),
         duration_days: item.duration_days ? Number(item.duration_days) : undefined,
       })),
@@ -552,94 +599,112 @@ export const PrescriptionForm: React.FC<PrescriptionFormProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Medication</label>
-              {form.items.map((item, index) => (
-                <div key={index} className="p-4 rounded-lg border bg-white space-y-4 relative">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Medicine</label>
-                      <MedicineSelect
-                        value={item.inventory_item_id}
-                        onChange={(value) => handleItemChange(index, 'inventory_item_id', value)}
-                        options={combinedInventory}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Dosage</label>
-                      <input
-                        type="text"
-                        value={item.dosage}
-                        onChange={(e) => handleItemChange(index, 'dosage', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg"
-                        placeholder="e.g. 500mg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Frequency *</label>
-                      <select
-                        value={item.frequency}
-                        onChange={(e) => handleItemChange(index, 'frequency', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg"
-                        required
-                      >
-                        {FREQUENCY_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Days</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.duration_days}
-                        onChange={(e) => handleItemChange(index, 'duration_days', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg"
-                        placeholder="e.g. 7"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Meal Timing</label>
-                      <select
-                        value={item.meal_timing}
-                        onChange={(e) => handleItemChange(index, 'meal_timing', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg"
-                      >
-                        {MEAL_TIMING_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="md:col-span-4">
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Item Instructions</label>
-                      <input
-                        type="text"
-                        value={item.instructions}
-                        onChange={(e) => handleItemChange(index, 'instructions', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg"
-                      />
-                    </div>
-                    <div className="md:col-span-2 flex items-end">
-                      <button
-                        type="button"
-                        onClick={() => removeItemRow(index)}
-                        disabled={form.items.length === 1}
-                        className="w-full bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
-                      >
-                        Remove
-                      </button>
-                    </div>
+          {/* Medication Section */}
+          <div className="p-6 rounded-xl bg-gray-50 border">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4">Medication</h3>
+            {form.items.map((item, index) => (
+              <div key={index} className="p-4 rounded-lg border bg-white space-y-4 relative mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Medicine</label>
+                    <MedicineSelect
+                      value={item.inventory_item_id}
+                      onChange={(value) => handleItemChange(index, 'inventory_item_id', value)}
+                      options={combinedInventory}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="1"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Dosage</label>
+                    <input
+                      type="text"
+                      value={item.dosage}
+                      onChange={(e) => handleItemChange(index, 'dosage', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="e.g. 500mg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Frequency *</label>
+                    <select
+                      value={item.frequency}
+                      onChange={(e) => handleItemChange(index, 'frequency', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      required
+                    >
+                      {FREQUENCY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Duration (Days)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={item.duration_days}
+                      onChange={(e) => handleItemChange(index, 'duration_days', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="e.g. 7"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Meal Timing</label>
+                    <select
+                      value={item.meal_timing}
+                      onChange={(e) => handleItemChange(index, 'meal_timing', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    >
+                      {MEAL_TIMING_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Instructions</label>
+                    <input
+                      type="text"
+                      value={item.instructions}
+                      onChange={(e) => handleItemChange(index, 'instructions', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="Special instructions..."
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
+                {form.items.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeItemRow(index)}
+                    className="absolute top-2 right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs flex items-center justify-center"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addItemRow}
+              className="w-full mt-2 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-teal-400 hover:text-teal-600 transition-colors"
+            >
+              + Add Another Medicine
+            </button>
           </div>
 
           <button

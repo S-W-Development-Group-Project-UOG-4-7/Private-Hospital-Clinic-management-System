@@ -11,7 +11,9 @@ use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\DrugPurchaseController;
 use App\Http\Controllers\Api\PatientAppointmentController;
+use App\Http\Controllers\Api\AppointmentApiController;
 use App\Http\Controllers\Api\PatientBillingController;
+use App\Http\Controllers\Api\PatientDepartmentController;
 use App\Http\Controllers\Api\PatientEhrController;
 use App\Http\Controllers\Api\PatientFeedbackController;
 use App\Http\Controllers\Api\PatientNotificationController;
@@ -21,6 +23,7 @@ use App\Http\Controllers\Api\PatientTeleconsultationController;
 use App\Http\Controllers\Api\PatientQueueController;
 use App\Http\Controllers\Api\ReceptionistAppointmentController;
 use App\Http\Controllers\Api\ReceptionistDashboardController;
+use App\Http\Controllers\Api\ReceptionistDepartmentController;
 use App\Http\Controllers\Api\ReceptionistDoctorController;
 use App\Http\Controllers\Api\ReceptionistDoctorScheduleController;
 use App\Http\Controllers\Api\ReceptionistInvoiceController;
@@ -41,11 +44,14 @@ use App\Http\Controllers\Api\DoctorQueueController;
 use App\Http\Controllers\Api\DoctorClinicReferralController;
 use App\Http\Controllers\Api\DoctorDashboardController;
 use App\Http\Controllers\Api\ClinicController;
+use App\Http\Controllers\Api\DoctorScheduleController;
 use App\Http\Controllers\Api\PharmacistController;
 use App\Http\Controllers\Api\PatientController;
 use App\Http\Controllers\Api\AIController;
 use App\Http\Controllers\Api\PharmacistPatientController;
 use App\Http\Controllers\Api\PharmacistReportController;
+use App\Http\Controllers\Api\SlotController;
+use App\Http\Controllers\Api\TelemedSessionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -104,18 +110,6 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 // PHARMACIST ROUTES
 // ==========================================
 Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->group(function () {
-
-    // --- UPDATED INVENTORY & DISPENSING SECTION ---
-    Route::get('inventory', [PharmacistController::class, 'index']);
-    Route::post('inventory/{id}/dispense', [PharmacistController::class, 'dispense']);
-
-    // Standard Inventory Management
-    // Prescriptions
-    Route::get('prescriptions', [PrescriptionController::class, 'index']);
-    Route::get('prescriptions/{id}', [PrescriptionController::class, 'show']);
-    Route::post('prescriptions/{id}/interaction-check', [PrescriptionController::class, 'checkInteractions']);
-    Route::post('prescriptions/{id}/dispense', [PrescriptionController::class, 'dispense']);
-    
     // Inventory - Specific routes MUST come before {id} route
     Route::get('inventory', [InventoryController::class, 'index']);
     Route::get('inventory/low-stock', [InventoryController::class, 'lowStock']);
@@ -126,11 +120,8 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->gr
     Route::put('inventory/{id}', [InventoryController::class, 'update']);
     Route::delete('inventory/{id}', [InventoryController::class, 'destroy']);
     Route::post('inventory/update', [InventoryController::class, 'update']);
-
-    // Statistics & Helpers
-    Route::get('inventory/low-stock', [InventoryController::class, 'lowStock']);
-    Route::get('inventory/expiring-soon', [InventoryController::class, 'expiringSoon']);
-    Route::get('inventory/stats', [InventoryController::class, 'stats']);
+    
+    // Inventory helpers
     Route::post('purchase-request', [InventoryController::class, 'createPurchaseRequest']);
 
     // Prescriptions
@@ -175,11 +166,32 @@ Route::get('clinics/{id}/doctors', [ClinicController::class, 'doctors']);
 Route::get('clinics/{id}/slots', [ClinicController::class, 'slots']);
 
 // ==========================================
+// SHARED APPOINTMENT + SLOT ROUTES
+// ==========================================
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('slots', [SlotController::class, 'index']);
+    Route::post('slots/{slot}/hold', [SlotController::class, 'hold'])->middleware('role:patient');
+    Route::post('slots/{slot}/confirm', [SlotController::class, 'confirm'])->middleware('role:patient');
+
+    Route::post('appointments', [ReceptionistAppointmentController::class, 'store'])->middleware('role:receptionist|admin');
+    Route::get('appointments/my', [AppointmentApiController::class, 'my'])->middleware('role:patient');
+    Route::post('appointments/{id}/cancel', [AppointmentApiController::class, 'cancel'])->middleware('role:patient|receptionist|admin');
+
+    Route::get('doctor/schedule', [DoctorScheduleController::class, 'index'])->middleware('role:doctor');
+
+    Route::get('telemed/appointments/{id}/session', [TelemedSessionController::class, 'show'])->middleware('role:patient|doctor');
+    Route::post('telemed/appointments/{id}/session/start', [TelemedSessionController::class, 'start'])->middleware('role:doctor');
+    Route::post('telemed/appointments/{id}/session/end', [TelemedSessionController::class, 'end'])->middleware('role:doctor');
+});
+
+// ==========================================
 // PATIENT ROUTES
 // ==========================================
 Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(function () {
     Route::get('profile', [PatientProfileController::class, 'show']);
     Route::put('profile', [PatientProfileController::class, 'update']);
+
+    Route::get('departments', [PatientDepartmentController::class, 'index']);
 
     Route::get('appointments', [PatientAppointmentController::class, 'index']);
     Route::post('appointments', [PatientAppointmentController::class, 'store']);
@@ -237,6 +249,7 @@ Route::middleware(['auth:sanctum', 'role:receptionist'])->prefix('receptionist')
     Route::delete('invoices/{id}', [ReceptionistInvoiceController::class, 'destroy']);
     Route::post('payments', [ReceptionistPaymentController::class, 'store']);
 
+    Route::get('departments', [ReceptionistDepartmentController::class, 'index']);
     Route::get('doctors', [ReceptionistDoctorController::class, 'index']);
     Route::get('doctor-schedules', [ReceptionistDoctorScheduleController::class, 'index']);
     Route::post('doctor-schedules', [ReceptionistDoctorScheduleController::class, 'store']);
@@ -290,6 +303,10 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(func
 
     // Lab Orders & Results
     Route::post('labs/orders', [DoctorLabController::class, 'createOrder']);
+    Route::get('labs/orders', [DoctorLabController::class, 'index']);
+    Route::get('labs/orders/{id}', [DoctorLabController::class, 'show']);
+    Route::put('labs/orders/{id}', [DoctorLabController::class, 'updateOrder']);
+    Route::delete('labs/orders/{id}', [DoctorLabController::class, 'destroyOrder']);
     Route::get('labs/results/{patientId}', [DoctorLabController::class, 'getPatientResults']);
     Route::post('labs/results/{id}/review', [DoctorLabController::class, 'reviewResult']);
 
@@ -303,6 +320,7 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(func
     Route::get('clinic-referrals', [DoctorClinicReferralController::class, 'index']);
 
     // Patients (Doctor can register patients)
+    Route::get('patients', [DoctorPatientController::class, 'index']);
     Route::post('patients', [DoctorPatientController::class, 'store']);
 
     // Inventory

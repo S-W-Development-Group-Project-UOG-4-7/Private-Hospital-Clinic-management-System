@@ -33,12 +33,14 @@ import type {
   Diagnosis,
   DoctorAppointment,
   DoctorInventoryItem,
+  LabOrder,
   DoctorPrescription,
   LabOrdersAndResultsResponse,
   LabResult,
   Referral,
   UpdateDiagnosisPayload,
   CreateClinicReferralPayload,
+  ClinicReferral,
   DailySummaryResponse,
   ConsultedPatient,
 } from '../../types/doctor';
@@ -114,6 +116,11 @@ const DoctorDashboardView: React.FC = () => {
 
   // Queue / consultation state
   const [queue, setQueue] = useState<any[]>([]);
+  const [queueDate, setQueueDate] = useState(() => {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  });
   const [queueLoading, setQueueLoading] = useState(false);
   const [consultationTypeFilter, setConsultationTypeFilter] = useState<'all' | 'online' | 'physical'>('all');
   const filteredQueueEntries = useMemo(() => {
@@ -140,6 +147,7 @@ const DoctorDashboardView: React.FC = () => {
   // Clinic referral modal state
   const [clinicReferralModalOpen, setClinicReferralModalOpen] = useState(false);
   const [clinicReferralPatientId, setClinicReferralPatientId] = useState<number | null>(null);
+  const [clinicReferralPatientInfo, setClinicReferralPatientInfo] = useState<{ id: number; name: string; phone?: string } | null>(null);
   const [clinicReferralSaving, setClinicReferralSaving] = useState(false);
 
   // Referral filters/forms
@@ -155,7 +163,23 @@ const DoctorDashboardView: React.FC = () => {
   const [labsPatientId, setLabsPatientId] = useState('');
   const [labOrderModalOpen, setLabOrderModalOpen] = useState(false);
   const [labOrderSaving, setLabOrderSaving] = useState(false);
-  const [labOrderForm, setLabOrderForm] = useState({
+  const [labOrderPatientInfo, setLabOrderPatientInfo] = useState<{ id: string; name: string; phone: string } | null>(null);
+  type LabOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  type LabOrderFormState = {
+    patient_id: string;
+    test_type: string;
+    description: string;
+    due_date: string;
+    priority: string;
+    clinic_id: string;
+    appointment_id: string;
+    test_description: string;
+    order_date: string;
+    notes: string;
+    instructions: string;
+    status: LabOrderStatus;
+  };
+  const initialLabOrderForm: LabOrderFormState = {
     patient_id: '',
     test_type: '',
     description: '',
@@ -167,7 +191,10 @@ const DoctorDashboardView: React.FC = () => {
     order_date: '',
     notes: '',
     instructions: '',
-  });
+    status: 'pending',
+  };
+  const [labOrderForm, setLabOrderForm] = useState<LabOrderFormState>(initialLabOrderForm);
+  const [labOrderEditingId, setLabOrderEditingId] = useState<number | null>(null);
 
   const [referralForm, setReferralForm] = useState({
     patient_id: '',
@@ -191,6 +218,9 @@ const DoctorDashboardView: React.FC = () => {
   const [referrals, setReferrals] = useState<any[]>([]);
   const [referralsLoading, setReferralsLoading] = useState(false);
   const [referralsLoaded, setReferralsLoaded] = useState(false);
+  const [clinicReferrals, setClinicReferrals] = useState<ClinicReferral[]>([]);
+  const [clinicReferralsLoading, setClinicReferralsLoading] = useState(false);
+  const [clinicReferralsLoaded, setClinicReferralsLoaded] = useState(false);
   const [referralModalOpen, setReferralModalOpen] = useState(false);
   const [referralSaving, setReferralSaving] = useState(false);
 
@@ -201,6 +231,7 @@ const DoctorDashboardView: React.FC = () => {
       await doctorApi.prescriptions.create(payload);
       setPrescriptionModalOpen(false);
       await loadPrescriptions();
+      toast.success('Prescription created successfully!');
     } catch (e: any) {
       setError(e?.message || 'Failed to create prescription');
     } finally {
@@ -275,6 +306,20 @@ const DoctorDashboardView: React.FC = () => {
     }
   }, []);
 
+  const loadClinicReferrals = useCallback(async () => {
+    setClinicReferralsLoading(true);
+    setError(null);
+    try {
+      const data = await doctorApi.clinics.listReferrals();
+      setClinicReferrals((data as any).data || (data as any));
+      setClinicReferralsLoaded(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load clinic referrals');
+    } finally {
+      setClinicReferralsLoading(false);
+    }
+  }, []);
+
   const loadClinics = useCallback(async () => {
     if (clinicsLoading) return;
     setClinicsLoading(true);
@@ -315,14 +360,14 @@ const DoctorDashboardView: React.FC = () => {
     setQueueLoading(true);
     setError(null);
     try {
-      const data = await doctorApi.queue.list();
+      const data = await doctorApi.queue.list({ date: queueDate });
       setQueue(data.data || data);
     } catch (e: any) {
       setError(e?.message || 'Failed to load queue');
     } finally {
       setQueueLoading(false);
     }
-  }, []);
+  }, [queueDate]);
 
   const refreshAppointments = useCallback(async (filters?: { status?: string; patient_id?: number }) => {
     setAppointmentsLoading(true);
@@ -343,6 +388,73 @@ const DoctorDashboardView: React.FC = () => {
     const last = patient?.last_name || '';
     const full = `${first} ${last}`.trim();
     return full || `Patient #${entry?.patient_id || entry?.id || ''}`;
+  };
+
+  const getPatientPhone = (entry: any) => {
+    const patient = entry?.patient || entry?.appointment?.patient || entry?.patient_data || entry;
+    const profile = patient?.patient_profile || patient?.profile;
+    return profile?.phone || profile?.guardian_phone || patient?.phone || patient?.phone_number || '';
+  };
+
+  const resolvePatientInfo = (entry: any, patientId?: number | string) => {
+    if (!entry && !patientId) return null;
+    const id = patientId ?? entry?.patient_id ?? entry?.id ?? entry?.patient?.id ?? null;
+    if (!id) return null;
+    return {
+      id: Number(id),
+      name: getPatientName(entry),
+      phone: getPatientPhone(entry),
+    };
+  };
+
+  const resolveLabOrderPatientInfo = (options: { entry?: any; patient?: any; patientId?: number | string }) => {
+    const patient = options.patient || options.entry?.patient || options.entry?.appointment?.patient || options.entry?.patient_data || options.entry;
+    const id = options.patientId ?? options.entry?.patient_id ?? patient?.id ?? options.entry?.id ?? '';
+    const first = patient?.first_name || patient?.name || patient?.full_name || '';
+    const last = patient?.last_name || '';
+    const name = `${first} ${last}`.trim() || (id ? `Patient #${id}` : '');
+    const phone = getPatientPhone(patient || options.entry);
+    if (!id && !name && !phone) return null;
+    return { id: id ? String(id) : '', name, phone };
+  };
+
+  const openLabOrderModal = async (options: { entry?: any; patient?: any; patientId?: number | string; appointmentId?: number | string } = {}) => {
+    const info = resolveLabOrderPatientInfo(options);
+    const resolvedAppointmentId =
+      options.appointmentId ??
+      options.entry?.appointment_id ??
+      (options.entry?.patient_id ? options.entry?.id : '') ??
+      '';
+    setLabOrderPatientInfo(info);
+    setLabOrderEditingId(null);
+    setLabOrderForm((p) => ({
+      ...initialLabOrderForm,
+      patient_id: info?.id || '',
+      appointment_id: resolvedAppointmentId !== undefined ? String(resolvedAppointmentId) : '',
+    }));
+    setLabOrderModalOpen(true);
+    await loadClinics();
+  };
+
+  const openLabOrderEdit = async (order: any) => {
+    const info = resolveLabOrderPatientInfo({ patient: order.patient, patientId: order.patient_id });
+    setLabOrderPatientInfo(info);
+    setLabOrderEditingId(order.id);
+    setLabOrderForm({
+      ...initialLabOrderForm,
+      patient_id: order.patient_id ? String(order.patient_id) : '',
+      appointment_id: order.appointment_id ? String(order.appointment_id) : '',
+      clinic_id: order.clinic_id ? String(order.clinic_id) : '',
+      test_type: order.test_type || '',
+      test_description: order.test_description || '',
+      order_date: order.order_date || '',
+      due_date: order.due_date || '',
+      notes: order.notes || '',
+      instructions: order.instructions || '',
+      status: order.status || 'pending',
+    });
+    setLabOrderModalOpen(true);
+    await loadClinics();
   };
 
   const handleLogout = () => {
@@ -373,6 +485,7 @@ const DoctorDashboardView: React.FC = () => {
       await doctorApi.prescriptions.update(editingPrescription.id, payload);
       setPrescriptionModalOpen(false);
       await loadPrescriptions();
+      toast.success('Prescription updated successfully!');
     } catch (e: any) {
       setError(e?.message || 'Failed to update prescription');
     } finally {
@@ -484,7 +597,7 @@ const DoctorDashboardView: React.FC = () => {
     }
   };
 
-  // Initial data loads
+  // Initial data loads - only run once on mount
   useEffect(() => {
     loadAppointments(initialAppointmentFilters);
     loadInventory();
@@ -493,16 +606,27 @@ const DoctorDashboardView: React.FC = () => {
     loadPrescriptions();
     loadReferrals();
     loadQueue();
-  }, [initialAppointmentFilters, loadAppointments, loadInventory, loadPatients, loadClinics, loadPrescriptions, loadReferrals, loadQueue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run once
+
+  // Only reload appointments when filters change
+  useEffect(() => {
+    if (initialAppointmentFilters) {
+      refreshAppointments(initialAppointmentFilters);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAppointmentFilters]); // Remove refreshAppointments dependency to prevent re-renders
 
   const handleLabOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLabOrderSaving(true);
     setError(null);
     try {
-      const payload: CreateLabOrderPayload = {
-        patient_id: Number(labOrderForm.patient_id),
+      const submittedPatientId = Number(labOrderForm.patient_id);
+      const basePayload = {
+        patient_id: submittedPatientId,
         appointment_id: labOrderForm.appointment_id ? Number(labOrderForm.appointment_id) : null,
+        clinic_id: labOrderForm.clinic_id ? Number(labOrderForm.clinic_id) : null,
         test_type: labOrderForm.test_type,
         test_description: labOrderForm.test_description || null,
         order_date: labOrderForm.order_date || new Date().toISOString().slice(0, 10),
@@ -510,11 +634,25 @@ const DoctorDashboardView: React.FC = () => {
         notes: labOrderForm.notes || null,
         instructions: labOrderForm.instructions || null,
       };
-      await doctorApi.labs.createOrder(payload);
+      if (labOrderEditingId) {
+        await doctorApi.labs.updateOrder(labOrderEditingId, {
+          ...basePayload,
+          status: labOrderForm.status || 'pending',
+        });
+      } else {
+        const payload: CreateLabOrderPayload = basePayload;
+        await doctorApi.labs.createOrder(payload);
+      }
       setLabOrderModalOpen(false);
+      setLabOrderEditingId(null);
+      if (Number.isFinite(submittedPatientId) && submittedPatientId > 0) {
+        setLabsPatientId(String(submittedPatientId));
+      }
       await loadLabResults();
+      setActive('labs');
+      toast.success(labOrderEditingId ? 'Lab order updated successfully!' : 'Lab order created successfully!');
     } catch (e: any) {
-      setError(e?.message || 'Failed to create lab order');
+      setError(e?.message || (labOrderEditingId ? 'Failed to update lab order' : 'Failed to create lab order'));
     } finally {
       setLabOrderSaving(false);
     }
@@ -527,6 +665,18 @@ const DoctorDashboardView: React.FC = () => {
       await loadLabResults();
     } catch (e: any) {
       setError(e?.message || 'Failed to review result');
+    }
+  };
+
+  const deleteLabOrder = async (order: LabOrder) => {
+    if (!window.confirm('Are you sure you want to delete this lab order?')) return;
+    setError(null);
+    try {
+      await doctorApi.labs.deleteOrder(order.id);
+      await loadLabResults();
+      toast.success('Lab order deleted successfully!');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to delete lab order');
     }
   };
 
@@ -561,6 +711,9 @@ const DoctorDashboardView: React.FC = () => {
     try {
       await doctorApi.clinics.createReferral(payload);
       setClinicReferralModalOpen(false);
+      await loadClinicReferrals();
+      setActive('referrals');
+      toast.success('Clinic referral created successfully!');
     } catch (e: any) {
       setError(e?.message || 'Failed to create clinic referral');
     } finally {
@@ -572,7 +725,7 @@ const DoctorDashboardView: React.FC = () => {
     setCallingNext(true);
     setError(null);
     try {
-      const nextPatient = await doctorApi.queue.callNext();
+      const nextPatient = await doctorApi.queue.callNext({ date: queueDate });
       if (nextPatient) {
         toast.success(`Called next patient: ${nextPatient.patient_name}`);
         await loadQueue();
@@ -613,39 +766,40 @@ const DoctorDashboardView: React.FC = () => {
   }, [initialAppointmentFilters, refreshAppointments]);
 
 
+  // Load data when switching tabs (only when needed)
   useEffect(() => {
     if (active === 'prescriptions' && !prescriptions.length && !prescriptionsLoading) {
       loadPrescriptions();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, prescriptions.length, prescriptionsLoading]);
 
-    if (active === 'referrals' && !referrals.length && !referralsLoading) {
+  useEffect(() => {
+    if (active === 'referrals' && !referralsLoaded && !referralsLoading) {
       loadReferrals({});
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, referralsLoaded, referralsLoading]);
 
-    if (active === 'queue' && !queue.length && !queueLoading) {
+  useEffect(() => {
+    if (active === 'referrals' && !clinicReferralsLoaded && !clinicReferralsLoading) {
+      loadClinicReferrals();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, clinicReferralsLoaded, clinicReferralsLoading]);
+
+  useEffect(() => {
+    if (active === 'queue') {
       loadQueue();
     }
+  }, [active, queueDate, loadQueue]);
 
+  useEffect(() => {
     if (active === 'daily_summary' && !dailySummary && !dailySummaryLoading) {
       loadDailySummary();
     }
-
-    if (active === 'labs' && currentPatientInConsultation && !labsLoading && !labData) {
-      const patientId = String(currentPatientInConsultation.patient_id);
-      if (labsPatientId !== patientId) {
-        setLabsPatientId(patientId);
-      }
-      const pid = Number(patientId || labsPatientId);
-      if (Number.isFinite(pid) && pid > 0) {
-        setLabsLoading(true);
-        doctorApi.labs.getPatientResults(pid)
-          .then(data => setLabData(data))
-          .catch(e => setError(e?.message || 'Failed to load lab results'))
-          .finally(() => setLabsLoading(false));
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, initialAppointmentFilters, loadPrescriptions, loadReferrals, loadQueue, loadDailySummary, prescriptionsLoading, referralsLoading, queueLoading, dailySummaryLoading, dailySummaryDate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, dailySummary, dailySummaryLoading]);
 
   // Separate effect for auto-loading lab results
   useEffect(() => {
@@ -663,10 +817,15 @@ const DoctorDashboardView: React.FC = () => {
           .finally(() => setLabsLoading(false));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, currentPatientInConsultation?.patient_id]);
+  }, [active, currentPatientInConsultation?.patient_id, labsLoading, labData, labsPatientId]);
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // Separate effect for auto-loading lab results (removing duplicate)
+  
+  const today = useMemo(() => {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }, []);
   const todaysAppointments = useMemo(
     () => appointments.filter((a) => a.appointment_date === today),
     [appointments, today]
@@ -948,7 +1107,16 @@ const DoctorDashboardView: React.FC = () => {
                         Doctor Referrals
                       </button>
                       <button
-                        onClick={() => setClinicReferralModalOpen(true)}
+                        onClick={() => {
+                          if (selectedAppointment) {
+                            setClinicReferralPatientId(selectedAppointment.patient_id);
+                            setClinicReferralPatientInfo(resolvePatientInfo(selectedAppointment, selectedAppointment.patient_id));
+                          } else {
+                            setClinicReferralPatientId(null);
+                            setClinicReferralPatientInfo(null);
+                          }
+                          setClinicReferralModalOpen(true);
+                        }}
                         className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full transition duration-300 w-full text-sm"
                       >
                         Refer to Clinic
@@ -1299,15 +1467,12 @@ const DoctorDashboardView: React.FC = () => {
 
                       <div className="mt-4 flex gap-2 flex-wrap">
                         <button
-                          onClick={async () => {
-                            setLabOrderForm((p) => ({
-                              ...p,
-                              patient_id: String(selectedAppointment.patient_id),
-                              appointment_id: String(selectedAppointment.id),
-                            }));
-                            setLabOrderModalOpen(true);
-                            await loadClinics();
-                          }}
+                          onClick={() => openLabOrderModal({
+                            entry: selectedAppointment,
+                            patientId: selectedAppointment.patient_id,
+                            patient: selectedAppointment.patient,
+                            appointmentId: selectedAppointment.id,
+                          })}
                           className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
                         >
                           Order Lab Test
@@ -1610,14 +1775,9 @@ const DoctorDashboardView: React.FC = () => {
                     <p className="text-gray-600 text-sm">Create orders and review patient results</p>
                   </div>
                   <button
-                    onClick={async () => {
-                      setLabOrderForm((p) => ({
-                        ...p,
-                        patient_id: labsPatientId,
-                      }));
-                      setLabOrderModalOpen(true);
-                      await loadClinics();
-                    }}
+                    onClick={() => openLabOrderModal({
+                      patientId: labsPatientId || undefined,
+                    })}
                     className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                   >
                     New Order
@@ -1664,6 +1824,7 @@ const DoctorDashboardView: React.FC = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Date</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
@@ -1684,6 +1845,22 @@ const DoctorDashboardView: React.FC = () => {
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-600">{order.order_date}</td>
                                   <td className="px-6 py-4 text-sm text-gray-600">{order.due_date || '-'}</td>
+                                  <td className="px-6 py-4 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => openLabOrderEdit(order)}
+                                        className="text-slate-700 hover:text-slate-900 font-medium text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded border border-slate-300"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => deleteLabOrder(order)}
+                                        className="text-red-600 hover:text-red-700 font-medium text-xs bg-red-50 hover:bg-red-100 px-2 py-1 rounded border border-red-200"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1744,6 +1921,12 @@ const DoctorDashboardView: React.FC = () => {
                     <p className="text-gray-600 text-sm">View and manage patients for consultation</p>
                   </div>
                   <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={queueDate}
+                      onChange={(e) => setQueueDate(e.target.value)}
+                      className="px-3 py-2 border rounded-lg text-sm"
+                    />
                     <button
                       onClick={callNextPatient}
                       disabled={callingNext || filteredQueueEntries.filter((e: any) => e.status === 'waiting').length === 0}
@@ -1838,26 +2021,32 @@ const DoctorDashboardView: React.FC = () => {
                             {/* Action Buttons for Current Patient */}
                             <div className="mt-4 flex flex-wrap gap-2">
                               <button
-                                onClick={async () => {
-                                  setLabOrderForm((p) => ({
-                                    ...p,
-                                    patient_id: String(currentPatient.patient_id),
-                                    appointment_id: currentPatient.appointment_id ? String(currentPatient.appointment_id) : '',
-                                  }));
-                                  setLabOrderModalOpen(true);
-                                  await loadClinics();
-                                }}
+                                onClick={() => openLabOrderModal({
+                                  entry: currentPatient,
+                                  patientId: currentPatient.patient_id,
+                                  patient: currentPatient?.patient || currentPatient?.appointment?.patient || currentPatient?.patient_data,
+                                  appointmentId: currentPatient.appointment_id || '',
+                                })}
                                 className="bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-md transition text-sm border border-slate-500"
                               >
                                 Lab Test
                               </button>
                               <button
                                 onClick={async () => {
+                                  // Get current patient data
+                                  const patientData = currentPatient?.patient || currentPatient?.appointment?.patient || currentPatient?.patient_data;
+                                  const patientPhone = patientData?.phone || patientData?.phone_number || patientData?.profile?.phone || '';
+                                  
                                   // Set patient context for prescription
                                   setSelectedAppointment({
                                     id: currentPatient.appointment_id || 0,
                                     patient_id: currentPatient.patient_id,
-                                    patient: currentPatient.patient,
+                                    patient: {
+                                      id: currentPatient.patient_id,
+                                      name: getPatientName(currentPatient),
+                                      phone_number: patientPhone,
+                                      ...patientData
+                                    },
                                   } as any);
                                   await openPrescriptionModal();
                                 }}
@@ -1867,7 +2056,21 @@ const DoctorDashboardView: React.FC = () => {
                               </button>
                               <button
                                 onClick={async () => {
+                                  const patientData = currentPatient?.patient || currentPatient?.appointment?.patient || currentPatient?.patient_data;
+                                  const patientPhone = getPatientPhone(currentPatient);
+                                  const selected = {
+                                    id: currentPatient.appointment_id || 0,
+                                    patient_id: currentPatient.patient_id,
+                                    patient: {
+                                      id: currentPatient.patient_id,
+                                      name: getPatientName(currentPatient),
+                                      phone_number: patientPhone,
+                                      ...patientData,
+                                    },
+                                  } as any;
+                                  setSelectedAppointment(selected);
                                   setClinicReferralPatientId(currentPatient.patient_id);
+                                  setClinicReferralPatientInfo(resolvePatientInfo(selected, currentPatient.patient_id));
                                   setClinicReferralModalOpen(true);
                                 }}
                                 className="bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-md transition text-sm border border-slate-500"
@@ -2004,15 +2207,12 @@ const DoctorDashboardView: React.FC = () => {
                                     {(entry.status === 'in_consultation' || entry.status === 'in_progress') && typeof entry.id === 'number' && (
                                       <>
                                         <button
-                                          onClick={async () => {
-                                            setLabOrderForm((p) => ({
-                                              ...p,
-                                              patient_id: String(entry.patient_id),
-                                              appointment_id: entry.appointment_id ? String(entry.appointment_id) : '',
-                                            }));
-                                            setLabOrderModalOpen(true);
-                                            await loadClinics();
-                                          }}
+                                          onClick={() => openLabOrderModal({
+                                            entry,
+                                            patientId: entry.patient_id,
+                                            patient: entry.patient,
+                                            appointmentId: entry.appointment_id || '',
+                                          })}
                                           className="text-slate-700 hover:text-slate-900 font-medium text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded border border-slate-300"
                                           title="Order Lab Test"
                                         >
@@ -2034,7 +2234,21 @@ const DoctorDashboardView: React.FC = () => {
                                         </button>
                                         <button
                                           onClick={() => {
+                                            const patientData = entry?.patient || entry?.appointment?.patient || entry?.patient_data;
+                                            const patientPhone = getPatientPhone(entry);
+                                            const selected = {
+                                              id: entry.appointment_id || 0,
+                                              patient_id: entry.patient_id,
+                                              patient: {
+                                                id: entry.patient_id,
+                                                name: getPatientName(entry),
+                                                phone_number: patientPhone,
+                                                ...patientData,
+                                              },
+                                            } as any;
+                                            setSelectedAppointment(selected);
                                             setClinicReferralPatientId(entry.patient_id);
+                                            setClinicReferralPatientInfo(resolvePatientInfo(selected, entry.patient_id));
                                             setClinicReferralModalOpen(true);
                                           }}
                                           className="text-slate-700 hover:text-slate-900 font-medium text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded border border-slate-300"
@@ -2176,6 +2390,54 @@ const DoctorDashboardView: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                  <div className="px-6 py-4 border-b">
+                    <h3 className="text-lg font-semibold text-gray-900">Clinic Referrals</h3>
+                    <p className="text-sm text-gray-600">Referrals sent to clinics</p>
+                  </div>
+                  {clinicReferralsLoading ? (
+                    <div className="text-center py-12">Loading...</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clinic</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Preferred Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {clinicReferrals.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
+                                No clinic referrals found.
+                              </td>
+                            </tr>
+                          ) : (
+                            clinicReferrals.map((r) => (
+                              <tr key={r.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 text-sm text-gray-900">
+                                  {r.clinic_name || `Clinic #${r.clinic_id}`}
+                                  {r.clinic_location ? ` - ${r.clinic_location}` : ''}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-600">{r.patient_id}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">{r.priority}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">{r.status}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">{r.preferred_appointment_date || '-'}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">{r.created_at || '-'}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -2269,6 +2531,11 @@ const DoctorDashboardView: React.FC = () => {
           patients={patients}
           initialPatientId={selectedAppointment?.patient_id || null}
           initialAppointmentId={selectedAppointment?.id || null}
+          initialPatient={selectedAppointment?.patient ? {
+            id: selectedAppointment.patient.id,
+            name: `${selectedAppointment.patient.first_name || ''} ${selectedAppointment.patient.last_name || ''}`.trim() || `Patient #${selectedAppointment.patient.id}`,
+            phone_number: selectedAppointment.patient.patient_profile?.phone || ''
+          } : null}
           initialPrescription={editingPrescription}
           onClose={closePrescriptionModal}
           onSubmit={editingPrescription ? updatePrescription : createPrescription}
@@ -2278,10 +2545,16 @@ const DoctorDashboardView: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">New Lab Order</h2>
+                <h2 className="text-2xl font-bold">{labOrderEditingId ? 'Edit Lab Order' : 'New Lab Order'}</h2>
                 <button
                   type="button"
-                  onClick={() => !labOrderSaving && setLabOrderModalOpen(false)}
+                  onClick={() => {
+                    if (labOrderSaving) return;
+                    setLabOrderModalOpen(false);
+                    setLabOrderEditingId(null);
+                    setLabOrderForm(initialLabOrderForm);
+                    setLabOrderPatientInfo(null);
+                  }}
                   disabled={labOrderSaving}
                   className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-60"
                   aria-label="Close"
@@ -2292,6 +2565,15 @@ const DoctorDashboardView: React.FC = () => {
 
               <form onSubmit={handleLabOrderSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
+                    <div className="rounded-lg border bg-gray-50 px-4 py-3 space-y-1">
+                      <div className="text-sm text-gray-600">ID: {labOrderPatientInfo?.id || labOrderForm.patient_id || '—'}</div>
+                      <div className="text-base font-semibold text-gray-900">{labOrderPatientInfo?.name || (labOrderForm.patient_id ? `Patient #${labOrderForm.patient_id}` : 'Select a patient')}</div>
+                      <div className="text-sm text-gray-600">Phone: {labOrderPatientInfo?.phone || 'N/A'}</div>
+                      <div className="text-sm text-gray-600">Appointment ID: {labOrderForm.appointment_id || '—'}</div>
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Patient ID *</label>
                     <input
@@ -2339,6 +2621,19 @@ const DoctorDashboardView: React.FC = () => {
                       className="w-full px-3 py-2 border rounded-lg"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={labOrderForm.status}
+                      onChange={(e) => setLabOrderForm((p) => ({ ...p, status: e.target.value as LabOrderStatus }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Test Description</label>
                     <input
@@ -2383,7 +2678,7 @@ const DoctorDashboardView: React.FC = () => {
                     disabled={labOrderSaving}
                     className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                   >
-                    {labOrderSaving ? 'Saving...' : 'Create Order'}
+                    {labOrderSaving ? 'Saving...' : (labOrderEditingId ? 'Update Order' : 'Create Order')}
                   </button>
                   <button
                     type="button"
@@ -2394,6 +2689,15 @@ const DoctorDashboardView: React.FC = () => {
                         return;
                       }
                       setClinicReferralPatientId(patientId);
+                      if (labOrderPatientInfo) {
+                        setClinicReferralPatientInfo({
+                          id: Number(labOrderPatientInfo.id),
+                          name: labOrderPatientInfo.name,
+                          phone: labOrderPatientInfo.phone,
+                        });
+                      } else {
+                        setClinicReferralPatientInfo(null);
+                      }
                       setClinicReferralModalOpen(true);
                     }}
                     disabled={labOrderSaving}
@@ -2518,10 +2822,12 @@ const DoctorDashboardView: React.FC = () => {
           onClose={() => {
             setClinicReferralModalOpen(false);
             setClinicReferralPatientId(null);
+            setClinicReferralPatientInfo(null);
           }}
           onSubmit={createClinicReferral}
           saving={clinicReferralSaving}
           initialPatientId={clinicReferralPatientId ?? selectedAppointment?.patient_id ?? null}
+          initialPatientInfo={clinicReferralPatientInfo}
         />
 
         {/* Patient Lookup Modal */}

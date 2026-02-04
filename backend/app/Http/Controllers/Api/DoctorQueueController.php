@@ -38,6 +38,12 @@ class DoctorQueueController extends Controller
                          });
                   });
             })
+            ->where(function ($q) {
+                $q->whereDoesntHave('appointment')
+                  ->orWhereHas('appointment', function ($aq) {
+                      $aq->where('visit_mode', Appointment::VISIT_MODE_PHYSICAL);
+                  });
+            })
             ->whereDate('queue_date', $date)
             ->with([
                 'patient:id,first_name,last_name,email,username,is_active',
@@ -60,6 +66,8 @@ class DoctorQueueController extends Controller
                 $q->where('doctor_id', $doctor->id)
                   ->orWhereNull('doctor_id');
             })
+            ->where('visit_mode', Appointment::VISIT_MODE_PHYSICAL)
+            ->whereIn('status', Appointment::activeScheduleStatuses())
             ->whereDate('appointment_date', $date)
             ->with([
                 'patient:id,first_name,last_name,email,username,is_active',
@@ -77,11 +85,14 @@ class DoctorQueueController extends Controller
         $appointmentItems = $appointments->map(function ($a) {
             return [
                 'id' => 'appt_' . $a->id,
+                'appointment_id' => $a->id,
+                'patient_id' => $a->patient_id,
+                'doctor_id' => $a->doctor_id,
                 'queue_number' => null,
                 'queue_date' => $a->appointment_date,
                 'patient' => $a->patient ?? null,
                 'doctor' => null,
-                'status' => $a->status ?? 'scheduled',
+                'status' => $a->status ?? Appointment::STATUS_CONFIRMED,
                 'appointment' => $a,
                 'checked_in' => false,
             ];
@@ -91,6 +102,9 @@ class DoctorQueueController extends Controller
         $queueItems = $entries->map(function ($e) {
             return [
                 'id' => $e->id,
+                'appointment_id' => $e->appointment_id,
+                'patient_id' => $e->patient_id,
+                'doctor_id' => $e->doctor_id,
                 'queue_number' => $e->queue_number,
                 'queue_date' => $e->queue_date,
                 'patient' => $e->patient ?? null,
@@ -166,6 +180,11 @@ class DoctorQueueController extends Controller
                 $entry->appointment->doctor_id = $doctor->id;
                 $entry->appointment->save();
             }
+
+            if ($entry->appointment) {
+                $entry->appointment->status = Appointment::STATUS_IN_PROGRESS;
+                $entry->appointment->save();
+            }
         }
 
         if ($validated['status'] === 'completed') {
@@ -174,7 +193,7 @@ class DoctorQueueController extends Controller
             
             // Update appointment status as well
             if ($entry->appointment) {
-                $entry->appointment->status = 'completed';
+                $entry->appointment->status = Appointment::STATUS_COMPLETED;
                 $entry->appointment->save();
             }
         }
@@ -264,6 +283,11 @@ class DoctorQueueController extends Controller
         // Also update the appointment's doctor if not set
         if ($entry->appointment && !$entry->appointment->doctor_id) {
             $entry->appointment->doctor_id = $doctor->id;
+            $entry->appointment->save();
+        }
+
+        if ($entry->appointment) {
+            $entry->appointment->status = Appointment::STATUS_IN_PROGRESS;
             $entry->appointment->save();
         }
 

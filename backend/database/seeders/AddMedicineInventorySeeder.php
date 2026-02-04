@@ -9,6 +9,130 @@ class AddMedicineInventorySeeder extends Seeder
 {
     public function run(): void
     {
+        $normalizeName = fn(string $name) => strtolower(trim($name));
+        $supplierId = DB::table('suppliers')->orderBy('id')->value('id');
+
+        // Selling prices in LKR for commonly used medicines
+        $sellingPriceOverrides = [
+            'paracetamol 500mg' => 12,
+            'paracetamol 650mg' => 16,
+            'ibuprofen 200mg' => 18,
+            'ibuprofen 400mg' => 28,
+            'aspirin 75mg' => 10,
+            'diclofenac 50mg' => 35,
+            'naproxen 500mg' => 45,
+            'amoxicillin 250mg' => 30,
+            'amoxicillin 500mg' => 45,
+            'azithromycin 250mg' => 70,
+            'azithromycin 500mg' => 120,
+            'ciprofloxacin 500mg' => 85,
+            'metronidazole 400mg' => 45,
+            'cephalexin 500mg' => 60,
+            'doxycycline 100mg' => 55,
+            'augmentin 625mg' => 120,
+            'amlodipine 5mg' => 25,
+            'amlodipine 10mg' => 35,
+            'losartan 50mg' => 40,
+            'atenolol 50mg' => 20,
+            'metoprolol 25mg' => 22,
+            'lisinopril 10mg' => 30,
+            'enalapril 5mg' => 20,
+            'metformin 500mg' => 18,
+            'metformin 850mg' => 24,
+            'glimepiride 2mg' => 20,
+            'glibenclamide 5mg' => 15,
+            'sitagliptin 100mg' => 85,
+            'omeprazole 20mg' => 30,
+            'pantoprazole 40mg' => 40,
+            'ranitidine 150mg' => 22,
+            'domperidone 10mg' => 18,
+            'ondansetron 4mg' => 60,
+            'loperamide 2mg' => 15,
+            'antacid suspension' => 240,
+            'salbutamol inhaler 100mcg' => 950,
+            'montelukast 10mg' => 60,
+            'cetirizine 10mg' => 25,
+            'loratadine 10mg' => 30,
+            'fexofenadine 180mg' => 80,
+            'chlorpheniramine 4mg' => 12,
+            'dextromethorphan syrup' => 350,
+            'guaifenesin 100mg/5ml' => 320,
+            'ambroxol 30mg' => 35,
+            'pseudoephedrine 60mg' => 25,
+        ];
+
+        $resolveSellingPrice = function (array $medicine) use ($normalizeName, $sellingPriceOverrides): float {
+            $nameKey = $normalizeName($medicine['name']);
+            if (array_key_exists($nameKey, $sellingPriceOverrides)) {
+                return (float) $sellingPriceOverrides[$nameKey];
+            }
+
+            $category = strtolower($medicine['category'] ?? '');
+            if (str_contains($category, 'antibiotic')) {
+                return 75;
+            }
+            if (str_contains($category, 'antidepressant')) {
+                return 90;
+            }
+            if (str_contains($category, 'benzodiazepine') || str_contains($category, 'opioid')) {
+                return 80;
+            }
+            if (str_contains($category, 'statin')) {
+                return 55;
+            }
+            if (str_contains($category, 'diabetes')) {
+                return 35;
+            }
+            if (str_contains($category, 'thyroid')) {
+                return 40;
+            }
+            if (str_contains($category, 'vitamin') || str_contains($category, 'supplement')) {
+                return 25;
+            }
+            if (str_contains($category, 'antihistamine')) {
+                return 35;
+            }
+            if (str_contains($category, 'bronchodilator')) {
+                return 45;
+            }
+            if (str_contains($category, 'antifungal')) {
+                return 55;
+            }
+            if (str_contains($category, 'corticosteroid') || str_contains($category, 'steroid')) {
+                return 50;
+            }
+
+            $unit = strtolower($medicine['unit'] ?? '');
+            if (str_contains($nameKey, 'inhaler') || str_contains($unit, 'inhaler')) {
+                return 950;
+            }
+            if (str_contains($nameKey, 'syrup') || str_contains($nameKey, 'suspension')) {
+                return 320;
+            }
+            if (
+                str_contains($nameKey, 'cream') ||
+                str_contains($nameKey, 'ointment') ||
+                str_contains($nameKey, 'gel') ||
+                str_contains($nameKey, 'shampoo') ||
+                str_contains($unit, 'tube')
+            ) {
+                return 280;
+            }
+            if (
+                str_contains($nameKey, 'drops') ||
+                str_contains($unit, 'bottle')
+            ) {
+                return 260;
+            }
+            if (str_contains($unit, 'capsule') || str_contains($unit, 'tablet') || str_contains($nameKey, 'mg')) {
+                return 30;
+            }
+
+            return 40;
+        };
+
+        $resolveBuyingPrice = fn(float $sellingPrice) => max(1, round($sellingPrice * 0.7, 2));
+
         $medicines = [
             // Pain Relievers & Analgesics
             ['name' => 'Paracetamol 500mg', 'generic_name' => 'Paracetamol (Acetaminophen)', 'brand_name' => 'Tylenol', 'category' => 'Analgesic', 'unit' => 'tablet'],
@@ -123,6 +247,9 @@ class AddMedicineInventorySeeder extends Seeder
 
         $batchNum = 1;
         foreach ($medicines as $med) {
+            $sellingPrice = $resolveSellingPrice($med);
+            $unitPrice = $resolveBuyingPrice($sellingPrice);
+
             DB::table('inventory_items')->updateOrInsert(
                 ['name' => $med['name']],
                 [
@@ -134,11 +261,11 @@ class AddMedicineInventorySeeder extends Seeder
                     'unit' => $med['unit'],
                     'quantity' => rand(100, 1000),
                     'reorder_level' => rand(20, 100),
-                    'unit_price' => round(rand(200, 5000) / 100, 2),
-                    'selling_price' => round(rand(300, 6000) / 100, 2),
+                    'unit_price' => $unitPrice,
+                    'selling_price' => $sellingPrice,
                     'expiry_date' => now()->addMonths(rand(6, 24))->format('Y-m-d'),
                     'batch_number' => 'BATCH' . date('Y') . str_pad($batchNum++, 4, '0', STR_PAD_LEFT),
-                    'supplier_id' => 1,
+                    'supplier_id' => $supplierId,
                     'is_active' => true,
                     'created_at' => now(),
                     'updated_at' => now(),

@@ -31,6 +31,7 @@ export interface PatientAppointment {
   id: number;
   patient_id: number;
   clinic_id?: number | null;
+  department_id?: number | null;
   doctor_id: number | null;
   appointment_date: string;
   appointment_time: string;
@@ -45,6 +46,7 @@ export interface PatientAppointment {
 
 export interface CreateAppointmentPayload {
   clinic_id?: number | null;
+  department_id?: number | null;
   doctor_id?: number | null;
   appointment_date: string;
   appointment_time: string;
@@ -244,6 +246,7 @@ export interface QueueEntry {
     id: number;
     time: string;
     type: string;
+    status?: string;
     doctor: {
       name: string;
     } | null;

@@ -19,6 +19,7 @@ import type {
   QueueStatusResponse,
   ClinicQueueResponse,
 } from '../types/patient';
+import { mapAppointmentStatus, normalizeAppointmentStatus } from '../utils/appointmentStatus';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('authToken');
@@ -75,12 +76,25 @@ export const patientApi = {
     },
   },
 
+  departments: {
+    list: async (): Promise<{ data: { id: number; name: string }[] }> => {
+      const response = await fetch(API_ENDPOINTS.PATIENT_DEPARTMENTS, {
+        headers: getAuthHeaders(),
+      });
+      return handleJson<{ data: { id: number; name: string }[] }>(response);
+    },
+  },
+
   appointments: {
     list: async (): Promise<PatientAppointmentsResponse> => {
       const response = await fetch(API_ENDPOINTS.PATIENT_APPOINTMENTS, {
         headers: getAuthHeaders(),
       });
-      return handleJson<PatientAppointmentsResponse>(response);
+      const data = await handleJson<PatientAppointmentsResponse>(response);
+      return {
+        ...data,
+        data: Array.isArray(data.data) ? data.data.map(mapAppointmentStatus) : [],
+      };
     },
 
     create: async (payload: CreateAppointmentPayload): Promise<PatientAppointment> => {
@@ -89,7 +103,8 @@ export const patientApi = {
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
-      return handleJson<PatientAppointment>(response);
+      const appointment = await handleJson<PatientAppointment>(response);
+      return mapAppointmentStatus(appointment);
     },
 
     update: async (id: number, payload: UpdateAppointmentPayload): Promise<PatientAppointment> => {
@@ -98,7 +113,8 @@ export const patientApi = {
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
-      return handleJson<PatientAppointment>(response);
+      const appointment = await handleJson<PatientAppointment>(response);
+      return mapAppointmentStatus(appointment);
     },
 
     remove: async (id: number): Promise<{ message: string }> => {
@@ -194,7 +210,28 @@ export const patientApi = {
       const response = await fetch(`${API_ENDPOINTS.PATIENT_QUEUE_STATUS}`, {
         headers: getAuthHeaders(),
       });
-      return handleJson<QueueStatusResponse>(response);
+      const data = await handleJson<QueueStatusResponse>(response);
+
+      return {
+        ...data,
+        queue_entry: data.queue_entry
+          ? {
+              ...data.queue_entry,
+              appointment: data.queue_entry.appointment
+                ? {
+                    ...data.queue_entry.appointment,
+                    status: normalizeAppointmentStatus(data.queue_entry.appointment.status),
+                  }
+                : data.queue_entry.appointment,
+            }
+          : data.queue_entry,
+        todays_appointments: Array.isArray(data.todays_appointments)
+          ? data.todays_appointments.map((appt) => ({
+              ...appt,
+              status: normalizeAppointmentStatus(appt.status),
+            }))
+          : data.todays_appointments,
+      };
     },
 
     clinicQueue: async (clinicId: number): Promise<ClinicQueueResponse> => {

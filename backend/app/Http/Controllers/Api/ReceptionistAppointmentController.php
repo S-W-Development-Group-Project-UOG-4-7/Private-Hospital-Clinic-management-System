@@ -8,6 +8,8 @@ use App\Models\PatientProfile;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Models\Department; // <--- ADDED IMPORT
+use App\Services\TelemedSessionService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -28,7 +30,7 @@ class ReceptionistAppointmentController extends Controller
         }
 
         if ($request->has('status')) {
-            $query->where('status', $request->get('status'));
+            $query->where('status', Appointment::normalizeStatus($request->get('status')));
         }
 
         if ($request->has('patient_id')) {
@@ -58,11 +60,21 @@ class ReceptionistAppointmentController extends Controller
             'patient_id' => ['nullable', 'max:50', 'required_without:patient_code'],
             'patient_code' => ['nullable', 'string', 'max:50', 'required_without:patient_id'],
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'], // <--- ADDED VALIDATION
+            'department_id' => ['required', 'integer', 'exists:departments,id'],
             'appointment_date' => ['required', 'date'],
             'appointment_time' => ['required'],
+            'visit_mode' => ['nullable', Rule::in([Appointment::VISIT_MODE_PHYSICAL, Appointment::VISIT_MODE_ONLINE])],
             'type' => ['nullable', Rule::in(['in_person', 'telemedicine'])],
-            'status' => ['nullable', Rule::in(['scheduled', 'completed', 'cancelled'])],
+            'status' => ['nullable', Rule::in([
+                'scheduled', 'completed', 'cancelled',
+                Appointment::STATUS_REQUESTED,
+                Appointment::STATUS_CONFIRMED,
+                Appointment::STATUS_CHECKED_IN,
+                Appointment::STATUS_IN_PROGRESS,
+                Appointment::STATUS_COMPLETED,
+                Appointment::STATUS_CANCELLED,
+                Appointment::STATUS_NO_SHOW,
+            ])],
             'is_walk_in' => ['nullable', 'boolean'],
             'reason' => ['nullable', 'string'], // Added reason
             'notes' => ['nullable', 'string'],   // Added notes
@@ -106,6 +118,125 @@ class ReceptionistAppointmentController extends Controller
 
         return DB::transaction(function () use ($validated, $patientId, $isWalkIn, $request) {
             $appointmentDate = $validated['appointment_date'];
+            $appointmentTime = $validated['appointment_time'];
+            $status = Appointment::normalizeStatus($validated['status'] ?? Appointment::STATUS_CONFIRMED);
+            $departmentId = $validated['department_id'];
+
+            $doctorId = $validated['doctor_id'] ?? null;
+
+            $visitMode = strtoupper(trim((string) ($validated['visit_mode'] ?? '')));
+            if ($visitMode === '') {
+                $visitMode = ($validated['type'] ?? null) === 'telemedicine'
+                    ? Appointment::VISIT_MODE_ONLINE
+                    : Appointment::VISIT_MODE_PHYSICAL;
+            }
+
+            $scheduledStart = CarbonImmutable::parse($appointmentDate . ' ' . $appointmentTime);
+            $scheduledEnd = $scheduledStart->addMinutes(30);
+
+            if (in_array($status, Appointment::blockingStatuses(), true)) {
+                $clinicName = 'OPD';
+                $clinicId = \App\Models\Clinic::query()
+                    ->whereRaw('LOWER(name) = ?', [strtolower($clinicName)])
+                    ->value('id');
+
+                $slotConflict = Appointment::query()
+                    ->whereIn('status', Appointment::blockingStatuses())
+                    ->whereDate('appointment_date', $appointmentDate)
+                    ->where('appointment_time', $appointmentTime)
+                    ->where(function ($q) use ($clinicId, $clinicName) {
+                        if ($clinicId) {
+                            $q->where('clinic_id', $clinicId);
+                        }
+                        $q->orWhere(function ($sub) use ($clinicName) {
+                            $sub->whereNull('clinic_id')
+                                ->whereRaw('LOWER(clinic) = ?', [strtolower($clinicName)]);
+                        });
+                    })
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($slotConflict) {
+                    return response()->json([
+                        'message' => 'Time slot already booked for this department.',
+                    ], 422);
+                }
+            }
+
+            if (! empty($doctorId)) {
+                $doctor = User::query()->role('doctor')->whereKey($doctorId)->first();
+                if (! $doctor || (int) $doctor->department_id !== (int) $departmentId) {
+                    return response()->json([
+                        'message' => 'Selected doctor does not belong to the chosen department.',
+                    ], 422);
+                }
+            }
+
+            if (! empty($doctorId) && in_array($status, Appointment::blockingStatuses(), true)) {
+                $conflict = Appointment::query()
+                    ->where('doctor_id', $doctorId)
+                    ->whereIn('status', Appointment::blockingStatuses())
+                    ->whereNotNull('scheduled_start')
+                    ->whereNotNull('scheduled_end')
+                    ->where('scheduled_start', '<', $scheduledEnd)
+                    ->where('scheduled_end', '>', $scheduledStart)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($conflict) {
+                    return response()->json([
+                        'message' => 'Appointment conflict: doctor is already booked for this time slot.',
+                    ], 422);
+                }
+            }
+
+            if (empty($doctorId) && in_array($status, Appointment::blockingStatuses(), true)) {
+                $doctorIds = User::query()
+                    ->role('doctor')
+                    ->where('department_id', $departmentId)
+                    ->where('is_active', true)
+                    ->pluck('id');
+
+                if ($doctorIds->isEmpty()) {
+                    return response()->json([
+                        'message' => 'No doctors available for the selected department.',
+                    ], 422);
+                }
+
+                $conflictedDoctorIds = Appointment::query()
+                    ->whereIn('doctor_id', $doctorIds)
+                    ->whereIn('status', Appointment::blockingStatuses())
+                    ->whereNotNull('scheduled_start')
+                    ->whereNotNull('scheduled_end')
+                    ->where('scheduled_start', '<', $scheduledEnd)
+                    ->where('scheduled_end', '>', $scheduledStart)
+                    ->pluck('doctor_id')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                $appointmentCounts = Appointment::query()
+                    ->selectRaw('doctor_id, COUNT(*) as total')
+                    ->whereIn('doctor_id', $doctorIds)
+                    ->whereDate('appointment_date', $appointmentDate)
+                    ->whereIn('status', Appointment::blockingStatuses())
+                    ->groupBy('doctor_id')
+                    ->pluck('total', 'doctor_id')
+                    ->toArray();
+
+                $availableDoctorIds = $doctorIds->filter(fn ($id) => ! in_array($id, $conflictedDoctorIds, true));
+
+                if ($availableDoctorIds->isEmpty()) {
+                    return response()->json([
+                        'message' => 'No doctors available at the selected time.',
+                    ], 422);
+                }
+
+                $doctorId = $availableDoctorIds
+                    ->sortBy(fn ($id) => $appointmentCounts[$id] ?? 0)
+                    ->values()
+                    ->first();
+            }
 
             // --- APPOINTMENT NUMBER LOCKING (Kept as is) ---
             $lastAppointmentNumber = Appointment::query()
@@ -119,59 +250,67 @@ class ReceptionistAppointmentController extends Controller
             // --- CREATE APPOINTMENT ---
             $appointment = Appointment::create([
                 'patient_id' => $patientId,
-                'doctor_id' => $validated['doctor_id'] ?? null,
-                'department_id' => $validated['department_id'] ?? null, // <--- ADDED THIS LINE
+                'doctor_id' => $doctorId,
+                'department_id' => $departmentId,
                 'clinic' => 'OPD',
                 'appointment_number' => $nextAppointmentNumber,
                 'appointment_date' => $appointmentDate,
                 'appointment_time' => $validated['appointment_time'],
-                'type' => $validated['type'] ?? 'in_person',
-                'status' => $validated['status'] ?? 'scheduled',
+                'scheduled_start' => $scheduledStart,
+                'scheduled_end' => $scheduledEnd,
+                'type' => $visitMode === Appointment::VISIT_MODE_ONLINE ? 'telemedicine' : 'in_person',
+                'visit_mode' => $visitMode,
+                'booking_channel' => Appointment::BOOKING_CHANNEL_FRONTDESK,
+                'status' => $status,
                 'is_walk_in' => $isWalkIn,
                 'reason' => $validated['reason'] ?? null,
                 'notes' => $validated['notes'] ?? null,
-                'confirmed_at' => now(),
+                'confirmed_at' => $status === Appointment::STATUS_CONFIRMED ? now() : null,
             ]);
 
+            if ($visitMode === Appointment::VISIT_MODE_ONLINE && $status !== Appointment::STATUS_REQUESTED) {
+                (new TelemedSessionService())->createForAppointment($appointment);
+            }
+
             // --- QUEUE GENERATION (Kept as is) ---
-            $queueDate = $appointmentDate;
-            $alreadyInQueue = QueueEntry::query()
-                ->where('appointment_id', $appointment->id)
-                ->whereDate('queue_date', $queueDate)
-                ->whereIn('status', ['waiting', 'in_consultation', 'completed'])
-                ->exists();
-
             $queueEntry = null;
-
-            if (! $alreadyInQueue) {
-                $doctorId = $appointment->doctor_id;
-
-                $lastQueueNumber = QueueEntry::query()
+            if ($visitMode === Appointment::VISIT_MODE_PHYSICAL && in_array($status, Appointment::activeScheduleStatuses(), true)) {
+                $queueDate = $appointmentDate;
+                $queueEntry = QueueEntry::query()
+                    ->where('appointment_id', $appointment->id)
                     ->whereDate('queue_date', $queueDate)
-                    ->where(function ($q) use ($doctorId) {
-                        if ($doctorId) {
-                            $q->where('doctor_id', $doctorId);
-                        } else {
-                            $q->whereNull('doctor_id');
-                        }
-                    })
-                    ->orderByDesc('queue_number')
-                    ->lockForUpdate()
-                    ->value('queue_number');
+                    ->first();
 
-                $nextQueueNumber = ((int) ($lastQueueNumber ?? 0)) + 1;
+                if (! $queueEntry) {
+                    $doctorId = $appointment->doctor_id;
 
-                $queueEntry = QueueEntry::create([
-                    'appointment_id' => $appointment->id,
-                    'patient_id' => $patientId,
-                    'doctor_id' => $doctorId,
-                    'queue_date' => $queueDate,
-                    'queue_number' => $nextQueueNumber,
-                    'status' => 'waiting',
-                    'priority' => 'normal',
-                    'checked_in_at' => now(),
-                    'created_by' => $request->user()?->id,
-                ]);
+                    $lastQueueNumber = QueueEntry::query()
+                        ->whereDate('queue_date', $queueDate)
+                        ->where(function ($q) use ($doctorId) {
+                            if ($doctorId) {
+                                $q->where('doctor_id', $doctorId);
+                            } else {
+                                $q->whereNull('doctor_id');
+                            }
+                        })
+                        ->orderByDesc('queue_number')
+                        ->lockForUpdate()
+                        ->value('queue_number');
+
+                    $nextQueueNumber = ((int) ($lastQueueNumber ?? 0)) + 1;
+
+                    $queueEntry = QueueEntry::create([
+                        'appointment_id' => $appointment->id,
+                        'patient_id' => $patientId,
+                        'doctor_id' => $doctorId,
+                        'queue_date' => $queueDate,
+                        'queue_number' => $nextQueueNumber,
+                        'status' => 'waiting',
+                        'priority' => 'normal',
+                        'checked_in_at' => now(),
+                        'created_by' => $request->user()?->id,
+                    ]);
+                }
             }
 
             return response()->json([
@@ -204,8 +343,18 @@ class ReceptionistAppointmentController extends Controller
             'department_id' => ['nullable', 'integer', 'exists:departments,id'], // <--- ADDED VALIDATION
             'appointment_date' => ['sometimes', 'date'],
             'appointment_time' => ['sometimes'],
+            'visit_mode' => ['sometimes', Rule::in([Appointment::VISIT_MODE_PHYSICAL, Appointment::VISIT_MODE_ONLINE])],
             'type' => ['sometimes', Rule::in(['in_person', 'telemedicine'])],
-            'status' => ['sometimes', Rule::in(['scheduled', 'completed', 'cancelled'])],
+            'status' => ['sometimes', Rule::in([
+                'scheduled', 'completed', 'cancelled',
+                Appointment::STATUS_REQUESTED,
+                Appointment::STATUS_CONFIRMED,
+                Appointment::STATUS_CHECKED_IN,
+                Appointment::STATUS_IN_PROGRESS,
+                Appointment::STATUS_COMPLETED,
+                Appointment::STATUS_CANCELLED,
+                Appointment::STATUS_NO_SHOW,
+            ])],
             'reason' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
         ]);
@@ -240,28 +389,86 @@ class ReceptionistAppointmentController extends Controller
         }
 
         // --- CONFLICT CHECK (Kept as is) ---
+        if (array_key_exists('status', $validated)) {
+            $validated['status'] = Appointment::normalizeStatus($validated['status']);
+        }
+
         $nextDoctorId = array_key_exists('doctor_id', $validated) ? $validated['doctor_id'] : $appointment->doctor_id;
+        $nextDepartmentId = array_key_exists('department_id', $validated) ? $validated['department_id'] : $appointment->department_id;
         $nextDate = $validated['appointment_date'] ?? $appointment->appointment_date;
         $nextTime = $validated['appointment_time'] ?? $appointment->appointment_time;
         $nextStatus = $validated['status'] ?? $appointment->status;
 
-        if (! empty($nextDoctorId) && $nextStatus === 'scheduled') {
-            $conflict = Appointment::query()
-                ->where('doctor_id', $nextDoctorId)
+        if ($nextDate && $nextTime && in_array($nextStatus, Appointment::blockingStatuses(), true)) {
+            $clinicName = strtolower((string) ($appointment->clinic ?? 'OPD'));
+            $clinicId = \App\Models\Clinic::query()
+                ->whereRaw('LOWER(name) = ?', [$clinicName])
+                ->value('id');
+
+            $slotConflict = Appointment::query()
+                ->whereIn('status', Appointment::blockingStatuses())
+                ->where('id', '!=', $appointment->id)
                 ->whereDate('appointment_date', $nextDate)
                 ->where('appointment_time', $nextTime)
-                ->where('status', 'scheduled')
-                ->where('id', '!=', $appointment->id)
+                ->where(function ($q) use ($clinicId, $clinicName) {
+                    if ($clinicId) {
+                        $q->where('clinic_id', $clinicId);
+                    }
+                    $q->orWhere(function ($sub) use ($clinicName) {
+                        $sub->whereNull('clinic_id')
+                            ->whereRaw('LOWER(clinic) = ?', [$clinicName]);
+                    });
+                })
                 ->exists();
+
+            if ($slotConflict) {
+                return response()->json([
+                    'message' => 'Time slot already booked for this department.',
+                ], 422);
+            }
+
+            $validated['scheduled_start'] = CarbonImmutable::parse($nextDate . ' ' . $nextTime);
+            $validated['scheduled_end'] = CarbonImmutable::parse($nextDate . ' ' . $nextTime)->addMinutes(30);
+        }
+
+        if (! empty($nextDoctorId) && in_array($nextStatus, Appointment::blockingStatuses(), true)) {
+            $scheduledStart = CarbonImmutable::parse($nextDate . ' ' . $nextTime);
+            $scheduledEnd = $scheduledStart->addMinutes(30);
+
+            $conflict = Appointment::hasOverlap((int) $nextDoctorId, $scheduledStart, $scheduledEnd, $appointment->id);
 
             if ($conflict) {
                 return response()->json([
                     'message' => 'Appointment conflict: doctor is already booked for this time slot.',
                 ], 422);
             }
+
+            $validated['scheduled_start'] = $scheduledStart;
+            $validated['scheduled_end'] = $scheduledEnd;
+        }
+
+        $visitMode = strtoupper(trim((string) ($validated['visit_mode'] ?? $appointment->visit_mode ?? '')));
+        if ($visitMode === '') {
+            $type = $validated['type'] ?? $appointment->type;
+            $visitMode = $type === 'telemedicine' ? Appointment::VISIT_MODE_ONLINE : Appointment::VISIT_MODE_PHYSICAL;
+        }
+        $validated['visit_mode'] = $visitMode;
+        if (array_key_exists('type', $validated) || empty($appointment->type)) {
+            $validated['type'] = $visitMode === Appointment::VISIT_MODE_ONLINE ? 'telemedicine' : 'in_person';
         }
 
         $appointment->update($validated);
+
+        if ($appointment->status === Appointment::STATUS_CONFIRMED && $appointment->confirmed_at === null) {
+            $appointment->confirmed_at = now();
+            $appointment->save();
+        }
+
+        if ($appointment->visit_mode === Appointment::VISIT_MODE_ONLINE && $appointment->status !== Appointment::STATUS_REQUESTED) {
+            (new TelemedSessionService())->createForAppointment($appointment);
+        } elseif ($appointment->videoSession) {
+            $appointment->videoSession->delete();
+        }
 
         return response()->json($appointment->fresh()->load(['patient', 'doctor', 'department']));
     }
@@ -270,9 +477,9 @@ class ReceptionistAppointmentController extends Controller
     {
         $appointment = Appointment::findOrFail($id);
 
-        if ($appointment->status !== 'scheduled') {
+        if ($appointment->status !== Appointment::STATUS_REQUESTED) {
             return response()->json([
-                'message' => 'Only scheduled appointments can be confirmed.',
+                'message' => 'Only requested appointments can be confirmed.',
             ], 422);
         }
 
@@ -281,7 +488,12 @@ class ReceptionistAppointmentController extends Controller
         }
 
         $appointment->confirmed_at = now();
+        $appointment->status = Appointment::STATUS_CONFIRMED;
         $appointment->save();
+
+        if ($appointment->visit_mode === Appointment::VISIT_MODE_ONLINE) {
+            (new TelemedSessionService())->createForAppointment($appointment);
+        }
 
         return response()->json($appointment->fresh()->load(['patient', 'doctor', 'department']));
     }

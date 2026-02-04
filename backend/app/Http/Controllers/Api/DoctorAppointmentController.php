@@ -24,7 +24,7 @@ class DoctorAppointmentController extends Controller
 
         // Filter by status
         if ($request->has('status')) {
-            $query->where('status', $request->status);
+            $query->where('status', Appointment::normalizeStatus($request->status));
         }
 
         // Filter by patient name
@@ -65,13 +65,23 @@ class DoctorAppointmentController extends Controller
             ->findOrFail($id);
 
         $validated = $request->validate([
-            'status' => ['required', Rule::in(['scheduled', 'completed', 'cancelled'])],
+            'status' => ['required', Rule::in([
+                'scheduled', 'completed', 'cancelled',
+                Appointment::STATUS_REQUESTED,
+                Appointment::STATUS_CONFIRMED,
+                Appointment::STATUS_CHECKED_IN,
+                Appointment::STATUS_IN_PROGRESS,
+                Appointment::STATUS_COMPLETED,
+                Appointment::STATUS_CANCELLED,
+                Appointment::STATUS_NO_SHOW,
+            ])],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $validated['status'] = Appointment::normalizeStatus($validated['status']);
 
         $appointment->update($validated);
 
         return response()->json($appointment->load('patient'));
     }
 }
-

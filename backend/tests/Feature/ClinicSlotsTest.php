@@ -32,7 +32,11 @@ class ClinicSlotsTest extends TestCase
             'clinic_id' => $clinic->id,
             'appointment_date' => '2026-01-15',
             'appointment_time' => '09:00',
-            'status' => 'scheduled',
+            'scheduled_start' => '2026-01-15 09:00:00',
+            'scheduled_end' => '2026-01-15 09:30:00',
+            'visit_mode' => 'PHYSICAL',
+            'booking_channel' => 'SYSTEM',
+            'status' => 'CONFIRMED',
         ]);
 
         $this->assertDatabaseHas('appointments', [
@@ -78,7 +82,11 @@ class ClinicSlotsTest extends TestCase
             'clinic_id' => $clinic->id,
             'appointment_date' => '2026-01-20',
             'appointment_time' => '10:00',
-            'status' => 'scheduled',
+            'scheduled_start' => '2026-01-20 10:00:00',
+            'scheduled_end' => '2026-01-20 10:30:00',
+            'visit_mode' => 'PHYSICAL',
+            'booking_channel' => 'SYSTEM',
+            'status' => 'CONFIRMED',
         ]);
         Appointment::create([
             'patient_id' => $doctor2->id,
@@ -86,7 +94,11 @@ class ClinicSlotsTest extends TestCase
             'clinic_id' => $clinic->id,
             'appointment_date' => '2026-01-20',
             'appointment_time' => '10:00',
-            'status' => 'scheduled',
+            'scheduled_start' => '2026-01-20 10:00:00',
+            'scheduled_end' => '2026-01-20 10:30:00',
+            'visit_mode' => 'PHYSICAL',
+            'booking_channel' => 'SYSTEM',
+            'status' => 'CONFIRMED',
         ]);
 
         // Attempt to book a patient appointment for the clinic at 10:00 without doctor

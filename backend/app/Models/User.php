@@ -15,6 +15,7 @@ use App\Models\PatientProfile;
 use App\Models\Prescription;
 use App\Models\ClinicReferral;
 use App\Models\Clinic;
+use App\Models\Appointment;
 
 class User extends Authenticatable
 {
@@ -31,6 +32,7 @@ class User extends Authenticatable
         'last_name',
         'username',
         'email',
+        'phone',
         'password',
         'is_active',
         'clinic_id',
@@ -94,6 +96,11 @@ class User extends Authenticatable
     public function prescriptions(): HasMany
     {
         return $this->hasMany(Prescription::class, 'patient_id');
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class, 'patient_id');
     }
 
     public function clinicReferrals(): HasMany

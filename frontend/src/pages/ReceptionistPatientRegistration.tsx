@@ -35,7 +35,13 @@ const ReceptionistPatientRegistration: React.FC = () => {
     document.title = 'Register New Patient';
 
     // Redirect if not receptionist
-    const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+    const storedUser = localStorage.getItem('authUser');
+    let authUser: any = {};
+    try {
+      authUser = storedUser && storedUser !== 'undefined' ? JSON.parse(storedUser) : {};
+    } catch {
+      authUser = {};
+    }
     if (authUser?.role?.toLowerCase() !== 'receptionist') {
       navigate('/login');
     }

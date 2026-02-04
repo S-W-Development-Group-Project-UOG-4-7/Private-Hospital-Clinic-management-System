@@ -34,6 +34,11 @@ const DrugPurchaseManagement: React.FC = () => {
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const currencyFormatter = new Intl.NumberFormat('en-LK', {
+    style: 'currency',
+    currency: 'LKR',
+    minimumFractionDigits: 2,
+  });
   const [formData, setFormData] = useState({
     supplier_id: '',
     purchase_date: new Date().toISOString().split('T')[0],
@@ -210,13 +215,15 @@ const DrugPurchaseManagement: React.FC = () => {
                 <div className="border-t pt-4">
                   <div className="flex justify-between mb-2">
                     <span className="font-semibold">Items:</span>
-                    <span className="font-bold text-lg">Total: ${purchase.total_amount.toFixed(2)}</span>
+                    <span className="font-bold text-lg">Total: {currencyFormatter.format(purchase.total_amount)}</span>
                   </div>
                   <div className="space-y-2">
                     {purchase.items.map((item) => (
                       <div key={item.id} className="flex justify-between text-sm bg-gray-50 p-2 rounded">
                         <span>{item.inventory_item.name}</span>
-                        <span>Qty: {item.quantity} × ${item.unit_price.toFixed(2)} = ${item.total_price.toFixed(2)}</span>
+                        <span>
+                          Qty: {item.quantity} × {currencyFormatter.format(item.unit_price)} = {currencyFormatter.format(item.total_price)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -348,4 +355,3 @@ const DrugPurchaseManagement: React.FC = () => {
 };
 
 export default DrugPurchaseManagement;
-

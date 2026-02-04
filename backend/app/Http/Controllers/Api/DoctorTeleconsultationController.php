@@ -63,10 +63,9 @@ class DoctorTeleconsultationController extends Controller
         // Mark appointment as completed
         if ($teleconsultation->appointment_id) {
             Appointment::where('id', $teleconsultation->appointment_id)
-                ->update(['status' => 'completed']);
+                ->update(['status' => Appointment::STATUS_COMPLETED]);
         }
 
         return response()->json($teleconsultation->load(['patient', 'doctor']));
     }
 }
-

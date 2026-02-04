@@ -92,6 +92,86 @@ const parseNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const normalizeMedicineName = (name: string) => name.trim().toLowerCase();
+
+const FALLBACK_MEDICINE_PRICES_LKR: Record<string, number> = {
+  'paracetamol 500mg': 12,
+  'paracetamol 650mg': 16,
+  'ibuprofen 200mg': 18,
+  'ibuprofen 400mg': 28,
+  'aspirin 75mg': 10,
+  'diclofenac 50mg': 35,
+  'naproxen 500mg': 45,
+  'amoxicillin 250mg': 30,
+  'amoxicillin 500mg': 45,
+  'azithromycin 250mg': 70,
+  'azithromycin 500mg': 120,
+  'ciprofloxacin 500mg': 85,
+  'metronidazole 400mg': 45,
+  'cephalexin 500mg': 60,
+  'doxycycline 100mg': 55,
+  'augmentin 625mg': 120,
+  'amlodipine 5mg': 25,
+  'amlodipine 10mg': 35,
+  'losartan 50mg': 40,
+  'atenolol 50mg': 20,
+  'metoprolol 25mg': 22,
+  'lisinopril 10mg': 30,
+  'enalapril 5mg': 20,
+  'metformin 500mg': 18,
+  'metformin 850mg': 24,
+  'glimepiride 2mg': 20,
+  'glibenclamide 5mg': 15,
+  'sitagliptin 100mg': 85,
+  'omeprazole 20mg': 30,
+  'pantoprazole 40mg': 40,
+  'ranitidine 150mg': 22,
+  'domperidone 10mg': 18,
+  'ondansetron 4mg': 60,
+  'loperamide 2mg': 15,
+  'antacid suspension': 240,
+  'salbutamol inhaler 100mcg': 950,
+  'montelukast 10mg': 60,
+  'cetirizine 10mg': 25,
+  'loratadine 10mg': 30,
+  'fexofenadine 180mg': 80,
+  'chlorpheniramine 4mg': 12,
+  'dextromethorphan syrup': 350,
+  'guaifenesin 100mg/5ml': 320,
+  'ambroxol 30mg': 35,
+  'pseudoephedrine 60mg': 25,
+};
+
+const resolveFallbackUnitPrice = (medicineName: string): number => {
+  if (!medicineName) {
+    return 0;
+  }
+
+  const key = normalizeMedicineName(medicineName);
+  const mappedPrice = FALLBACK_MEDICINE_PRICES_LKR[key];
+  if (mappedPrice !== undefined) {
+    return mappedPrice;
+  }
+
+  if (key.includes('inhaler')) {
+    return 950;
+  }
+  if (key.includes('syrup')) {
+    return 320;
+  }
+  if (key.includes('drops')) {
+    return 260;
+  }
+  if (key.includes('cream') || key.includes('ointment') || key.includes('gel')) {
+    return 280;
+  }
+  if (key.includes('capsule') || key.includes('tablet') || key.includes('mg')) {
+    return 30;
+  }
+
+  return 40;
+};
+
 const formatDate = (value?: string | null) => {
   if (!value) {
     return '—';
@@ -139,7 +219,9 @@ const mapPrescriptionFromApi = (prescription: any): PharmacistPrescription => {
         item?.inventoryItem?.selling_price,
       0
     );
-    const totalPrice = unitPrice * quantity;
+    const resolvedUnitPrice =
+      unitPrice > 0 ? unitPrice : resolveFallbackUnitPrice(medicationName);
+    const totalPrice = resolvedUnitPrice * quantity;
 
     return {
       id: item?.id ?? 0,
@@ -149,7 +231,7 @@ const mapPrescriptionFromApi = (prescription: any): PharmacistPrescription => {
       duration,
       quantity,
       instructions: item?.instructions ?? '',
-      unit_price: unitPrice,
+      unit_price: resolvedUnitPrice,
       total_price: totalPrice,
     };
   });
@@ -234,6 +316,7 @@ const PharmacistDashboard: React.FC = () => {
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
   const [prescriptions, setPrescriptions] = useState<PharmacistPrescription[]>([]);
   const [selectedPrescription, setSelectedPrescription] = useState<PharmacistPrescription | null>(null);
+  const [prescriptionPhoneSearch, setPrescriptionPhoneSearch] = useState('');
   const [prescriptionDetailsLoading, setPrescriptionDetailsLoading] = useState(false);
   const [dispenseNotes, setDispenseNotes] = useState('');
   const [dispensing, setDispensing] = useState(false);
@@ -345,9 +428,9 @@ const PharmacistDashboard: React.FC = () => {
 
   const currencyFormatter = useMemo(
     () =>
-      new Intl.NumberFormat(undefined, {
+      new Intl.NumberFormat('en-LK', {
         style: 'currency',
-        currency: 'USD',
+        currency: 'LKR',
         minimumFractionDigits: 2,
       }),
     []
@@ -464,25 +547,30 @@ const PharmacistDashboard: React.FC = () => {
     loadSectionData();
   }, [active]);
 
-  const loadPrescriptions = async () => {
+  const loadPrescriptions = async (options?: { phone?: string }) => {
     setError(null);
     setPrescriptionsLoading(true);
     try {
-      const resp = await pharmacistApi.prescriptions.list();
-      // Transform API data to match expected format
-      const rawData = Array.isArray(resp.data) ? resp.data : [];
-      const transformedData = rawData.map((p: any) => ({
-        ...p,
-        patient_name: p.patient ? `${p.patient.first_name || ''} ${p.patient.last_name || ''}`.trim() : 'Unknown Patient',
-        doctor_name: p.doctor ? `${p.doctor.first_name || ''} ${p.doctor.last_name || ''}`.trim() : 'Unknown Doctor',
-        items: p.items?.map((item: any) => ({
-          ...item,
-          medication_name: item.inventory_item?.name || item.medicine_name || 'Unknown Medication',
-        })) || [],
-      }));
-      setPrescriptions(transformedData);
+      const phone = options?.phone ?? prescriptionPhoneSearch.trim();
+      const resp = await pharmacistApi.prescriptions.list({
+        phone: phone || undefined,
+      });
+      const rawPrescriptions = Array.isArray(resp?.data)
+        ? resp.data
+        : Array.isArray(resp)
+        ? resp
+        : Array.isArray(resp?.data?.data)
+        ? resp.data.data
+        : [];
+
+      const mapped = rawPrescriptions.map(mapPrescriptionFromApi);
+      setPrescriptions(mapped);
+      setPrescriptionsLoaded(true);
     } catch (e: any) {
       console.error('Failed to load prescriptions:', e);
+      setError(e?.message || 'Failed to load prescriptions');
+    } finally {
+      setPrescriptionsLoading(false);
     }
   };
 
@@ -730,11 +818,11 @@ const PharmacistDashboard: React.FC = () => {
       return;
     }
     if (!inventoryForm.unit_price || parseFloat(inventoryForm.unit_price) < 0.01) {
-      setError('Unit price must be at least $0.01');
+      setError('Unit price must be at least Rs 0.01');
       return;
     }
     if (!inventoryForm.selling_price || parseFloat(inventoryForm.selling_price) < 0.01) {
-      setError('Selling price must be at least $0.01');
+      setError('Selling price must be at least Rs 0.01');
       return;
     }
 
@@ -965,198 +1053,101 @@ const PharmacistDashboard: React.FC = () => {
     }
 
     const invoiceNumber = selectedPrescription.invoice?.invoice_number || `RX-${selectedPrescription.id}`;
-    const invoiceDate = selectedPrescription.dispensed_at 
+    const invoiceDate = selectedPrescription.dispensed_at
       ? new Date(selectedPrescription.dispensed_at).toLocaleDateString()
       : new Date().toLocaleDateString();
+    const dueDate = selectedPrescription.invoice?.due_date || '—';
     const total = selectedPrescription.invoice?.amount ?? selectedPrescriptionTotal;
+    const statusLabel = selectedPrescription.invoice?.status ?? 'unpaid';
+    const statusClass =
+      statusLabel === 'paid'
+        ? 'status-paid'
+        : statusLabel === 'partial'
+          ? 'status-partial'
+          : 'status-unpaid';
 
     const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Bill - ${invoiceNumber}</title>
+        <title>Invoice ${invoiceNumber}</title>
         <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { 
-            font-family: 'Segoe UI', Arial, sans-serif; 
-            padding: 40px; 
-            color: #333;
-            max-width: 800px;
-            margin: 0 auto;
-          }
-          .header { 
-            text-align: center; 
-            border-bottom: 3px solid #0d9488; 
-            padding-bottom: 20px; 
-            margin-bottom: 30px; 
-          }
-          .header h1 { 
-            color: #0d9488; 
-            font-size: 28px; 
-            margin-bottom: 5px;
-          }
-          .header p { 
-            color: #666; 
-            font-size: 14px;
-          }
-          .invoice-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 30px;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-          }
-          .invoice-info div { flex: 1; }
-          .invoice-info h3 { 
-            color: #0d9488; 
-            font-size: 12px; 
-            text-transform: uppercase; 
-            margin-bottom: 8px;
-            letter-spacing: 1px;
-          }
-          .invoice-info p { 
-            font-size: 14px; 
-            margin: 4px 0; 
-          }
-          .invoice-number {
-            text-align: right;
-          }
-          .invoice-number .number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #0d9488;
-          }
-          table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin: 20px 0; 
-          }
-          th { 
-            background: #0d9488; 
-            color: white; 
-            padding: 12px 15px; 
-            text-align: left;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          th:last-child { text-align: right; }
-          td { 
-            padding: 15px; 
-            border-bottom: 1px solid #e5e7eb; 
-            font-size: 14px;
-          }
-          td:last-child { text-align: right; font-weight: 600; }
-          .medication-name { font-weight: 600; color: #111; }
-          .medication-details { font-size: 12px; color: #666; margin-top: 4px; }
-          .totals { 
-            margin-top: 20px;
-            border-top: 2px solid #e5e7eb;
-            padding-top: 20px;
-          }
-          .totals-row {
-            display: flex;
-            justify-content: flex-end;
-            margin: 8px 0;
-            font-size: 14px;
-          }
-          .totals-row span:first-child {
-            margin-right: 50px;
-            color: #666;
-          }
-          .totals-row.grand-total {
-            font-size: 20px;
-            font-weight: bold;
-            color: #0d9488;
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 2px solid #0d9488;
-          }
-          .notes {
-            margin-top: 30px;
-            padding: 15px;
-            background: #fef3c7;
-            border-left: 4px solid #f59e0b;
-            border-radius: 4px;
-          }
-          .notes h4 { 
-            color: #92400e; 
-            margin-bottom: 8px;
-            font-size: 14px;
-          }
-          .notes p { 
-            font-size: 13px; 
-            color: #78350f; 
-          }
-          .footer { 
-            margin-top: 50px; 
-            text-align: center; 
-            color: #666; 
-            font-size: 12px;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 20px;
-          }
-          .footer p { margin: 3px 0; }
-          .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-          }
-          .status-dispensed { background: #d1fae5; color: #065f46; }
-          .status-pending { background: #fef3c7; color: #92400e; }
-          .status-paid { background: #d1fae5; color: #065f46; }
+          body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
+          .header { text-align: center; margin-bottom: 24px; }
+          .header h1 { margin: 0; font-size: 22px; }
+          .header p { margin: 4px 0; color: #6b7280; }
+          .info { display: flex; gap: 24px; margin-bottom: 24px; }
+          .info div { flex: 1; }
+          .label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+          .value { font-weight: 600; margin-top: 4px; }
+          .summary { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-top: 16px; }
+          .summary-row { display: flex; justify-content: space-between; margin: 8px 0; }
+          .total { font-size: 18px; font-weight: 700; }
+          .status { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 999px; font-size: 12px; text-transform: uppercase; }
           .status-unpaid { background: #fee2e2; color: #991b1b; }
-          @media print {
-            body { padding: 20px; }
-            .no-print { display: none; }
-          }
+          .status-paid { background: #dcfce7; color: #166534; }
+          .status-partial { background: #ffedd5; color: #9a3412; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th { text-align: left; font-size: 12px; text-transform: uppercase; color: #6b7280; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+          td { padding: 10px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+          td:last-child, th:last-child { text-align: right; }
+          .medication-name { font-weight: 600; color: #111; }
+          .medication-details { font-size: 11px; color: #6b7280; margin-top: 4px; }
+          .notes { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-top: 16px; }
+          .footer { margin-top: 32px; text-align: center; color: #6b7280; font-size: 12px; }
+          @media print { body { padding: 12px; } }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>🏥 Private Hospital & Clinic</h1>
-          <p>Pharmacy Department</p>
+          <h1>Private Hospital & Clinic</h1>
+          <p>Reception Billing</p>
           <p>123 Medical Center Drive, Healthcare City | Tel: (555) 123-4567</p>
         </div>
 
-        <div class="invoice-info">
+        <div class="info">
           <div>
-            <h3>Bill To</h3>
-            <p><strong>${selectedPrescription.patient_name}</strong></p>
-            <p>Patient ID: ${selectedPrescription.patient_id}</p>
+            <div class="label">Invoice</div>
+            <div class="value">${invoiceNumber}</div>
           </div>
           <div>
-            <h3>Prescribing Doctor</h3>
-            <p>Dr. ${selectedPrescription.doctor_name}</p>
-            <p>Date: ${new Date(selectedPrescription.created_at).toLocaleDateString()}</p>
+            <div class="label">Issued</div>
+            <div class="value">${invoiceDate}</div>
           </div>
-          <div class="invoice-number">
-            <h3>Invoice</h3>
-            <p class="number">${invoiceNumber}</p>
-            <p>Date: ${invoiceDate}</p>
-            <p>
-              <span class="status-badge ${selectedPrescription.status === 'dispensed' ? 'status-dispensed' : 'status-pending'}">
-                ${selectedPrescription.status}
-              </span>
-            </p>
+          <div>
+            <div class="label">Due</div>
+            <div class="value">${dueDate}</div>
+          </div>
+        </div>
+
+        <div class="info">
+          <div>
+            <div class="label">Patient</div>
+            <div class="value">${selectedPrescription.patient_name}</div>
+          </div>
+          <div>
+            <div class="label">Doctor</div>
+            <div class="value">Dr. ${selectedPrescription.doctor_name}</div>
+          </div>
+          <div>
+            <div class="label">Status</div>
+            <div class="value"><span class="status ${statusClass}">${statusLabel}</span></div>
           </div>
         </div>
 
         <table>
           <thead>
             <tr>
-              <th style="width: 50%">Medication</th>
-              <th style="width: 15%">Qty</th>
-              <th style="width: 15%">Unit Price</th>
-              <th style="width: 20%">Amount</th>
+              <th>Medication</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>Amount</th>
             </tr>
           </thead>
           <tbody>
-            ${selectedPrescription.items.map(item => `
+            ${selectedPrescription.items
+              .map(
+                (item) => `
               <tr>
                 <td>
                   <div class="medication-name">${item.medication_name}</div>
@@ -1166,54 +1157,31 @@ const PharmacistDashboard: React.FC = () => {
                   </div>
                 </td>
                 <td>${item.quantity}</td>
-                <td>$${(item.unit_price ?? 0).toFixed(2)}</td>
-                <td>$${(item.total_price ?? item.quantity * (item.unit_price ?? 0)).toFixed(2)}</td>
+                <td>Rs ${(item.unit_price ?? 0).toFixed(2)}</td>
+                <td>Rs ${(item.total_price ?? item.quantity * (item.unit_price ?? 0)).toFixed(2)}</td>
               </tr>
-            `).join('')}
+            `
+              )
+              .join('')}
           </tbody>
         </table>
 
-        <div class="totals">
-          <div class="totals-row">
-            <span>Subtotal:</span>
-            <span>$${selectedPrescriptionTotal.toFixed(2)}</span>
-          </div>
-          <div class="totals-row">
-            <span>Tax (0%):</span>
-            <span>$0.00</span>
-          </div>
-          <div class="totals-row grand-total">
-            <span>Total Amount:</span>
-            <span>$${total.toFixed(2)}</span>
+        <div class="summary">
+          <div class="summary-row total">
+            <span>Total Amount</span>
+            <span>Rs ${total.toFixed(2)}</span>
           </div>
         </div>
 
-        ${selectedPrescription.invoice ? `
-          <div style="margin-top: 20px; text-align: right;">
-            <span class="status-badge ${selectedPrescription.invoice.status === 'paid' ? 'status-paid' : 'status-unpaid'}">
-              Payment: ${selectedPrescription.invoice.status}
-            </span>
-          </div>
-        ` : ''}
-
-        ${selectedPrescription.notes ? `
-          <div class="notes">
-            <h4>Pharmacist Notes</h4>
-            <p>${selectedPrescription.notes}</p>
-          </div>
-        ` : ''}
+        ${selectedPrescription.notes ? `<div class="notes"><div class="label">Notes</div><div class="value">${selectedPrescription.notes}</div></div>` : ''}
 
         <div class="footer">
-          <p><strong>Thank you for choosing Private Hospital & Clinic Pharmacy</strong></p>
-          <p>For questions about your medication, please contact our pharmacy at (555) 123-4567</p>
-          <p>Please present this bill at the reception for payment</p>
-          <p style="margin-top: 10px; color: #999;">Generated on ${new Date().toLocaleString()}</p>
+          <p>Please collect payment at the reception.</p>
+          <p>Generated on ${new Date().toLocaleString()}</p>
         </div>
 
         <script>
-          window.onload = function() {
-            window.print();
-          }
+          window.onload = function() { window.print(); };
         </script>
       </body>
       </html>
@@ -1629,6 +1597,43 @@ const PharmacistDashboard: React.FC = () => {
                   <h2 className="text-2xl font-bold text-gray-800">Prescription Management</h2>
                 </div>
 
+                <div className="bg-white rounded-lg shadow-lg p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Patient Phone</label>
+                      <input
+                        type="tel"
+                        value={prescriptionPhoneSearch}
+                        onChange={(e) => setPrescriptionPhoneSearch(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="e.g. 07XXXXXXXX"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => loadPrescriptions({ phone: prescriptionPhoneSearch.trim() })}
+                        disabled={prescriptionsLoading || prescriptionPhoneSearch.trim() === ''}
+                        className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+                      >
+                        Search
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPrescriptionPhoneSearch('');
+                          loadPrescriptions({ phone: '' });
+                        }}
+                        disabled={prescriptionsLoading}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg transition duration-300"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Tip: search by exact phone number used in patient profile.
+                    </div>
+                  </div>
+                </div>
+
                 {prescriptionsLoading ? (
                   <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto"></div>
@@ -1742,7 +1747,9 @@ const PharmacistDashboard: React.FC = () => {
                       <TrendingUp className="w-8 h-8 text-green-500 mr-3" />
                       <div>
                         <p className="text-sm text-gray-600">Total Value</p>
-                        <p className="text-2xl font-bold text-gray-900">${inventoryStats.total_value || 0}</p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {currencyFormatter.format(inventoryStats.total_value || 0)}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -2040,7 +2047,7 @@ const PharmacistDashboard: React.FC = () => {
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price ($) *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (Rs) *</label>
                             <input
                               type="number"
                               value={inventoryForm.unit_price}
@@ -2053,7 +2060,7 @@ const PharmacistDashboard: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price ($) *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price (Rs) *</label>
                             <input
                               type="number"
                               value={inventoryForm.selling_price}
@@ -3153,117 +3160,6 @@ const PharmacistDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Prescription Details Modal */}
-      {selectedPrescription && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Prescription Details</h2>
-                <button
-                  onClick={() => setSelectedPrescription(null)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                {/* Patient & Doctor Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Patient</p>
-                    <p className="text-lg font-semibold text-gray-900">{selectedPrescription.patient_name}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Doctor</p>
-                    <p className="text-lg font-semibold text-gray-900">Dr. {selectedPrescription.doctor_name}</p>
-                  </div>
-                </div>
-
-                {/* Status & Date */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Status</p>
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                      selectedPrescription.status === 'dispensed' ? 'bg-green-100 text-green-800' :
-                      selectedPrescription.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      selectedPrescription.status === 'held' ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {selectedPrescription.status}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Date</p>
-                    <p className="text-gray-900">{new Date(selectedPrescription.created_at).toLocaleDateString()}</p>
-                  </div>
-                </div>
-
-                {/* Medications */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Medications</h3>
-                  {selectedPrescription.items && selectedPrescription.items.length > 0 ? (
-                    <div className="space-y-3">
-                      {selectedPrescription.items.map((item, index) => (
-                        <div key={item.id || index} className="border rounded-lg p-4 bg-gray-50">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="font-semibold text-gray-900">{item.medication_name}</p>
-                              <div className="text-sm text-gray-600 mt-1 space-y-1">
-                                {item.dosage && <p>Dosage: {item.dosage}</p>}
-                                {item.frequency && <p>Frequency: {item.frequency}</p>}
-                                {item.duration && <p>Duration: {item.duration}</p>}
-                                {item.quantity && <p>Quantity: {item.quantity}</p>}
-                                {item.instructions && <p>Instructions: {item.instructions}</p>}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500">No medications listed</p>
-                  )}
-                </div>
-
-                {/* Actions */}
-                {selectedPrescription.status === 'pending' && (
-                  <div className="flex gap-3 pt-4 border-t">
-                    <button
-                      onClick={() => {
-                        // TODO: Implement dispense functionality
-                        setSuccess('Prescription dispensed successfully');
-                        setSelectedPrescription(null);
-                        loadPrescriptions();
-                      }}
-                      className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      Dispense
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedPrescription(null);
-                      }}
-                      className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                    >
-                      Hold
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedPrescription(null);
-                      }}
-                      className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

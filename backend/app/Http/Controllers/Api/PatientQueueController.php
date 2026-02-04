@@ -22,6 +22,9 @@ class PatientQueueController extends Controller
             ->where('patient_id', $user->id)
             ->whereDate('created_at', $today)
             ->whereIn('status', ['waiting', 'scheduled', 'in_consultation', 'in_progress'])
+            ->whereHas('appointment', function ($q) {
+                $q->where('visit_mode', Appointment::VISIT_MODE_PHYSICAL);
+            })
             ->with(['appointment:id,appointment_date,appointment_time,type,status,doctor_id', 'appointment.doctor:id,first_name,last_name'])
             ->first();
 

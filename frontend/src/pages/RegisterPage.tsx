@@ -38,7 +38,13 @@ const RegisterPage: React.FC = () => {
     // Redirect if already authenticated
     const isAuthenticated = !!localStorage.getItem('authToken');
     if (isAuthenticated) {
-      const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+      const storedUser = localStorage.getItem('authUser');
+      let authUser: any = {};
+      try {
+        authUser = storedUser && storedUser !== 'undefined' ? JSON.parse(storedUser) : {};
+      } catch {
+        authUser = {};
+      }
       const role = authUser?.role?.toLowerCase() || 'patient';
 
       let redirectPath = '/portal';

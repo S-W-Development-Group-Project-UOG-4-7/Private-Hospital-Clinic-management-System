@@ -26,6 +26,14 @@ class PrescriptionController extends Controller
             $query->where('patient_id', $request->patient_id);
         }
 
+        if ($request->has('phone') && $request->phone) {
+            $phone = $request->phone;
+            $query->whereHas('patient.patientProfile', function ($q) use ($phone) {
+                $q->where('phone', $phone)
+                  ->orWhere('guardian_phone', $phone);
+            });
+        }
+
         $prescriptions = $query->orderBy('created_at', 'desc')->paginate(20);
 
         return response()->json($prescriptions);
@@ -128,30 +136,38 @@ class PrescriptionController extends Controller
             $lowStockAlerts = [];
 
             foreach ($prescription->items as $item) {
-                $inventoryItem = $item->inventoryItem;
+                $inventoryItem = $this->resolveInventoryItemForDispense($item);
                 $dispenseQuantity = $this->resolveItemQuantity($item);
-                $unitPrice = (float) ($item->unit_price ?: ($inventoryItem->selling_price ?? $inventoryItem->unit_price ?? 0));
+                $unitPrice = $this->resolveUnitPriceForDispense($item, $inventoryItem);
 
-                if ($inventoryItem->quantity < $dispenseQuantity) {
-                    DB::rollBack();
-                    return response()->json([
-                        'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$dispenseQuantity}"
-                    ], 400);
+                if ($inventoryItem) {
+                    if ($inventoryItem->quantity < $dispenseQuantity) {
+                        DB::rollBack();
+                        return response()->json([
+                            'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$dispenseQuantity}"
+                        ], 400);
+                    }
+
+                    $inventoryItem->decrement('quantity', $dispenseQuantity);
+                    $inventoryItem->refresh();
+
+                    if ($inventoryItem->quantity <= $inventoryItem->reorder_level) {
+                        $lowStockAlerts[] = $this->formatLowStockAlert($inventoryItem);
+                    }
                 }
 
-                $inventoryItem->decrement('quantity', $dispenseQuantity);
-                $inventoryItem->refresh();
-
-                if ($inventoryItem->quantity <= $inventoryItem->reorder_level) {
-                    $lowStockAlerts[] = $this->formatLowStockAlert($inventoryItem);
-                }
-
-                $item->update([
+                $updatePayload = [
                     'is_dispensed' => true,
                     'quantity' => $dispenseQuantity,
                     'unit_price' => $unitPrice,
                     'total_price' => $unitPrice * $dispenseQuantity,
-                ]);
+                ];
+
+                if ($inventoryItem && !$item->inventory_item_id) {
+                    $updatePayload['inventory_item_id'] = $inventoryItem->id;
+                }
+
+                $item->update($updatePayload);
             }
 
             $prescription->update([
@@ -225,32 +241,40 @@ class PrescriptionController extends Controller
             $lowStockAlerts = [];
 
             foreach ($prescription->items as $item) {
-                $inventoryItem = $item->inventoryItem;
+                $inventoryItem = $this->resolveInventoryItemForDispense($item);
                 $dispenseQuantity = $this->resolveItemQuantity($item);
 
-                if ($inventoryItem->quantity < $dispenseQuantity) {
-                    DB::rollBack();
-                    return response()->json([
-                        'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$dispenseQuantity}"
-                    ], 400);
+                if ($inventoryItem) {
+                    if ($inventoryItem->quantity < $dispenseQuantity) {
+                        DB::rollBack();
+                        return response()->json([
+                            'error' => "Insufficient stock for {$inventoryItem->name}. Available: {$inventoryItem->quantity}, Required: {$dispenseQuantity}"
+                        ], 400);
+                    }
+
+                    $inventoryItem->decrement('quantity', $dispenseQuantity);
+                    $inventoryItem->refresh();
+
+                    if ($inventoryItem->quantity <= $inventoryItem->reorder_level) {
+                        $lowStockAlerts[] = $this->formatLowStockAlert($inventoryItem);
+                    }
                 }
 
-                $inventoryItem->decrement('quantity', $dispenseQuantity);
-                $inventoryItem->refresh();
-
-                if ($inventoryItem->quantity <= $inventoryItem->reorder_level) {
-                    $lowStockAlerts[] = $this->formatLowStockAlert($inventoryItem);
-                }
-
-                $unitPrice = (float) ($item->unit_price ?: ($inventoryItem->selling_price ?? $inventoryItem->unit_price ?? 0));
+                $unitPrice = $this->resolveUnitPriceForDispense($item, $inventoryItem);
                 $totalPrice = $unitPrice * $dispenseQuantity;
 
-                $item->update([
+                $updatePayload = [
                     'is_dispensed' => true,
                     'quantity' => $dispenseQuantity,
                     'unit_price' => $unitPrice,
                     'total_price' => $totalPrice,
-                ]);
+                ];
+
+                if ($inventoryItem && !$item->inventory_item_id) {
+                    $updatePayload['inventory_item_id'] = $inventoryItem->id;
+                }
+
+                $item->update($updatePayload);
 
                 $totalAmount += $totalPrice;
             }
@@ -310,7 +334,7 @@ class PrescriptionController extends Controller
             'date' => now()->format('Y-m-d'),
             'items' => $prescription->items->map(function ($item) {
                 return [
-                    'medication' => $item->inventoryItem->name,
+                    'medication' => $item->medicine_name ?? $item->inventoryItem?->name ?? 'Medication',
                     'dosage' => $item->dosage,
                     'quantity' => $item->quantity,
                     'instructions' => $item->instructions,
@@ -356,6 +380,116 @@ class PrescriptionController extends Controller
         return MedicationQuantityCalculator::fromPrescriptionItem($item);
     }
 
+    protected function resolveInventoryItemForDispense(PrescriptionItem $item): ?InventoryItem
+    {
+        if ($item->inventoryItem) {
+            return $item->inventoryItem;
+        }
+
+        if ($item->inventory_item_id) {
+            return InventoryItem::find($item->inventory_item_id);
+        }
+
+        if ($item->medicine_name) {
+            return InventoryItem::where('name', $item->medicine_name)->first();
+        }
+
+        return null;
+    }
+
+    protected function resolveUnitPriceForDispense(PrescriptionItem $item, ?InventoryItem $inventoryItem): float
+    {
+        $itemUnitPrice = (float) ($item->unit_price ?? 0);
+        if ($itemUnitPrice > 0) {
+            return $itemUnitPrice;
+        }
+
+        $inventoryPrice = (float) ($inventoryItem?->selling_price ?? $inventoryItem?->unit_price ?? 0);
+        if ($inventoryPrice > 0) {
+            return $inventoryPrice;
+        }
+
+        return $this->resolveFallbackUnitPrice($item->medicine_name ?? null);
+    }
+
+    protected function resolveFallbackUnitPrice(?string $medicineName): float
+    {
+        if (!$medicineName) {
+            return 0;
+        }
+
+        $key = strtolower(trim($medicineName));
+        $map = [
+            'paracetamol 500mg' => 12,
+            'paracetamol 650mg' => 16,
+            'ibuprofen 200mg' => 18,
+            'ibuprofen 400mg' => 28,
+            'aspirin 75mg' => 10,
+            'diclofenac 50mg' => 35,
+            'naproxen 500mg' => 45,
+            'amoxicillin 250mg' => 30,
+            'amoxicillin 500mg' => 45,
+            'azithromycin 250mg' => 70,
+            'azithromycin 500mg' => 120,
+            'ciprofloxacin 500mg' => 85,
+            'metronidazole 400mg' => 45,
+            'cephalexin 500mg' => 60,
+            'doxycycline 100mg' => 55,
+            'augmentin 625mg' => 120,
+            'amlodipine 5mg' => 25,
+            'amlodipine 10mg' => 35,
+            'losartan 50mg' => 40,
+            'atenolol 50mg' => 20,
+            'metoprolol 25mg' => 22,
+            'lisinopril 10mg' => 30,
+            'enalapril 5mg' => 20,
+            'metformin 500mg' => 18,
+            'metformin 850mg' => 24,
+            'glimepiride 2mg' => 20,
+            'glibenclamide 5mg' => 15,
+            'sitagliptin 100mg' => 85,
+            'omeprazole 20mg' => 30,
+            'pantoprazole 40mg' => 40,
+            'ranitidine 150mg' => 22,
+            'domperidone 10mg' => 18,
+            'ondansetron 4mg' => 60,
+            'loperamide 2mg' => 15,
+            'antacid suspension' => 240,
+            'salbutamol inhaler 100mcg' => 950,
+            'montelukast 10mg' => 60,
+            'cetirizine 10mg' => 25,
+            'loratadine 10mg' => 30,
+            'fexofenadine 180mg' => 80,
+            'chlorpheniramine 4mg' => 12,
+            'dextromethorphan syrup' => 350,
+            'guaifenesin 100mg/5ml' => 320,
+            'ambroxol 30mg' => 35,
+            'pseudoephedrine 60mg' => 25,
+        ];
+
+        if (array_key_exists($key, $map)) {
+            return (float) $map[$key];
+        }
+
+        if (str_contains($key, 'inhaler')) {
+            return 950;
+        }
+        if (str_contains($key, 'syrup') || str_contains($key, 'suspension')) {
+            return 320;
+        }
+        if (str_contains($key, 'drops')) {
+            return 260;
+        }
+        if (str_contains($key, 'cream') || str_contains($key, 'ointment') || str_contains($key, 'gel')) {
+            return 280;
+        }
+        if (str_contains($key, 'capsule') || str_contains($key, 'tablet') || str_contains($key, 'mg')) {
+            return 30;
+        }
+
+        return 40;
+    }
+
     protected function formatLowStockAlert(InventoryItem $inventoryItem): array
     {
         return [
@@ -366,4 +500,3 @@ class PrescriptionController extends Controller
         ];
     }
 }
-

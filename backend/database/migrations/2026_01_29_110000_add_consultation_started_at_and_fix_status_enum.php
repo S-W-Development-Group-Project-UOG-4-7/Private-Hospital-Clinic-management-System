@@ -16,11 +16,13 @@ return new class extends Migration
             }
         });
 
-        // For PostgreSQL, we need to modify the enum by altering the column type
-        // First, drop the enum constraint and recreate with new values
-        DB::statement("ALTER TABLE queue_entries DROP CONSTRAINT IF EXISTS queue_entries_status_check");
-        DB::statement("ALTER TABLE queue_entries ALTER COLUMN status TYPE VARCHAR(50)");
-        DB::statement("ALTER TABLE queue_entries ADD CONSTRAINT queue_entries_status_check CHECK (status IN ('waiting', 'in_consultation', 'in_progress', 'completed', 'cancelled', 'no_show'))");
+        if (Schema::getConnection()->getDriverName() === 'pgsql') {
+            // For PostgreSQL, we need to modify the enum by altering the column type
+            // First, drop the enum constraint and recreate with new values
+            DB::statement("ALTER TABLE queue_entries DROP CONSTRAINT IF EXISTS queue_entries_status_check");
+            DB::statement("ALTER TABLE queue_entries ALTER COLUMN status TYPE VARCHAR(50)");
+            DB::statement("ALTER TABLE queue_entries ADD CONSTRAINT queue_entries_status_check CHECK (status IN ('waiting', 'in_consultation', 'in_progress', 'completed', 'cancelled', 'no_show'))");
+        }
     }
 
     public function down(): void
@@ -31,8 +33,10 @@ return new class extends Migration
             }
         });
 
-        // Revert enum back to original values
-        DB::statement("ALTER TABLE queue_entries DROP CONSTRAINT IF EXISTS queue_entries_status_check");
-        DB::statement("ALTER TABLE queue_entries ADD CONSTRAINT queue_entries_status_check CHECK (status IN ('waiting', 'in_consultation', 'completed', 'cancelled'))");
+        if (Schema::getConnection()->getDriverName() === 'pgsql') {
+            // Revert enum back to original values
+            DB::statement("ALTER TABLE queue_entries DROP CONSTRAINT IF EXISTS queue_entries_status_check");
+            DB::statement("ALTER TABLE queue_entries ADD CONSTRAINT queue_entries_status_check CHECK (status IN ('waiting', 'in_consultation', 'completed', 'cancelled'))");
+        }
     }
 };

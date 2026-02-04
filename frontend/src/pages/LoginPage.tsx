@@ -178,7 +178,7 @@ const LoginPage: React.FC = () => {
                   required
                   autoComplete="email"
                   value={loginId}
-                  onChange={(e) => setLoginId(e.target.value)}
+                  onChange={(e) => setLoginId(e.target.value.replace(/\s+/g, ''))}
                   className="w-full px-4 py-3 text-gray-900 transition bg-white border border-gray-300 rounded-lg shadow-sm outline-none placeholder:text-gray-500 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                   placeholder="Enter your email"
                 />

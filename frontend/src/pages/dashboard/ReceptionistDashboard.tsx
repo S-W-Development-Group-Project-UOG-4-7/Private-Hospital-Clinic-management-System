@@ -26,6 +26,7 @@ import type {
   ReceptionistDashboardStats,
   ReceptionistDoctor,
   ReceptionistPatient,
+  ClinicSlotAvailability,
   Referral,
 } from '../../types/receptionist';
 
@@ -48,6 +49,16 @@ const safeParseJson = (value: string | null) => {
   }
 };
 
+const buildPatientName = (invoice: Invoice) => {
+  if (invoice.patient) {
+    const first = invoice.patient.first_name || '';
+    const last = invoice.patient.last_name || '';
+    const full = `${first} ${last}`.trim();
+    return full || `Patient #${invoice.patient_id}`;
+  }
+  return `Patient #${invoice.patient_id}`;
+};
+
 const ReceptionistDashboard: React.FC = () => {
   const navigate = useNavigate();
   const authUser = useMemo(() => safeParseJson(localStorage.getItem('authUser')), []);
@@ -67,6 +78,8 @@ const ReceptionistDashboard: React.FC = () => {
 
   const [doctorsLoading, setDoctorsLoading] = useState(true);
   const [doctors, setDoctors] = useState<ReceptionistDoctor[]>([]);
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
   const [patientsLoading, setPatientsLoading] = useState(false);
   const [patientsPage, setPatientsPage] = useState(1);
@@ -97,14 +110,32 @@ const ReceptionistDashboard: React.FC = () => {
   const appointmentPatientSearchTimer = React.useRef<number | null>(null);
   const [appointmentForm, setAppointmentForm] = useState({
     patient_id: '',
+    department_id: '',
+    doctor_id: '',
     appointment_date: '',
     appointment_time: '',
     type: 'in_person' as 'in_person' | 'telemedicine',
     status: 'scheduled' as 'scheduled' | 'completed' | 'cancelled',
   });
+  const [availableDoctors, setAvailableDoctors] = useState<ReceptionistDoctor[]>([]);
+  const [availableDoctorsLoading, setAvailableDoctorsLoading] = useState(false);
+  const [availableDoctorsError, setAvailableDoctorsError] = useState<string | null>(null);
+
+  const [slotCalendar, setSlotCalendar] = useState<ClinicSlotAvailability[]>([]);
+  const [slotCalendarLoading, setSlotCalendarLoading] = useState(false);
+  const [slotCalendarError, setSlotCalendarError] = useState<string | null>(null);
+  const [slotClinicId, setSlotClinicId] = useState<number | null>(null);
+  const [slotClinicName, setSlotClinicName] = useState<string | null>(null);
+  const [slotClinicLoading, setSlotClinicLoading] = useState(false);
+  const [slotClinicError, setSlotClinicError] = useState<string | null>(null);
 
   const [queueLoading, setQueueLoading] = useState(false);
-  const [queueDate, setQueueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [queueDate, setQueueDate] = useState(() => {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  });
+  const [queueDepartmentFilter, setQueueDepartmentFilter] = useState('');
   const [queueDoctorFilter, setQueueDoctorFilter] = useState('');
   const [queueStartTime, setQueueStartTime] = useState('');
   const [queueEndTime, setQueueEndTime] = useState('');
@@ -113,6 +144,7 @@ const ReceptionistDashboard: React.FC = () => {
   const [checkInSaving, setCheckInSaving] = useState(false);
   const [checkInForm, setCheckInForm] = useState({
     patient_id: '',
+    department_id: '',
     doctor_id: '',
     appointment_id: '',
   });
@@ -129,6 +161,28 @@ const ReceptionistDashboard: React.FC = () => {
     description: '',
     due_date: '',
   });
+
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('en-LK', {
+        style: 'currency',
+        currency: 'LKR',
+        minimumFractionDigits: 2,
+      }),
+    []
+  );
+
+  const queueDoctors = useMemo(() => {
+    const departmentId = Number(queueDepartmentFilter);
+    if (!Number.isFinite(departmentId) || departmentId <= 0) return doctors;
+    return doctors.filter((doctor) => doctor.department?.id === departmentId);
+  }, [doctors, queueDepartmentFilter]);
+
+  const checkInDoctors = useMemo(() => {
+    const departmentId = Number(checkInForm.department_id);
+    if (!Number.isFinite(departmentId) || departmentId <= 0) return [];
+    return doctors.filter((doctor) => doctor.department?.id === departmentId);
+  }, [checkInForm.department_id, doctors]);
 
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -192,6 +246,57 @@ const ReceptionistDashboard: React.FC = () => {
     }
   }, []);
 
+  const loadDepartments = useCallback(async () => {
+    setDepartmentsLoading(true);
+    try {
+      const resp = await receptionistApi.departments.list();
+      setDepartments(Array.isArray(resp.data) ? resp.data : []);
+    } catch {
+      setDepartments([]);
+    } finally {
+      setDepartmentsLoading(false);
+    }
+  }, []);
+
+  const loadAvailableDoctors = useCallback(async (params: { department_id: number; date: string; time: string }) => {
+    setAvailableDoctorsLoading(true);
+    setAvailableDoctorsError(null);
+    try {
+      const resp = await receptionistApi.doctors.list({
+        department_id: params.department_id,
+        date: params.date,
+        time: params.time,
+        available_only: true,
+        is_active: true,
+      });
+      const doctorData = Array.isArray(resp.data) ? resp.data : [];
+      setAvailableDoctors(doctorData);
+
+      if (!editingAppointment) {
+        const nextDoctor = doctorData
+          .slice()
+          .sort((a, b) => {
+            const aCount = a.appointment_count ?? 0;
+            const bCount = b.appointment_count ?? 0;
+            if (aCount !== bCount) return aCount - bCount;
+            const aName = `${a.first_name || ''} ${a.last_name || ''}`.trim();
+            const bName = `${b.first_name || ''} ${b.last_name || ''}`.trim();
+            return aName.localeCompare(bName);
+          })[0];
+
+        setAppointmentForm((prev) => ({
+          ...prev,
+          doctor_id: nextDoctor ? String(nextDoctor.id) : '',
+        }));
+      }
+    } catch (e: any) {
+      setAvailableDoctors([]);
+      setAvailableDoctorsError(e?.message || 'Failed to load available doctors');
+    } finally {
+      setAvailableDoctorsLoading(false);
+    }
+  }, [editingAppointment]);
+
   const loadPatients = useCallback(async (page = 1) => {
     setError(null);
     setPatientsLoading(true);
@@ -220,6 +325,15 @@ const ReceptionistDashboard: React.FC = () => {
     }
   }, [appointmentsQueryDate]);
 
+  const slotSummaries = useMemo(() => {
+    return slotCalendar
+      .map((slot) => ({
+        time: slot.time,
+        available: slot.available_count,
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [slotCalendar]);
+
   const loadAppointmentPatients = useCallback(async (search = '') => {
     setAppointmentPatientsLoading(true);
     try {
@@ -238,6 +352,7 @@ const ReceptionistDashboard: React.FC = () => {
     try {
       const resp = await receptionistApi.queue.list({
         date: queueDate,
+        department_id: queueDepartmentFilter ? Number(queueDepartmentFilter) : undefined,
         doctor_id: queueDoctorFilter && queueDoctorFilter !== '0' ? Number(queueDoctorFilter) : queueDoctorFilter === '0' ? 0 : undefined,
         start_time: queueStartTime || undefined,
         end_time: queueEndTime || undefined,
@@ -248,7 +363,7 @@ const ReceptionistDashboard: React.FC = () => {
     } finally {
       setQueueLoading(false);
     }
-  }, [queueDate, queueDoctorFilter, queueStartTime, queueEndTime]);
+  }, [queueDate, queueDepartmentFilter, queueDoctorFilter, queueStartTime, queueEndTime]);
 
   const loadInvoices = useCallback(async (page = 1) => {
     setError(null);
@@ -298,7 +413,41 @@ const ReceptionistDashboard: React.FC = () => {
   useEffect(() => {
     loadStats();
     loadDoctors();
-  }, [loadDoctors, loadStats]);
+    loadDepartments();
+  }, [loadDoctors, loadDepartments, loadStats]);
+
+  useEffect(() => {
+    let isActive = true;
+    const loadClinics = async () => {
+      setSlotClinicLoading(true);
+      setSlotClinicError(null);
+      try {
+        const resp = await receptionistApi.clinics.list();
+        const clinics = Array.isArray(resp.data) ? resp.data : [];
+        const opdClinic = clinics.find((clinic) => clinic.name?.toLowerCase() === 'opd');
+        const selected = opdClinic || clinics[0];
+        if (isActive) {
+          setSlotClinicId(selected?.id ?? null);
+          setSlotClinicName(selected?.name ?? null);
+        }
+      } catch (e: any) {
+        if (isActive) {
+          setSlotClinicId(null);
+          setSlotClinicName(null);
+          setSlotClinicError(e?.message || 'Failed to load clinics');
+        }
+      } finally {
+        if (isActive) {
+          setSlotClinicLoading(false);
+        }
+      }
+    };
+
+    loadClinics();
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (active === 'patients') {
@@ -337,6 +486,88 @@ const ReceptionistDashboard: React.FC = () => {
     referralsLoading,
     scheduleLoaded,
     scheduleLoading,
+  ]);
+
+  useEffect(() => {
+    if (!queueDepartmentFilter) return;
+    const departmentId = Number(queueDepartmentFilter);
+    if (!Number.isFinite(departmentId) || departmentId <= 0) return;
+    if (queueDoctorFilter && queueDoctorFilter !== '0') {
+      const doctorId = Number(queueDoctorFilter);
+      const doctorInDepartment = doctors.some((doctor) => doctor.id === doctorId && doctor.department?.id === departmentId);
+      if (!doctorInDepartment) {
+        setQueueDoctorFilter('');
+      }
+    }
+  }, [queueDepartmentFilter, queueDoctorFilter, doctors]);
+
+  useEffect(() => {
+    if (!appointmentModalOpen) return;
+    const departmentId = Number(appointmentForm.department_id);
+    if (!Number.isFinite(departmentId) || departmentId <= 0) {
+      setAvailableDoctors([]);
+      return;
+    }
+    if (!appointmentForm.appointment_date || !appointmentForm.appointment_time) {
+      setAvailableDoctors([]);
+      return;
+    }
+
+    loadAvailableDoctors({
+      department_id: departmentId,
+      date: appointmentForm.appointment_date,
+      time: appointmentForm.appointment_time,
+    });
+  }, [
+    appointmentModalOpen,
+    appointmentForm.department_id,
+    appointmentForm.appointment_date,
+    appointmentForm.appointment_time,
+    loadAvailableDoctors,
+  ]);
+
+  useEffect(() => {
+    if (!appointmentModalOpen) return;
+    const departmentId = Number(appointmentForm.department_id);
+    if (!appointmentForm.appointment_date || !Number.isFinite(departmentId) || departmentId <= 0) {
+      setSlotCalendar([]);
+      setSlotCalendarError(null);
+      setSlotCalendarLoading(false);
+      return;
+    }
+    if (!slotClinicId) {
+      setSlotCalendar([]);
+      setSlotCalendarError(slotClinicError || 'No clinic available for slots');
+      setSlotCalendarLoading(false);
+      return;
+    }
+
+    setSlotCalendarLoading(true);
+    setSlotCalendarError(null);
+    receptionistApi.slots
+      .list({
+        clinic_id: slotClinicId,
+        date: appointmentForm.appointment_date,
+        department_id: departmentId,
+        include_all: true,
+        include_unassigned: slotClinicName?.toLowerCase() === 'opd',
+      })
+      .then((resp) => {
+        setSlotCalendar(Array.isArray(resp.data) ? resp.data : []);
+      })
+      .catch((e: any) => {
+        setSlotCalendar([]);
+        setSlotCalendarError(e?.message || 'Failed to load time slots');
+      })
+      .finally(() => {
+        setSlotCalendarLoading(false);
+      });
+  }, [
+    appointmentModalOpen,
+    appointmentForm.appointment_date,
+    appointmentForm.department_id,
+    slotClinicId,
+    slotClinicError,
   ]);
 
   const openCreatePatient = () => {
@@ -414,11 +645,14 @@ const ReceptionistDashboard: React.FC = () => {
     setEditingAppointment(null);
     setAppointmentForm({
       patient_id: '',
+      department_id: '',
+      doctor_id: '',
       appointment_date: '',
       appointment_time: '',
       type: 'in_person',
       status: 'scheduled',
     });
+    setAvailableDoctors([]);
     setAppointmentPatientSearch('');
     loadAppointmentPatients('');
     setAppointmentModalOpen(true);
@@ -428,6 +662,8 @@ const ReceptionistDashboard: React.FC = () => {
     setEditingAppointment(appt);
     setAppointmentForm({
       patient_id: String(appt.patient_id),
+      department_id: appt.department?.id ? String(appt.department.id) : appt.department_id ? String(appt.department_id) : '',
+      doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
       appointment_date: appt.appointment_date || '',
       appointment_time: (appt.appointment_time || '').slice(0, 5),
       type: appt.type || 'in_person',
@@ -441,6 +677,11 @@ const ReceptionistDashboard: React.FC = () => {
     if (appointmentSaving) return;
     setAppointmentModalOpen(false);
     setEditingAppointment(null);
+    setAvailableDoctors([]);
+    setAvailableDoctorsError(null);
+    setSlotCalendar([]);
+    setSlotCalendarError(null);
+    setSlotCalendarLoading(false);
   };
 
   const submitAppointment = async (e: React.FormEvent) => {
@@ -453,10 +694,20 @@ const ReceptionistDashboard: React.FC = () => {
         setError('Patient id is required');
         return;
       }
+      if (!appointmentForm.department_id) {
+        setError('Department is required');
+        return;
+      }
+      if (!appointmentForm.doctor_id) {
+        setError('No available doctor for the selected time');
+        return;
+      }
 
       if (editingAppointment) {
         await receptionistApi.appointments.update(editingAppointment.id, {
           patient_id: patientId,
+          department_id: Number(appointmentForm.department_id),
+          doctor_id: Number(appointmentForm.doctor_id),
           appointment_date: appointmentForm.appointment_date,
           appointment_time: appointmentForm.appointment_time,
           type: appointmentForm.type,
@@ -466,6 +717,8 @@ const ReceptionistDashboard: React.FC = () => {
       } else {
         const created = await receptionistApi.appointments.create({
           patient_id: patientId,
+          department_id: Number(appointmentForm.department_id),
+          doctor_id: Number(appointmentForm.doctor_id),
           appointment_date: appointmentForm.appointment_date,
           appointment_time: appointmentForm.appointment_time,
           type: appointmentForm.type,
@@ -512,6 +765,7 @@ const ReceptionistDashboard: React.FC = () => {
   const openCheckIn = () => {
     setCheckInForm({
       patient_id: '',
+      department_id: queueDepartmentFilter || '',
       doctor_id: '',
       appointment_id: '',
     });
@@ -529,16 +783,18 @@ const ReceptionistDashboard: React.FC = () => {
     setCheckInSaving(true);
     try {
       const patientId = checkInForm.patient_id.trim();
+      const departmentId = Number(checkInForm.department_id);
       const doctorId = Number(checkInForm.doctor_id);
       const appointmentId = checkInForm.appointment_id.trim() === '' ? null : Number(checkInForm.appointment_id);
 
-      if (patientId === '' || !Number.isFinite(doctorId)) {
-        setError('Invalid patient or doctor id');
+      if (patientId === '' || !Number.isFinite(departmentId) || !Number.isFinite(doctorId)) {
+        setError('Invalid patient, department, or doctor id');
         return;
       }
 
       await receptionistApi.queue.checkIn({
         patient_id: patientId,
+        department_id: departmentId,
         doctor_id: doctorId,
         appointment_id: Number.isFinite(appointmentId as any) ? (appointmentId as number) : null,
         queue_date: queueDate,
@@ -622,6 +878,116 @@ const ReceptionistDashboard: React.FC = () => {
     } catch (e: any) {
       setError(e?.message || 'Failed to record payment');
     }
+  };
+
+  const handlePrintInvoice = (invoice: Invoice) => {
+    const invoiceNumber = invoice.invoice_number || `INV-${invoice.id}`;
+    const invoiceDate = invoice.issued_at || new Date().toISOString().slice(0, 10);
+    const dueDate = invoice.due_date || '—';
+    const patientName = buildPatientName(invoice);
+    const amountValue = Number(invoice.amount ?? 0);
+    const amount = currencyFormatter.format(Number.isFinite(amountValue) ? amountValue : 0);
+
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      toast.error('Unable to open print window');
+      return;
+    }
+
+    const statusClass =
+      invoice.status === 'paid'
+        ? 'status-paid'
+        : invoice.status === 'partial'
+          ? 'status-partial'
+          : 'status-unpaid';
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice ${invoiceNumber}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
+          .header { text-align: center; margin-bottom: 24px; }
+          .header h1 { margin: 0; font-size: 22px; }
+          .header p { margin: 4px 0; color: #6b7280; }
+          .info { display: flex; gap: 24px; margin-bottom: 24px; }
+          .info div { flex: 1; }
+          .label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+          .value { font-weight: 600; margin-top: 4px; }
+          .summary { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-top: 16px; }
+          .summary-row { display: flex; justify-content: space-between; margin: 8px 0; }
+          .total { font-size: 18px; font-weight: 700; }
+          .status { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 999px; font-size: 12px; text-transform: uppercase; }
+          .status-unpaid { background: #fee2e2; color: #991b1b; }
+          .status-paid { background: #dcfce7; color: #166534; }
+          .status-partial { background: #ffedd5; color: #9a3412; }
+          .footer { margin-top: 32px; text-align: center; color: #6b7280; font-size: 12px; }
+          @media print { body { padding: 12px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Private Hospital & Clinic</h1>
+          <p>Reception Billing</p>
+          <p>123 Medical Center Drive, Healthcare City | Tel: (555) 123-4567</p>
+        </div>
+
+        <div class="info">
+          <div>
+            <div class="label">Invoice</div>
+            <div class="value">${invoiceNumber}</div>
+          </div>
+          <div>
+            <div class="label">Issued</div>
+            <div class="value">${invoiceDate}</div>
+          </div>
+          <div>
+            <div class="label">Due</div>
+            <div class="value">${dueDate}</div>
+          </div>
+        </div>
+
+        <div class="info">
+          <div>
+            <div class="label">Patient</div>
+            <div class="value">${patientName}</div>
+          </div>
+          <div>
+            <div class="label">Amount</div>
+            <div class="value">${amount}</div>
+          </div>
+          <div>
+            <div class="label">Status</div>
+            <div class="value">
+              <span class="status ${statusClass}">${invoice.status}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-row total">
+            <span>Total Amount</span>
+            <span>${amount}</span>
+          </div>
+        </div>
+
+        ${invoice.description ? `<div class="summary"><div class="label">Notes</div><div class="value">${invoice.description}</div></div>` : ''}
+
+        <div class="footer">
+          <p>Please collect payment at the reception.</p>
+          <p>Generated on ${new Date().toLocaleString()}</p>
+        </div>
+
+        <script>
+          window.onload = function() { window.print(); };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
   };
 
   const openCreateSchedule = () => {
@@ -711,15 +1077,16 @@ const ReceptionistDashboard: React.FC = () => {
 
   const exportQueueCsv = () => {
     const rows = [
-      ['queue_date', 'queue_number', 'status', 'patient_id', 'patient_name', 'doctor_id', 'doctor_name'],
+      ['queue_date', 'queue_number', 'status', 'patient_id', 'patient_name', 'doctor_id', 'doctor_name', 'department'],
       ...queueItems.map((q) => [
         q.queue_date,
-        String(q.queue_number),
+        q.queue_number ?? '',
         q.status,
         String(q.patient_id),
         `${q.patient?.first_name || ''} ${q.patient?.last_name || ''}`.trim(),
         q.doctor_id ? String(q.doctor_id) : '',
         `${q.doctor?.first_name || ''} ${q.doctor?.last_name || ''}`.trim(),
+        q.appointment?.department?.name || q.doctor?.department?.name || '',
       ]),
     ];
 
@@ -1418,10 +1785,11 @@ const ReceptionistDashboard: React.FC = () => {
                   </button>
                   <button
                     onClick={async () => {
-                      if (!window.confirm('Clear all queue entries for the selected date and doctor? This cannot be undone.')) return;
+                      if (!window.confirm('Clear all queue entries for the selected date and filters? This cannot be undone.')) return;
                       try {
                         toast.loading('Clearing queue...');
                         const params: any = { date: queueDate };
+                        if (queueDepartmentFilter !== '') params.department_id = Number(queueDepartmentFilter);
                         if (queueDoctorFilter !== '') params.doctor_id = Number(queueDoctorFilter);
                         const resp = await receptionistApi.queue.clear(params);
                         toast.dismiss();
@@ -1440,7 +1808,7 @@ const ReceptionistDashboard: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-lg shadow-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div className="space-y-2">
                       <input
                         type="date"
@@ -1466,13 +1834,26 @@ const ReceptionistDashboard: React.FC = () => {
                       </div>
                     </div>
                     <select
+                      value={queueDepartmentFilter}
+                      onChange={(e) => setQueueDepartmentFilter(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      disabled={departmentsLoading}
+                    >
+                      <option value="">All Departments</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
                       value={queueDoctorFilter}
                       onChange={(e) => setQueueDoctorFilter(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg"
                       disabled={doctorsLoading}
                     >
                       <option value="">All Doctors</option>
-                      {doctors.map((d) => (
+                      {queueDoctors.map((d) => (
                         <option key={d.id} value={d.id}>
                           {`${d.first_name || ''} ${d.last_name || ''}`.trim() || d.email}
                         </option>
@@ -1500,6 +1881,7 @@ const ReceptionistDashboard: React.FC = () => {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Doctor</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                           </tr>
@@ -1507,7 +1889,7 @@ const ReceptionistDashboard: React.FC = () => {
                         <tbody className="divide-y divide-gray-200">
                           {queueItems.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
+                              <td colSpan={7} className="px-6 py-8 text-center text-gray-600">
                                 No queue entries.
                               </td>
                             </tr>
@@ -1530,6 +1912,9 @@ const ReceptionistDashboard: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-600">
                                   {q.doctor ? `${q.doctor.first_name || ''} ${q.doctor.last_name || ''}`.trim() : q.doctor_id ? `#${q.doctor_id}` : '-'}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-600">
+                                  {q.appointment?.department?.name || q.doctor?.department?.name || '-'}
                                 </td>
                                 <td className="px-6 py-4">
                                   <span
@@ -1629,7 +2014,11 @@ const ReceptionistDashboard: React.FC = () => {
                                 <td className="px-6 py-4 text-sm text-gray-600">
                                   {inv.patient ? `${inv.patient.first_name || ''} ${inv.patient.last_name || ''}`.trim() : `#${inv.patient_id}`}
                                 </td>
-                                <td className="px-6 py-4 text-sm text-gray-900">{inv.amount}</td>
+                                <td className="px-6 py-4 text-sm text-gray-900">
+                                  {currencyFormatter.format(
+                                    Number.isFinite(Number(inv.amount)) ? Number(inv.amount) : 0
+                                  )}
+                                </td>
                                 <td className="px-6 py-4">
                                   <span
                                     className={`px-2 py-1 rounded text-xs ${
@@ -1646,16 +2035,24 @@ const ReceptionistDashboard: React.FC = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                  {inv.status !== 'paid' && inv.status !== 'cancelled' ? (
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <button
-                                      onClick={() => recordPayment(inv)}
-                                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                                      onClick={() => handlePrintInvoice(inv)}
+                                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-full text-xs transition duration-300"
                                     >
-                                      Pay
+                                      Print
                                     </button>
-                                  ) : (
-                                    <span className="text-sm text-gray-500">-</span>
-                                  )}
+                                    {inv.status !== 'paid' && inv.status !== 'cancelled' ? (
+                                      <button
+                                        onClick={() => recordPayment(inv)}
+                                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                                      >
+                                        Pay
+                                      </button>
+                                    ) : (
+                                      <span className="text-sm text-gray-500">-</span>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))
@@ -1861,7 +2258,7 @@ const ReceptionistDashboard: React.FC = () => {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">Patient Queue Report</h2>
-                    <p className="text-gray-600 text-sm">Export the queue list by doctor/date</p>
+                    <p className="text-gray-600 text-sm">Export the queue list by department, doctor, and date</p>
                   </div>
                   <button
                     onClick={exportQueueCsv}
@@ -1873,7 +2270,7 @@ const ReceptionistDashboard: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-lg shadow-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <input
                       type="date"
                       value={queueDate}
@@ -1881,13 +2278,26 @@ const ReceptionistDashboard: React.FC = () => {
                       className="w-full px-3 py-2 border rounded-lg"
                     />
                     <select
+                      value={queueDepartmentFilter}
+                      onChange={(e) => setQueueDepartmentFilter(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      disabled={departmentsLoading}
+                    >
+                      <option value="">All Departments</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
                       value={queueDoctorFilter}
                       onChange={(e) => setQueueDoctorFilter(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg"
                       disabled={doctorsLoading}
                     >
                       <option value="">All Doctors</option>
-                      {doctors.map((d) => (
+                      {queueDoctors.map((d) => (
                         <option key={d.id} value={d.id}>
                           {`${d.first_name || ''} ${d.last_name || ''}`.trim() || d.email}
                         </option>
@@ -1911,25 +2321,29 @@ const ReceptionistDashboard: React.FC = () => {
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Queue</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Doctor</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {queueItems.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="px-6 py-8 text-center text-gray-600">
+                            <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
                               No data.
                             </td>
                           </tr>
                         ) : (
                           queueItems.map((q) => (
                             <tr key={q.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 text-sm text-gray-900">#{q.queue_number}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900">#{q.queue_number ?? '-'}</td>
                               <td className="px-6 py-4 text-sm text-gray-600">
                                 {q.patient ? `${q.patient.first_name || ''} ${q.patient.last_name || ''}`.trim() : `#${q.patient_id}`}
                               </td>
                               <td className="px-6 py-4 text-sm text-gray-600">
                                 {q.doctor ? `${q.doctor.first_name || ''} ${q.doctor.last_name || ''}`.trim() : q.doctor_id ? `#${q.doctor_id}` : '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {q.appointment?.department?.name || q.doctor?.department?.name || '-'}
                               </td>
                               <td className="px-6 py-4 text-sm text-gray-600">{q.status}</td>
                             </tr>
@@ -2081,6 +2495,33 @@ const ReceptionistDashboard: React.FC = () => {
                   <div className="text-xs text-gray-500 mt-1">Selected ID: {appointmentForm.patient_id || '-'}</div>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
+                  <select
+                    required
+                    value={appointmentForm.department_id}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAppointmentForm((p) => ({
+                        ...p,
+                        department_id: value,
+                        doctor_id: '',
+                      }));
+                      setAvailableDoctors([]);
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="">Select department...</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                  {departmentsLoading && (
+                    <div className="text-xs text-gray-500 mt-1">Loading departments...</div>
+                  )}
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                   <input
                     type="date"
@@ -2099,6 +2540,87 @@ const ReceptionistDashboard: React.FC = () => {
                     onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_time: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-lg"
                   />
+                </div>
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Time Slot Calendar</label>
+                    <span className="text-xs text-gray-500">Click a slot to auto-fill time</span>
+                  </div>
+                  {!appointmentForm.department_id || !appointmentForm.appointment_date ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
+                      Select a department and date to load available slots.
+                    </div>
+                  ) : slotClinicLoading ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading clinic slots...</div>
+                  ) : slotCalendarLoading ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading available slots...</div>
+                  ) : slotSummaries.length === 0 ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
+                      No slots available for the selected date.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {slotSummaries.map((slot) => {
+                        const isSelected = appointmentForm.appointment_time === slot.time;
+                        const isDisabled = slot.available === 0;
+                        return (
+                          <button
+                            key={slot.time}
+                            type="button"
+                            disabled={isDisabled}
+                            onClick={() => setAppointmentForm((p) => ({ ...p, appointment_time: slot.time }))}
+                            className={`rounded-lg border px-3 py-2 text-left transition ${
+                              isSelected
+                                ? 'border-teal-600 bg-teal-600 text-white'
+                                : isDisabled
+                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-200 bg-white hover:border-teal-300 hover:bg-teal-50 text-gray-800'
+                            }`}
+                          >
+                            <div className="text-sm font-semibold">{slot.time}</div>
+                            <div className={`text-xs ${isSelected ? 'text-teal-100' : isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {slot.available > 0 ? `${slot.available} available` : 'Fully booked'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {slotCalendarError && <div className="text-xs text-red-600 mt-2">{slotCalendarError}</div>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Available Doctor (Auto Assigned)</label>
+                  <select
+                    value={appointmentForm.doctor_id}
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
+                  >
+                    {!appointmentForm.department_id || !appointmentForm.appointment_date || !appointmentForm.appointment_time ? (
+                      <option value="">Select department, date, and time</option>
+                    ) : availableDoctorsLoading ? (
+                      <option value="">Loading doctors...</option>
+                    ) : availableDoctors.length === 0 ? (
+                      <option value="">No available doctors</option>
+                    ) : (
+                      <>
+                        {appointmentForm.doctor_id &&
+                          !availableDoctors.some((doc) => String(doc.id) === appointmentForm.doctor_id) && (
+                            <option value={appointmentForm.doctor_id}>Current doctor</option>
+                          )}
+                        {availableDoctors.map((doc) => (
+                          <option key={doc.id} value={doc.id}>
+                            {`${doc.first_name || ''} ${doc.last_name || ''}`.trim()} • ${doc.appointment_count ?? 0} appts
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  {availableDoctorsError && (
+                    <div className="text-xs text-red-600 mt-1">{availableDoctorsError}</div>
+                  )}
+                  <div className="text-xs text-gray-500 mt-1">
+                    Doctor is auto-selected with the lowest appointment load.
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -2167,21 +2689,41 @@ const ReceptionistDashboard: React.FC = () => {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
+                <select
+                  required
+                  value={checkInForm.department_id}
+                  onChange={(e) => setCheckInForm((p) => ({ ...p, department_id: e.target.value, doctor_id: '' }))}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  disabled={departmentsLoading}
+                >
+                  <option value="">Select department</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Doctor *</label>
                 <select
                   required
                   value={checkInForm.doctor_id}
                   onChange={(e) => setCheckInForm((p) => ({ ...p, doctor_id: e.target.value }))}
                   className="w-full px-3 py-2 border rounded-lg"
-                  disabled={doctorsLoading}
+                  disabled={doctorsLoading || !checkInForm.department_id}
                 >
                   <option value="">Select doctor</option>
-                  {doctors.map((d) => (
+                  {checkInDoctors.map((d) => (
                     <option key={d.id} value={d.id}>
                       {`${d.first_name || ''} ${d.last_name || ''}`.trim() || d.email}
                     </option>
                   ))}
                 </select>
+                {checkInForm.department_id && checkInDoctors.length === 0 && !doctorsLoading && (
+                  <div className="text-xs text-gray-500 mt-1">No doctors found for this department.</div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Appointment ID (optional)</label>

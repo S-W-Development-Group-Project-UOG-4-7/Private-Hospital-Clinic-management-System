@@ -82,6 +82,15 @@ const InventoryManagement: React.FC = () => {
   const [stockUpdating, setStockUpdating] = useState(false);
   const [stockBatchNumber, setStockBatchNumber] = useState<string>('');
   const [stockExpiryDate, setStockExpiryDate] = useState<string>('');
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('en-LK', {
+        style: 'currency',
+        currency: 'LKR',
+        minimumFractionDigits: 2,
+      }),
+    []
+  );
   
   // Searchable Medicine Dropdown State
   const [medicineSearch, setMedicineSearch] = useState<string>('');
@@ -584,7 +593,7 @@ const InventoryManagement: React.FC = () => {
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Total Value</p>
-              <p className="text-3xl font-bold text-green-600 mt-1">${stats.totalValue.toFixed(2)}</p>
+              <p className="text-3xl font-bold text-green-600 mt-1">{currencyFormatter.format(stats.totalValue)}</p>
             </div>
             <div className="p-3 bg-green-100 rounded-lg">
               <DollarSign className="w-6 h-6 text-green-600" />
@@ -697,8 +706,8 @@ const InventoryManagement: React.FC = () => {
                         <StatusBadge quantity={item.quantity} reorderLevel={item.reorder_level} expiryDate={item.expiry_date} />
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <p className="font-semibold text-gray-900">${item.selling_price.toFixed(2)}</p>
-                        <p className="text-xs text-gray-500">Cost: ${item.unit_price.toFixed(2)}</p>
+                        <p className="font-semibold text-gray-900">{currencyFormatter.format(item.selling_price)}</p>
+                        <p className="text-xs text-gray-500">Cost: {currencyFormatter.format(item.unit_price)}</p>
                       </td>
                       <td className="py-4 px-6 text-center">
                         {item.expiry_date ? (
@@ -1107,11 +1116,11 @@ const InventoryManagement: React.FC = () => {
                 </div>
                 <div>
                   <span className="block text-xs text-gray-500 uppercase">Selling Price</span>
-                  <span className="text-lg font-bold text-teal-600">${viewDetailsItem.selling_price.toFixed(2)}</span>
+                  <span className="text-lg font-bold text-teal-600">{currencyFormatter.format(viewDetailsItem.selling_price)}</span>
                 </div>
                 <div>
                   <span className="block text-xs text-gray-500 uppercase">Cost Price</span>
-                  <span className="text-sm font-medium text-gray-800">${viewDetailsItem.unit_price.toFixed(2)}</span>
+                  <span className="text-sm font-medium text-gray-800">{currencyFormatter.format(viewDetailsItem.unit_price)}</span>
                 </div>
                 <div>
                   <span className="block text-xs text-gray-500 uppercase">Quantity</span>

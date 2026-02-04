@@ -44,7 +44,8 @@ class UserController extends Controller
             'username'   => ['required', 'string', 'max:255', 'unique:users'], // specific to your setup
             'email'      => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'role'       => ['required', 'exists:roles,name'], // Validate against Spatie roles table
-            'department_id' => ['nullable', 'exists:departments,id'], 
+            'phone' => [\Illuminate\Validation\Rule::requiredIf($request->role === 'doctor'), 'nullable', 'string', 'max:50'],
+            'department_id' => [\Illuminate\Validation\Rule::requiredIf($request->role === 'doctor'), 'nullable', 'exists:departments,id'],
             'password'   => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
@@ -54,6 +55,7 @@ class UserController extends Controller
             'last_name'  => $request->last_name,
             'username'   => $request->username,
             'email'      => $request->email,
+            'phone'      => $request->phone,
             'department_id' => $request->department_id, // Ensure this column exists in migration
             'password'   => Hash::make($request->password),
         ]);
@@ -90,7 +92,8 @@ class UserController extends Controller
             'username'   => ['required', 'string', 'max:255', 'unique:users,username,' . $id],
             'email'      => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $id],
             'role'       => ['required', 'exists:roles,name'],
-            'department_id' => ['nullable', 'exists:departments,id'],
+            'phone' => [\Illuminate\Validation\Rule::requiredIf($request->role === 'doctor'), 'nullable', 'string', 'max:50'],
+            'department_id' => [\Illuminate\Validation\Rule::requiredIf($request->role === 'doctor'), 'nullable', 'exists:departments,id'],
             'password'   => ['nullable', 'confirmed', Rules\Password::defaults()],
         ]);
 
@@ -100,6 +103,7 @@ class UserController extends Controller
             'last_name'  => $request->last_name,
             'username'   => $request->username,
             'email'      => $request->email,
+            'phone'      => $request->phone,
             'department_id' => $request->department_id,
         ]);
 

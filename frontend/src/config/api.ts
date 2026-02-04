@@ -22,6 +22,7 @@ export const API_ENDPOINTS = {
 
   // Patient Portal
   PATIENT_PROFILE: `${API_BASE_URL}/api/patient/profile`,
+  PATIENT_DEPARTMENTS: `${API_BASE_URL}/api/patient/departments`,
   PATIENT_APPOINTMENTS: `${API_BASE_URL}/api/patient/appointments`,
   PATIENT_TELECONSULTATIONS: `${API_BASE_URL}/api/patient/teleconsultations`,
   PATIENT_EHR: `${API_BASE_URL}/api/patient/ehr`,
@@ -44,6 +45,8 @@ export const API_ENDPOINTS = {
   RECEPTIONIST_DOCTORS: `${API_BASE_URL}/api/receptionist/doctors`,
   RECEPTIONIST_DOCTOR_SCHEDULES: `${API_BASE_URL}/api/receptionist/doctor-schedules`,
   RECEPTIONIST_REFERRALS: `${API_BASE_URL}/api/receptionist/referrals`,
+  RECEPTIONIST_DEPARTMENTS: `${API_BASE_URL}/api/receptionist/departments`,
+  SLOTS: `${API_BASE_URL}/api/slots`,
 
   // Prescriptions
   PRESCRIPTIONS: `${API_BASE_URL}/api/prescriptions`,
@@ -105,6 +108,7 @@ export const API_ENDPOINTS = {
   DOCTOR_PRESCRIPTION_SHOW: (id: string) => `${API_BASE_URL}/api/doctor/prescriptions/${id}`,
   DOCTOR_INVENTORY: `${API_BASE_URL}/api/doctor/inventory`,
   DOCTOR_LAB_ORDERS: `${API_BASE_URL}/api/doctor/labs/orders`,
+  DOCTOR_LAB_ORDER: (id: string) => `${API_BASE_URL}/api/doctor/labs/orders/${id}`,
   DOCTOR_LAB_RESULTS: (patientId: string) => `${API_BASE_URL}/api/doctor/labs/results/${patientId}`,
   DOCTOR_LAB_RESULT_REVIEW: (id: string) => `${API_BASE_URL}/api/doctor/labs/results/${id}/review`,
   DOCTOR_REFERRALS: `${API_BASE_URL}/api/doctor/referrals`,
@@ -120,6 +124,7 @@ export const API_ENDPOINTS = {
 
   // Clinics
   CLINICS: `${API_BASE_URL}/api/clinics`,
+  CLINIC_SLOTS: (id: string | number) => `${API_BASE_URL}/api/clinics/${id}/slots`,
   CLINIC_REFERRAL: `${API_BASE_URL}/api/doctor/clinic-referrals`,
 
   // Patients
