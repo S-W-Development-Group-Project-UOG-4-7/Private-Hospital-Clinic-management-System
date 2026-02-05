@@ -36,6 +36,10 @@ class DatabaseSeeder extends Seeder
             return [$roleName => $role->id];
         });
 
+        $this->call([
+            \Database\Seeders\PermissionsSeeder::class,
+        ]);
+
         $makeUniqueUsername = function (string $base): string {
             $candidate = $base;
             $suffix = 1;

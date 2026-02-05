@@ -238,7 +238,7 @@ class ReceptionistQueueController extends Controller
         $entry = QueueEntry::findOrFail($id);
 
         $validated = $request->validate([
-            'status' => ['required', Rule::in(['waiting', 'in_consultation', 'completed', 'cancelled'])],
+            'status' => ['required', Rule::in(['waiting', 'in_consultation', 'completed', 'cancelled', 'no_show'])],
         ]);
 
         $entry->status = $validated['status'];
@@ -257,6 +257,116 @@ class ReceptionistQueueController extends Controller
         }
 
         $entry->save();
+
+        return response()->json($entry->fresh()->load(['patient', 'doctor', 'appointment']));
+    }
+
+    public function callNext(Request $request)
+    {
+        $validated = $request->validate([
+            'date' => ['nullable', 'date'],
+            'doctor_id' => ['nullable', 'integer'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+        ]);
+
+        $date = $validated['date'] ?? now()->toDateString();
+
+        $query = QueueEntry::query()
+            ->whereDate('queue_date', $date)
+            ->where('status', 'waiting')
+            ->with(['patient', 'doctor', 'appointment']);
+
+        if (array_key_exists('doctor_id', $validated) && $validated['doctor_id'] !== null) {
+            $doctorId = (int) $validated['doctor_id'];
+            if ($doctorId === 0) {
+                $query->whereNull('doctor_id');
+            } else {
+                $query->where('doctor_id', $doctorId);
+            }
+        }
+
+        if (! empty($validated['department_id'])) {
+            $query->whereHas('appointment', function ($q) use ($validated) {
+                $q->where('department_id', (int) $validated['department_id']);
+            });
+        }
+
+        $entry = $query->orderBy('queue_number')->first();
+
+        if (! $entry) {
+            return response()->json(['message' => 'No waiting patients in queue.'], 404);
+        }
+
+        $entry->status = 'in_consultation';
+        $entry->called_at = now();
+        $entry->consultation_started_at = now();
+        $entry->save();
+
+        if ($entry->appointment) {
+            $entry->appointment->status = Appointment::STATUS_IN_PROGRESS;
+            $entry->appointment->save();
+        }
+
+        return response()->json($entry->fresh()->load(['patient', 'doctor', 'appointment']));
+    }
+
+    public function skip(int $id)
+    {
+        $entry = QueueEntry::findOrFail($id);
+
+        if ($entry->status !== 'waiting') {
+            return response()->json(['message' => 'Only waiting entries can be skipped.'], 422);
+        }
+
+        $max = QueueEntry::query()
+            ->whereDate('queue_date', $entry->queue_date)
+            ->where('doctor_id', $entry->doctor_id)
+            ->max('queue_number');
+
+        $entry->queue_number = ((int) $max) + 1;
+        $entry->called_at = now();
+        $entry->save();
+
+        return response()->json($entry->fresh()->load(['patient', 'doctor', 'appointment']));
+    }
+
+    public function requeue(int $id)
+    {
+        $entry = QueueEntry::findOrFail($id);
+
+        $max = QueueEntry::query()
+            ->whereDate('queue_date', $entry->queue_date)
+            ->where('doctor_id', $entry->doctor_id)
+            ->max('queue_number');
+
+        $entry->status = 'waiting';
+        $entry->queue_number = ((int) $max) + 1;
+        $entry->called_at = null;
+        $entry->consultation_started_at = null;
+        $entry->checked_out_at = null;
+        $entry->completed_at = null;
+        $entry->save();
+
+        if ($entry->appointment) {
+            $entry->appointment->status = Appointment::STATUS_CONFIRMED;
+            $entry->appointment->save();
+        }
+
+        return response()->json($entry->fresh()->load(['patient', 'doctor', 'appointment']));
+    }
+
+    public function markNoShow(int $id)
+    {
+        $entry = QueueEntry::findOrFail($id);
+
+        $entry->status = 'no_show';
+        $entry->checked_out_at = now();
+        $entry->save();
+
+        if ($entry->appointment) {
+            $entry->appointment->status = Appointment::STATUS_NO_SHOW;
+            $entry->appointment->save();
+        }
 
         return response()->json($entry->fresh()->load(['patient', 'doctor', 'appointment']));
     }

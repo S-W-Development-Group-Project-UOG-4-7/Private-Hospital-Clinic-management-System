@@ -120,6 +120,17 @@ class PatientAppointmentController extends Controller
             $selectedDoctorId = $doctorId ? (int) $doctorId : null;
             $selectedDoctor = null;
 
+            $alreadyBookedForDay = Appointment::query()
+                ->where('patient_id', $user->id)
+                ->whereDate('appointment_date', $validated['appointment_date'])
+                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->lockForUpdate()
+                ->exists();
+
+            if ($alreadyBookedForDay) {
+                return response()->json(['message' => 'You already have an appointment on this date.'], 409);
+            }
+
             $bookingQuery = Appointment::query()
                 ->whereIn('status', Appointment::blockingStatuses())
                 ->whereDate('appointment_date', $validated['appointment_date'])
@@ -364,6 +375,99 @@ class PatientAppointmentController extends Controller
 
             return response()->json([
                 'message' => 'Appointment deleted successfully',
+            ]);
+        });
+    }
+
+    public function cancel(Request $request, int $id)
+    {
+        $user = $request->user();
+
+        $appointment = Appointment::query()
+            ->where('patient_id', $user->id)
+            ->findOrFail($id);
+
+        $appointment->status = Appointment::STATUS_CANCELLED;
+        $appointment->save();
+
+        return response()->json(['message' => 'Appointment cancelled successfully.']);
+    }
+
+    public function reschedule(Request $request, int $id)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'slot_id' => ['required', 'integer', 'exists:slots,id'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return DB::transaction(function () use ($user, $id, $validated) {
+            $appointment = Appointment::query()
+                ->where('patient_id', $user->id)
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            $slot = \App\Models\Slot::query()->lockForUpdate()->findOrFail((int) $validated['slot_id']);
+
+            if ($slot->status === 'BOOKED') {
+                return response()->json(['message' => 'Slot already booked.'], 409);
+            }
+
+            if ($slot->status === 'HELD' && (int) $slot->held_by_patient_id !== (int) $user->id) {
+                return response()->json(['message' => 'Slot is temporarily held by another patient.'], 409);
+            }
+
+            if ($slot->status === 'HELD' && $slot->isHoldExpired()) {
+                $slot->status = 'AVAILABLE';
+                $slot->held_by_patient_id = null;
+                $slot->held_until = null;
+                $slot->save();
+            }
+
+            $scheduledStart = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->start_time);
+            $scheduledEnd = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->end_time);
+
+            $alreadyBookedForDay = Appointment::query()
+                ->where('patient_id', $user->id)
+                ->where('id', '!=', $appointment->id)
+                ->whereDate('appointment_date', $slot->date->format('Y-m-d'))
+                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->exists();
+
+            if ($alreadyBookedForDay) {
+                return response()->json(['message' => 'You already have an appointment on this date.'], 409);
+            }
+
+            if (Appointment::hasOverlap((int) $slot->doctor_id, $scheduledStart, $scheduledEnd, $appointment->id)) {
+                return response()->json(['message' => 'Selected doctor is not available at the chosen time.'], 422);
+            }
+
+            $doctor = \App\Models\User::query()->find($slot->doctor_id);
+
+            $appointment->update([
+                'doctor_id' => $slot->doctor_id,
+                'department_id' => $doctor?->department_id,
+                'clinic_id' => $doctor?->clinic_id,
+                'appointment_date' => $slot->date->format('Y-m-d'),
+                'appointment_time' => $slot->start_time,
+                'scheduled_start' => $scheduledStart,
+                'scheduled_end' => $scheduledEnd,
+                'visit_mode' => Appointment::VISIT_MODE_PHYSICAL,
+                'type' => 'in_person',
+                'booking_channel' => Appointment::BOOKING_CHANNEL_PATIENT_PORTAL,
+                'status' => Appointment::STATUS_CONFIRMED,
+                'reason' => $validated['reason'] ?? $appointment->reason,
+                'confirmed_at' => now(),
+            ]);
+
+            $slot->status = 'BOOKED';
+            $slot->held_until = null;
+            $slot->held_by_patient_id = null;
+            $slot->save();
+
+            return response()->json([
+                'appointment' => $appointment->load(['doctor:id,first_name,last_name,email', 'department:id,name']),
             ]);
         });
     }

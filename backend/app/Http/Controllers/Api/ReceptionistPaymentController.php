@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class ReceptionistPaymentController extends Controller
         ]);
 
         $invoice = Invoice::with('payments')->findOrFail($validated['invoice_id']);
+        $user = $request->user();
 
         $payment = Payment::create([
             'invoice_id' => $invoice->id,
@@ -42,6 +44,20 @@ class ReceptionistPaymentController extends Controller
             $invoice->status = 'unpaid';
         }
         $invoice->save();
+
+        AuditLog::create([
+            'user_id' => $user?->id,
+            'action' => 'receptionist_payment_recorded',
+            'entity_type' => 'payment',
+            'entity_id' => $payment->id,
+            'changes' => [
+                'invoice_id' => $invoice->id,
+                'amount' => $payment->amount,
+                'method' => $payment->method,
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
 
         return response()->json([
             'message' => 'Payment recorded successfully',

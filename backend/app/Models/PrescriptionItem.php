@@ -16,6 +16,7 @@ class PrescriptionItem extends Model
         'inventory_item_id',
         'medicine_name',
         'quantity',
+        'dispensed_quantity',
         'dosage',
         'frequency',
         'meal_timing',
@@ -53,4 +54,3 @@ class PrescriptionItem extends Model
         return MedicationQuantityCalculator::fromPrescriptionItem($this);
     }
 }
-

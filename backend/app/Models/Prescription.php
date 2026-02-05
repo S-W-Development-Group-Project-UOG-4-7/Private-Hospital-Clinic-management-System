@@ -16,12 +16,16 @@ class Prescription extends Model
         'patient_id',
         'doctor_id',
         'clinic_id',
+        'appointment_id',
         'pharmacist_id',
         'prescription_date',
         'status',
         'notes',
         'instructions',
         'dispensed_at',
+        'root_prescription_id',
+        'previous_prescription_id',
+        'version',
     ];
 
     protected $casts = [
@@ -54,9 +58,18 @@ class Prescription extends Model
         return $this->hasMany(PrescriptionItem::class);
     }
 
+    public function rootPrescription(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'root_prescription_id');
+    }
+
+    public function previousPrescription(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_prescription_id');
+    }
+
     public function getTotalAmountAttribute(): float
     {
         return $this->items->sum('total_price');
     }
 }
-

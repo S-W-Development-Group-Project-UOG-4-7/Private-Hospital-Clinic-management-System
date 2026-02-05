@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
 use App\Models\Referral;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class DoctorReferralController extends Controller
 {
@@ -17,13 +17,21 @@ class DoctorReferralController extends Controller
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:users,id'],
             'referred_doctor_id' => ['nullable', 'integer', 'exists:users,id'],
-            'specialty' => ['nullable', 'string', 'max:255'],
+            'to_department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'clinic_id' => ['nullable', 'integer', 'exists:clinics,id'],
             'reason' => ['required', 'string', 'max:2000'],
-            'clinical_summary' => ['nullable', 'string', 'max:5000'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'referral_date' => ['required', 'date'],
-            'appointment_date' => ['nullable', 'date', 'after_or_equal:referral_date'],
+            'referred_at' => ['nullable', 'date'],
         ]);
+
+        $assigned = Appointment::query()
+            ->where('doctor_id', $doctor->id)
+            ->where('patient_id', (int) $validated['patient_id'])
+            ->exists();
+
+        if (! $assigned) {
+            return response()->json(['message' => 'Not authorized to refer this patient.'], 403);
+        }
 
         // Generate referral number
         $referralNumber = 'REF-' . strtoupper(Str::random(8));
@@ -31,18 +39,17 @@ class DoctorReferralController extends Controller
         $referral = Referral::create([
             'referral_number' => $referralNumber,
             'patient_id' => $validated['patient_id'],
-            'referring_doctor_id' => $doctor->id,
-            'referred_doctor_id' => $validated['referred_doctor_id'] ?? null,
-            'specialty' => $validated['specialty'] ?? null,
+            'referred_by_doctor_id' => $doctor->id,
+            'referred_to_doctor_id' => $validated['referred_doctor_id'] ?? null,
+            'to_department_id' => $validated['to_department_id'] ?? null,
+            'clinic_id' => $validated['clinic_id'] ?? null,
             'status' => 'pending',
             'reason' => $validated['reason'],
-            'clinical_summary' => $validated['clinical_summary'] ?? null,
             'notes' => $validated['notes'] ?? null,
-            'referral_date' => $validated['referral_date'],
-            'appointment_date' => $validated['appointment_date'] ?? null,
+            'referred_at' => $validated['referred_at'] ?? now()->toDateString(),
         ]);
 
-        return response()->json($referral->load(['patient', 'referringDoctor', 'referredDoctor']), 201);
+        return response()->json($referral->load(['patient', 'referredByDoctor', 'referredToDoctor', 'toDepartment', 'clinic']), 201);
     }
 
     public function index(Request $request)
@@ -50,8 +57,8 @@ class DoctorReferralController extends Controller
         $doctor = $request->user();
 
         $query = Referral::query()
-            ->where('referring_doctor_id', $doctor->id)
-            ->with(['patient:id,first_name,last_name,email', 'referredDoctor:id,first_name,last_name,email']);
+            ->where('referred_by_doctor_id', $doctor->id)
+            ->with(['patient:id,first_name,last_name,email', 'referredToDoctor:id,first_name,last_name,email', 'toDepartment:id,name', 'clinic:id,name']);
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -62,10 +69,9 @@ class DoctorReferralController extends Controller
         }
 
         $referrals = $query
-            ->orderBy('referral_date', 'desc')
+            ->orderBy('referred_at', 'desc')
             ->get();
 
         return response()->json(['data' => $referrals]);
     }
 }
-

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class Invoice extends Model
 {
@@ -35,5 +36,19 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(InvoiceItem::class);
+    }
+
+    public function totalFromItems(?Collection $items = null): float
+    {
+        $items = $items ?? $this->items;
+
+        return (float) $items->sum(function (InvoiceItem $item) {
+            return (float) $item->line_total;
+        });
     }
 }

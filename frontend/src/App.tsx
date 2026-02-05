@@ -31,7 +31,8 @@ import Inventory from './pages/admin/Inventory';
 import Reports from './pages/admin/Reports';
 import Departments from './pages/admin/Departments';
 import Appointments from './pages/admin/Appointments'; // <--- NEW IMPORT ADDED HERE
-import NotImplemented from './pages/admin/NotImplemented';
+import Billing from './pages/admin/Billing';
+import Settings from './pages/admin/Settings';
 
 // --- Home Page Components ---
 import HeroSection from './components/HomePage/HeroSection';
@@ -118,9 +119,9 @@ const App: React.FC = () => (
         <Route path="departments" element={<Departments />} />
         <Route path="appointments" element={<Appointments />} /> {/* <--- UPDATED THIS LINE */}
 
-        {/* Placeholders for Future Features */}
-        <Route path="billing" element={<NotImplemented />} />
-        <Route path="settings" element={<NotImplemented />} />
+        {/* Admin Billing + Settings */}
+        <Route path="billing" element={<Billing />} />
+        <Route path="settings" element={<Settings />} />
     </Route>
 
     {/* --- DOCTOR ROUTES --- */}

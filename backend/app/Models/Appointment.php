@@ -84,6 +84,11 @@ class Appointment extends Model
         return $this->hasOne(VideoSession::class, 'appointment_id');
     }
 
+    public function consultationNote(): HasOne
+    {
+        return $this->hasOne(ConsultationNote::class, 'appointment_id');
+    }
+
     public static function activeScheduleStatuses(): array
     {
         return [

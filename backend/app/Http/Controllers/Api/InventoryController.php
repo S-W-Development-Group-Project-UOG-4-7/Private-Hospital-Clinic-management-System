@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\InventoryItem;
+use App\Models\StockLedger;
 use Illuminate\Http\Request;
 
 class InventoryController extends Controller
@@ -67,6 +69,30 @@ class InventoryController extends Controller
 
         $item = InventoryItem::create($validated);
 
+        if ($item->quantity > 0) {
+            StockLedger::create([
+                'inventory_item_id' => $item->id,
+                'type' => 'ADJUST',
+                'quantity' => $item->quantity,
+                'ref_type' => 'inventory_item',
+                'ref_id' => $item->id,
+                'cost_price' => $item->unit_price,
+                'sell_price' => $item->selling_price,
+                'performed_by' => $request->user()?->id,
+                'reason' => 'initial_stock',
+            ]);
+        }
+
+        AuditLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'inventory_item_created',
+            'entity_type' => 'inventory_item',
+            'entity_id' => $item->id,
+            'changes' => $validated,
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
+
         return response()->json($item->load('supplier'), 201);
     }
 
@@ -97,7 +123,36 @@ class InventoryController extends Controller
             'is_active' => 'boolean',
         ]);
 
+        $originalQuantity = $item->quantity;
+
         $item->update($validated);
+
+        if (array_key_exists('quantity', $validated)) {
+            $delta = (int) $item->quantity - (int) $originalQuantity;
+            if ($delta !== 0) {
+                StockLedger::create([
+                    'inventory_item_id' => $item->id,
+                    'type' => 'ADJUST',
+                    'quantity' => $delta,
+                    'ref_type' => 'inventory_item',
+                    'ref_id' => $item->id,
+                    'cost_price' => $item->unit_price,
+                    'sell_price' => $item->selling_price,
+                    'performed_by' => $request->user()?->id,
+                    'reason' => 'manual_adjustment',
+                ]);
+            }
+        }
+
+        AuditLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'inventory_item_updated',
+            'entity_type' => 'inventory_item',
+            'entity_id' => $item->id,
+            'changes' => $validated,
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
 
         return response()->json($item->load('supplier'));
     }
@@ -106,6 +161,18 @@ class InventoryController extends Controller
     {
         $item = InventoryItem::findOrFail($id);
         $item->delete();
+
+        AuditLog::create([
+            'user_id' => request()->user()?->id,
+            'action' => 'inventory_item_deleted',
+            'entity_type' => 'inventory_item',
+            'entity_id' => $item->id,
+            'changes' => [
+                'name' => $item->name,
+            ],
+            'ip_address' => request()->ip(),
+            'user_agent' => (string) request()->userAgent(),
+        ]);
 
         return response()->json(['message' => 'Inventory item deleted successfully']);
     }
@@ -275,6 +342,31 @@ class InventoryController extends Controller
         return response()->json($report);
     }
 
+    public function stockMovement(Request $request)
+    {
+        $query = StockLedger::query()->with(['inventoryItem:id,name', 'performer:id,first_name,last_name,email']);
+
+        if ($request->has('item_id')) {
+            $query->where('inventory_item_id', (int) $request->get('item_id'));
+        }
+
+        if ($request->has('type')) {
+            $query->where('type', $request->get('type'));
+        }
+
+        if ($request->has('from_date')) {
+            $query->whereDate('created_at', '>=', $request->get('from_date'));
+        }
+
+        if ($request->has('to_date')) {
+            $query->whereDate('created_at', '<=', $request->get('to_date'));
+        }
+
+        return response()->json([
+            'data' => $query->orderByDesc('created_at')->paginate(50),
+        ]);
+    }
+
     public function storageReport()
     {
         $report = [
@@ -298,32 +390,17 @@ class InventoryController extends Controller
 
     public function auditLogs(Request $request)
     {
-        // In a real system, you'd have an audit_logs table
-        // For now, return mock data
-        $logs = [
-            [
-                'id' => 1,
-                'action' => 'inventory_update',
-                'entity_type' => 'inventory_item',
-                'entity_id' => 1,
-                'user_id' => $request->user()->id,
-                'user_name' => $request->user()->name,
-                'changes' => ['quantity' => ['old' => 50, 'new' => 45]],
-                'timestamp' => now()->subHours(2),
-            ],
-            [
-                'id' => 2,
-                'action' => 'prescription_dispensed',
-                'entity_type' => 'prescription',
-                'entity_id' => 1,
-                'user_id' => $request->user()->id,
-                'user_name' => $request->user()->name,
-                'changes' => ['status' => ['old' => 'pending', 'new' => 'dispensed']],
-                'timestamp' => now()->subHours(1),
-            ],
-        ];
+        $logs = AuditLog::query()
+            ->whereIn('action', [
+                'inventory_item_created',
+                'inventory_item_updated',
+                'inventory_item_deleted',
+                'prescription_dispensed',
+            ])
+            ->with('user:id,first_name,last_name,email')
+            ->orderByDesc('created_at')
+            ->paginate(50);
 
         return response()->json($logs);
     }
 }
-

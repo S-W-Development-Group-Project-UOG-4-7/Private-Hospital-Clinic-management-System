@@ -11,11 +11,30 @@ interface Drug {
   expiry: string;
 }
 
+interface ValuationSummary {
+  total_cost_value: number;
+  total_sell_value: number;
+  items: number;
+}
+
 const Inventory: React.FC = () => {
   const navigate = useNavigate();
   const [drugs, setDrugs] = useState<Drug[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Reports State
+  const [valuationSummary, setValuationSummary] = useState<ValuationSummary>({
+    total_cost_value: 0,
+    total_sell_value: 0,
+    items: 0,
+  });
+  const [stockMovement, setStockMovement] = useState<Array<Record<string, any>>>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState('');
+  const [movementType, setMovementType] = useState<'ALL' | 'PURCHASE' | 'DISPENSE' | 'ADJUST'>('ALL');
+  const [movementStart, setMovementStart] = useState('');
+  const [movementEnd, setMovementEnd] = useState('');
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,7 +59,54 @@ const Inventory: React.FC = () => {
 
   useEffect(() => {
     fetchInventory();
+    fetchReports();
   }, []);
+
+  const fetchReports = async () => {
+    setReportsLoading(true);
+    setReportsError('');
+    try {
+      const [valuationRes, movementRes] = await Promise.all([
+        api.get('/admin/reports/inventory-valuation'),
+        api.get('/admin/reports/stock-movement', {
+          params: {
+            start_date: movementStart || undefined,
+            end_date: movementEnd || undefined,
+            type: movementType === 'ALL' ? undefined : movementType,
+          },
+        }),
+      ]);
+
+      const valuationData = valuationRes.data as any;
+      const movementData = movementRes.data as any;
+
+      setValuationSummary(valuationData?.summary || {
+        total_cost_value: 0,
+        total_sell_value: 0,
+        items: 0,
+      });
+      setStockMovement(movementData?.data || []);
+    } catch (error) {
+      console.error("Failed to load reports", error);
+      setReportsError('Failed to load reports.');
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  const downloadCsv = async (url: string, params: Record<string, any>, filename: string) => {
+    const response = await api.get<Blob>(url, {
+      params: { ...params, format: 'csv' },
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response.data as BlobPart], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(link.href);
+  };
 
   // Open Modal for Editing
   const handleEditClick = (drug: Drug) => {
@@ -143,6 +209,22 @@ const Inventory: React.FC = () => {
         </div>
       </div>
 
+      {/* Valuation Snapshot */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded shadow border border-gray-100">
+          <h3 className="text-sm text-gray-500 uppercase">Total Cost Value</h3>
+          <p className="text-2xl font-bold text-gray-800">{valuationSummary.total_cost_value}</p>
+        </div>
+        <div className="bg-white p-4 rounded shadow border border-gray-100">
+          <h3 className="text-sm text-gray-500 uppercase">Total Sell Value</h3>
+          <p className="text-2xl font-bold text-gray-800">{valuationSummary.total_sell_value}</p>
+        </div>
+        <div className="bg-white p-4 rounded shadow border border-gray-100">
+          <h3 className="text-sm text-gray-500 uppercase">Items Counted</h3>
+          <p className="text-2xl font-bold text-gray-800">{valuationSummary.items}</p>
+        </div>
+      </div>
+
       {/* Inventory Table */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
@@ -198,6 +280,108 @@ const Inventory: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Stock Movement Report */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-800">Stock Movement</h3>
+            <p className="text-sm text-gray-500">Track purchases, dispensing, and adjustments.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => fetchReports()}
+              className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={() => downloadCsv('/admin/reports/stock-movement', {
+                start_date: movementStart || undefined,
+                end_date: movementEnd || undefined,
+                type: movementType === 'ALL' ? undefined : movementType,
+              }, 'stock_movement.csv')}
+              className="px-4 py-2 rounded border bg-white hover:bg-gray-50"
+            >
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-600">Type</label>
+            <select
+              className="border p-2 rounded w-full focus:ring-2 focus:ring-teal-500 outline-none"
+              value={movementType}
+              onChange={(e) => setMovementType(e.target.value as 'ALL' | 'PURCHASE' | 'DISPENSE' | 'ADJUST')}
+            >
+              <option value="ALL">All</option>
+              <option value="PURCHASE">Purchase</option>
+              <option value="DISPENSE">Dispense</option>
+              <option value="ADJUST">Adjust</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600">Start Date</label>
+            <input
+              type="date"
+              className="border p-2 rounded w-full focus:ring-2 focus:ring-teal-500 outline-none"
+              value={movementStart}
+              onChange={(e) => setMovementStart(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600">End Date</label>
+            <input
+              type="date"
+              className="border p-2 rounded w-full focus:ring-2 focus:ring-teal-500 outline-none"
+              value={movementEnd}
+              onChange={(e) => setMovementEnd(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={() => downloadCsv('/admin/reports/inventory-valuation', {}, 'inventory_valuation.csv')}
+              className="w-full px-4 py-2 rounded border bg-white hover:bg-gray-50"
+            >
+              Export Valuation CSV
+            </button>
+          </div>
+        </div>
+
+        {reportsError && <p className="text-sm text-red-600">{reportsError}</p>}
+        {reportsLoading ? (
+          <p className="text-center text-gray-500 py-6">Loading stock movement...</p>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-left text-sm border border-gray-200">
+              <thead className="bg-gray-100">
+                <tr>
+                  {stockMovement[0] ? Object.keys(stockMovement[0]).map((key) => (
+                    <th key={key} className="p-3 border-b font-semibold text-gray-700">{key}</th>
+                  )) : (
+                    <th className="p-3 border-b font-semibold text-gray-700">No data</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {stockMovement.length > 0 ? stockMovement.map((row, idx) => (
+                  <tr key={idx} className="border-b last:border-0">
+                    {Object.keys(row).map((key) => (
+                      <td key={key} className="p-3 text-gray-600">{row[key]}</td>
+                    ))}
+                  </tr>
+                )) : (
+                  <tr>
+                    <td className="p-4 text-center text-gray-500 italic">No stock movement data available.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* --- ADD / EDIT MODAL --- */}

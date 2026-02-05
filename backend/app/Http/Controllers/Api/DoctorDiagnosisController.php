@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
 use App\Models\Diagnosis;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -24,6 +25,10 @@ class DoctorDiagnosisController extends Controller
             'diagnosis_date' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        if (! $this->doctorAssignedToPatient($doctor->id, (int) $validated['patient_id'], $validated['appointment_id'] ?? null)) {
+            return response()->json(['message' => 'Not authorized to create diagnosis for this patient.'], 403);
+        }
 
         $diagnosis = Diagnosis::create([
             'patient_id' => $validated['patient_id'],
@@ -66,6 +71,10 @@ class DoctorDiagnosisController extends Controller
     {
         $doctor = $request->user();
 
+        if (! $this->doctorAssignedToPatient($doctor->id, $patientId, null)) {
+            return response()->json(['message' => 'Not authorized to view this patient.'], 403);
+        }
+
         $diagnoses = Diagnosis::query()
             ->where('patient_id', $patientId)
             ->with(['doctor:id,first_name,last_name,email', 'appointment:id,appointment_date'])
@@ -74,5 +83,17 @@ class DoctorDiagnosisController extends Controller
 
         return response()->json(['data' => $diagnoses]);
     }
-}
 
+    private function doctorAssignedToPatient(int $doctorId, int $patientId, ?int $appointmentId): bool
+    {
+        $query = Appointment::query()
+            ->where('doctor_id', $doctorId)
+            ->where('patient_id', $patientId);
+
+        if ($appointmentId) {
+            $query->where('id', $appointmentId);
+        }
+
+        return $query->exists();
+    }
+}

@@ -12,3 +12,8 @@ Artisan::command('inspire', function () {
 Schedule::command('inventory:check-reorder-levels')
     ->dailyAt('09:00')
     ->timezone('UTC');
+
+// Generate weekly appointment slots for doctors
+Schedule::command('slots:generate')
+    ->weeklyOn(1, '00:10')
+    ->timezone('UTC');

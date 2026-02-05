@@ -31,7 +31,11 @@ class SlotController extends Controller
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
             'date' => ['required', 'date'],
             'visit_mode' => ['nullable', Rule::in([Appointment::VISIT_MODE_PHYSICAL, Appointment::VISIT_MODE_ONLINE])],
+            'available_only' => ['nullable', 'boolean'],
         ]);
+
+        $availableOnly = filter_var($request->get('available_only', false), FILTER_VALIDATE_BOOLEAN);
+        $user = $request->user();
 
         $query = Slot::query()
             ->with(['doctor:id,first_name,last_name,department_id'])
@@ -53,10 +57,59 @@ class SlotController extends Controller
             $query->whereIn('allowed_visit_mode', ['BOTH', $visitMode]);
         }
 
+        if ($availableOnly) {
+            $query->where(function ($q) use ($user) {
+                $q->where('status', 'AVAILABLE');
+                if ($user) {
+                    $q->orWhere(function ($sub) use ($user) {
+                        $sub->where('status', 'HELD')
+                            ->where('held_by_patient_id', $user->id)
+                            ->where(function ($held) {
+                                $held->whereNull('held_until')->orWhere('held_until', '>=', now());
+                            });
+                    });
+                }
+            });
+
+            $query->whereNotExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('appointments')
+                    ->whereColumn('appointments.doctor_id', 'slots.doctor_id')
+                    ->whereIn('appointments.status', Appointment::activeScheduleStatuses())
+                    ->whereNotNull('appointments.scheduled_start')
+                    ->whereNotNull('appointments.scheduled_end')
+                    ->whereRaw('appointments.scheduled_start < (slots.date + slots.end_time)')
+                    ->whereRaw('appointments.scheduled_end > (slots.date + slots.start_time)');
+            });
+        }
+
         $slots = $query
             ->orderBy('date')
             ->orderBy('start_time')
             ->get();
+
+        if ($availableOnly && empty($validated['doctor_id']) && ! empty($validated['department_id'])) {
+            $doctorIds = $slots->pluck('doctor_id')->unique()->filter()->values();
+            $appointmentCounts = Appointment::query()
+                ->selectRaw('doctor_id, COUNT(*) as total')
+                ->whereIn('doctor_id', $doctorIds)
+                ->whereDate('appointment_date', $validated['date'])
+                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->groupBy('doctor_id')
+                ->pluck('total', 'doctor_id')
+                ->toArray();
+
+            $slots = $slots
+                ->groupBy('start_time')
+                ->map(function ($group) use ($appointmentCounts) {
+                    return $group
+                        ->sortBy(function ($slot) use ($appointmentCounts) {
+                            return $appointmentCounts[$slot->doctor_id] ?? 0;
+                        })
+                        ->first();
+                })
+                ->values();
+        }
 
         return response()->json(['data' => $slots]);
     }
@@ -86,6 +139,13 @@ class SlotController extends Controller
                 $slot->status = 'AVAILABLE';
                 $slot->held_by_patient_id = null;
                 $slot->held_until = null;
+            }
+
+            $scheduledStart = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->start_time);
+            $scheduledEnd = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->end_time);
+
+            if (Appointment::hasOverlap((int) $slot->doctor_id, $scheduledStart, $scheduledEnd)) {
+                return response()->json(['message' => 'Selected doctor is not available at the chosen time.'], 409);
             }
 
             if ($visitMode !== '' && ! $this->slotAllowsVisitMode($slot, $visitMode)) {
@@ -143,6 +203,16 @@ class SlotController extends Controller
 
             $scheduledStart = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->start_time);
             $scheduledEnd = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->end_time);
+
+            $alreadyBookedForDay = Appointment::query()
+                ->where('patient_id', $user->id)
+                ->whereDate('appointment_date', $slot->date->format('Y-m-d'))
+                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->exists();
+
+            if ($alreadyBookedForDay) {
+                return response()->json(['message' => 'You already have an appointment on this date.'], 409);
+            }
 
             if (Appointment::hasOverlap((int) $slot->doctor_id, $scheduledStart, $scheduledEnd)) {
                 return response()->json(['message' => 'Selected doctor is not available at the chosen time.'], 422);

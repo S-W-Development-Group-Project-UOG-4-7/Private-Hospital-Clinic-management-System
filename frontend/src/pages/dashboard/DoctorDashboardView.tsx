@@ -88,6 +88,23 @@ const DoctorDashboardView: React.FC = () => {
   const [currentPatientInConsultation, setCurrentPatientInConsultation] = useState<DoctorAppointment | null>(null);
   const [teleconsultationMeetingUrl, setTeleconsultationMeetingUrl] = useState<string | null>(null);
   const [teleconsultationId, setTeleconsultationId] = useState<number | null>(null);
+  const [consultationLoading, setConsultationLoading] = useState(false);
+  const [consultationSaving, setConsultationSaving] = useState(false);
+  const [consultationForm, setConsultationForm] = useState({
+    subjective: '',
+    objective: '',
+    assessment: '',
+    plan: '',
+    diagnosis_text: '',
+    vitals: {
+      blood_pressure_systolic: '',
+      blood_pressure_diastolic: '',
+      heart_rate: '',
+      temperature: '',
+      weight: '',
+      height: '',
+    },
+  });
 
   const [patientDiagnosesLoading, setPatientDiagnosesLoading] = useState(false);
   const [patientDiagnoses, setPatientDiagnoses] = useState<Diagnosis[]>([]);
@@ -164,7 +181,7 @@ const DoctorDashboardView: React.FC = () => {
   const [labOrderModalOpen, setLabOrderModalOpen] = useState(false);
   const [labOrderSaving, setLabOrderSaving] = useState(false);
   const [labOrderPatientInfo, setLabOrderPatientInfo] = useState<{ id: string; name: string; phone: string } | null>(null);
-  type LabOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  type LabOrderStatus = 'ORDERED' | 'COLLECTED' | 'REPORTED' | 'REVIEWED' | 'CANCELLED';
   type LabOrderFormState = {
     patient_id: string;
     test_type: string;
@@ -191,7 +208,7 @@ const DoctorDashboardView: React.FC = () => {
     order_date: '',
     notes: '',
     instructions: '',
-    status: 'pending',
+    status: 'ORDERED',
   };
   const [labOrderForm, setLabOrderForm] = useState<LabOrderFormState>(initialLabOrderForm);
   const [labOrderEditingId, setLabOrderEditingId] = useState<number | null>(null);
@@ -451,7 +468,7 @@ const DoctorDashboardView: React.FC = () => {
       due_date: order.due_date || '',
       notes: order.notes || '',
       instructions: order.instructions || '',
-      status: order.status || 'pending',
+      status: order.status || 'ORDERED',
     });
     setLabOrderModalOpen(true);
     await loadClinics();
@@ -516,6 +533,60 @@ const DoctorDashboardView: React.FC = () => {
     setDiagnosisModalOpen(true);
   };
 
+  useEffect(() => {
+    let isActive = true;
+    if (!selectedAppointment) return;
+
+    setConsultationLoading(true);
+    doctorApi.consultations
+      .show(selectedAppointment.id)
+      .then((resp) => {
+        if (!isActive) return;
+        const note = resp?.note;
+        setConsultationForm({
+          subjective: note?.subjective || '',
+          objective: note?.objective || '',
+          assessment: note?.assessment || '',
+          plan: note?.plan || '',
+          diagnosis_text: note?.diagnosis_text || '',
+          vitals: {
+            blood_pressure_systolic: note?.vitals_json?.blood_pressure_systolic ?? '',
+            blood_pressure_diastolic: note?.vitals_json?.blood_pressure_diastolic ?? '',
+            heart_rate: note?.vitals_json?.heart_rate ?? '',
+            temperature: note?.vitals_json?.temperature ?? '',
+            weight: note?.vitals_json?.weight ?? '',
+            height: note?.vitals_json?.height ?? '',
+          },
+        });
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setConsultationForm({
+          subjective: '',
+          objective: '',
+          assessment: '',
+          plan: '',
+          diagnosis_text: '',
+          vitals: {
+            blood_pressure_systolic: '',
+            blood_pressure_diastolic: '',
+            heart_rate: '',
+            temperature: '',
+            weight: '',
+            height: '',
+          },
+        });
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setConsultationLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedAppointment]);
+
   const openEditDiagnosis = (diagnosis: Diagnosis) => {
     setEditingDiagnosis(diagnosis);
     setDiagnosisModalOpen(true);
@@ -544,6 +615,65 @@ const DoctorDashboardView: React.FC = () => {
       setError(e?.message || 'Failed to update diagnosis');
     } finally {
       setDiagnosisSaving(false);
+    }
+  };
+
+  const saveConsultationNotes = async () => {
+    if (!selectedAppointment) return;
+    setConsultationSaving(true);
+    setError(null);
+    try {
+      await doctorApi.consultations.save(selectedAppointment.id, {
+        subjective: consultationForm.subjective,
+        objective: consultationForm.objective,
+        assessment: consultationForm.assessment,
+        plan: consultationForm.plan,
+        diagnosis_text: consultationForm.diagnosis_text,
+        vitals_json: {
+          blood_pressure_systolic: consultationForm.vitals.blood_pressure_systolic || null,
+          blood_pressure_diastolic: consultationForm.vitals.blood_pressure_diastolic || null,
+          heart_rate: consultationForm.vitals.heart_rate || null,
+          temperature: consultationForm.vitals.temperature || null,
+          weight: consultationForm.vitals.weight || null,
+          height: consultationForm.vitals.height || null,
+        },
+      });
+      toast.success('Consultation notes saved');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save consultation notes');
+    } finally {
+      setConsultationSaving(false);
+    }
+  };
+
+  const startConsultation = async () => {
+    if (!selectedAppointment) return;
+    setConsultationStarting(true);
+    setError(null);
+    try {
+      const updated = await doctorApi.consultations.start(selectedAppointment.id);
+      setSelectedAppointment(updated);
+      toast.success('Consultation started');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to start consultation');
+    } finally {
+      setConsultationStarting(false);
+    }
+  };
+
+  const completeConsultation = async () => {
+    if (!selectedAppointment) return;
+    setConsultationEnding(true);
+    setError(null);
+    try {
+      await saveConsultationNotes();
+      const updated = await doctorApi.consultations.complete(selectedAppointment.id);
+      setSelectedAppointment(updated);
+      toast.success('Consultation completed');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to complete consultation');
+    } finally {
+      setConsultationEnding(false);
     }
   };
 
@@ -637,7 +767,7 @@ const DoctorDashboardView: React.FC = () => {
       if (labOrderEditingId) {
         await doctorApi.labs.updateOrder(labOrderEditingId, {
           ...basePayload,
-          status: labOrderForm.status || 'pending',
+          status: labOrderForm.status || 'ORDERED',
         });
       } else {
         const payload: CreateLabOrderPayload = basePayload;
@@ -1536,15 +1666,157 @@ const DoctorDashboardView: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="mt-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Consultation Notes</label>
-                        <textarea
-                          rows={5}
-                          value={consultNotes}
-                          onChange={(e) => setConsultNotes(e.target.value)}
-                          className="w-full px-3 py-2 border rounded-lg"
-                          placeholder="Record symptoms, vitals summary, assessments, plan..."
-                        />
+                      <div className="mt-6 space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={startConsultation}
+                            disabled={consultationStarting}
+                            className="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                          >
+                            {consultationStarting ? 'Starting...' : 'Start Consultation'}
+                          </button>
+                          <button
+                            onClick={completeConsultation}
+                            disabled={consultationEnding}
+                            className="bg-gray-700 hover:bg-gray-800 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                          >
+                            {consultationEnding ? 'Completing...' : 'Complete Consultation'}
+                          </button>
+                          <button
+                            onClick={saveConsultationNotes}
+                            disabled={consultationSaving}
+                            className="bg-white border border-teal-300 hover:bg-teal-50 disabled:opacity-60 text-teal-700 font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                          >
+                            {consultationSaving ? 'Saving...' : 'Save Notes'}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Subjective</label>
+                            <textarea
+                              rows={3}
+                              value={consultationForm.subjective}
+                              onChange={(e) => setConsultationForm((p) => ({ ...p, subjective: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Objective</label>
+                            <textarea
+                              rows={3}
+                              value={consultationForm.objective}
+                              onChange={(e) => setConsultationForm((p) => ({ ...p, objective: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Assessment</label>
+                            <textarea
+                              rows={3}
+                              value={consultationForm.assessment}
+                              onChange={(e) => setConsultationForm((p) => ({ ...p, assessment: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+                            <textarea
+                              rows={3}
+                              value={consultationForm.plan}
+                              onChange={(e) => setConsultationForm((p) => ({ ...p, plan: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis</label>
+                          <textarea
+                            rows={2}
+                            value={consultationForm.diagnosis_text}
+                            onChange={(e) => setConsultationForm((p) => ({ ...p, diagnosis_text: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">BP Systolic</label>
+                            <input
+                              type="number"
+                              value={consultationForm.vitals.blood_pressure_systolic}
+                              onChange={(e) =>
+                                setConsultationForm((p) => ({
+                                  ...p,
+                                  vitals: { ...p.vitals, blood_pressure_systolic: e.target.value },
+                                }))
+                              }
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">BP Diastolic</label>
+                            <input
+                              type="number"
+                              value={consultationForm.vitals.blood_pressure_diastolic}
+                              onChange={(e) =>
+                                setConsultationForm((p) => ({
+                                  ...p,
+                                  vitals: { ...p.vitals, blood_pressure_diastolic: e.target.value },
+                                }))
+                              }
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Heart Rate</label>
+                            <input
+                              type="number"
+                              value={consultationForm.vitals.heart_rate}
+                              onChange={(e) =>
+                                setConsultationForm((p) => ({ ...p, vitals: { ...p.vitals, heart_rate: e.target.value } }))
+                              }
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Temperature</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={consultationForm.vitals.temperature}
+                              onChange={(e) =>
+                                setConsultationForm((p) => ({ ...p, vitals: { ...p.vitals, temperature: e.target.value } }))
+                              }
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Weight</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={consultationForm.vitals.weight}
+                              onChange={(e) =>
+                                setConsultationForm((p) => ({ ...p, vitals: { ...p.vitals, weight: e.target.value } }))
+                              }
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Height</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={consultationForm.vitals.height}
+                              onChange={(e) =>
+                                setConsultationForm((p) => ({ ...p, vitals: { ...p.vitals, height: e.target.value } }))
+                              }
+                              className="w-full px-3 py-2 border rounded-lg"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -1835,9 +2107,10 @@ const DoctorDashboardView: React.FC = () => {
                                   <td className="px-6 py-4 text-sm text-gray-600">{order.test_description || '-'}</td>
                                   <td className="px-6 py-4">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                      order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                      order.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                      order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      order.status === 'ORDERED' ? 'bg-yellow-100 text-yellow-800' :
+                                      order.status === 'COLLECTED' ? 'bg-blue-100 text-blue-800' :
+                                      order.status === 'REPORTED' ? 'bg-green-100 text-green-800' :
+                                      order.status === 'REVIEWED' ? 'bg-teal-100 text-teal-800' :
                                       'bg-gray-100 text-gray-800'
                                     }`}>
                                       {order.status}
@@ -2628,10 +2901,11 @@ const DoctorDashboardView: React.FC = () => {
                       onChange={(e) => setLabOrderForm((p) => ({ ...p, status: e.target.value as LabOrderStatus }))}
                       className="w-full px-3 py-2 border rounded-lg"
                     >
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="ORDERED">Ordered</option>
+                      <option value="COLLECTED">Collected</option>
+                      <option value="REPORTED">Reported</option>
+                      <option value="REVIEWED">Reviewed</option>
+                      <option value="CANCELLED">Cancelled</option>
                     </select>
                   </div>
                   <div className="md:col-span-2">

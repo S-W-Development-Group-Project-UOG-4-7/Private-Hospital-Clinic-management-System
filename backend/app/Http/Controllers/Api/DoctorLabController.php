@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LabOrder;
 use App\Models\LabResult;
+use App\Models\Appointment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -60,6 +61,18 @@ class DoctorLabController extends Controller
             'instructions' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        if (! empty($validated['appointment_id'])) {
+            $appointment = Appointment::query()
+                ->where('id', (int) $validated['appointment_id'])
+                ->where('doctor_id', $doctor->id)
+                ->where('patient_id', (int) $validated['patient_id'])
+                ->first();
+
+            if (! $appointment) {
+                return response()->json(['message' => 'Appointment not found for this doctor/patient.'], 403);
+            }
+        }
+
         // Generate order number
         $orderNumber = 'LAB-' . strtoupper(Str::random(8));
 
@@ -71,7 +84,7 @@ class DoctorLabController extends Controller
             'appointment_id' => $validated['appointment_id'] ?? null,
             'test_type' => $validated['test_type'],
             'test_description' => $validated['test_description'] ?? null,
-            'status' => 'pending',
+            'status' => 'ORDERED',
             'order_date' => $validated['order_date'],
             'due_date' => $validated['due_date'] ?? null,
             'notes' => $validated['notes'] ?? null,
@@ -99,7 +112,7 @@ class DoctorLabController extends Controller
             'due_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'instructions' => ['nullable', 'string', 'max:2000'],
-            'status' => ['nullable', Rule::in(['pending', 'in_progress', 'completed', 'cancelled'])],
+            'status' => ['nullable', Rule::in(['ORDERED', 'COLLECTED', 'REPORTED', 'REVIEWED', 'CANCELLED'])],
         ]);
 
         $validated = $validator->validate();
@@ -145,6 +158,15 @@ class DoctorLabController extends Controller
     {
         $doctor = $request->user();
 
+        $assigned = Appointment::query()
+            ->where('doctor_id', $doctor->id)
+            ->where('patient_id', $patientId)
+            ->exists();
+
+        if (! $assigned) {
+            return response()->json(['message' => 'Not authorized to view this patient.'], 403);
+        }
+
         $results = LabResult::query()
             ->where('patient_id', $patientId)
             ->with(['labOrder', 'doctor:id,first_name,last_name,email'])
@@ -179,6 +201,11 @@ class DoctorLabController extends Controller
             'reviewed_at' => now(),
             'doctor_notes' => $validated['doctor_notes'] ?? null,
         ]);
+
+        if ($result->labOrder) {
+            $result->labOrder->status = 'REVIEWED';
+            $result->labOrder->save();
+        }
 
         return response()->json($result->load(['labOrder', 'doctor']));
     }

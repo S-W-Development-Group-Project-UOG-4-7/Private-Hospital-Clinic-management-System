@@ -2,19 +2,41 @@ export interface PatientUser {
   id: number;
   name: string;
   email: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string | null;
   role?: string;
 }
 
 export interface PatientProfile {
   phone: string | null;
   date_of_birth: string | null;
-  gender: string | null;
+  gender?: string | null;
   address: string | null;
+  nic_passport?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relationship?: string | null;
 }
 
 export interface PatientProfileResponse {
   user: PatientUser;
   profile: PatientProfile;
+}
+
+export type SlotStatus = 'AVAILABLE' | 'HELD' | 'BOOKED';
+
+export interface PatientSlot {
+  id: number;
+  doctor_id: number;
+  date: string;
+  start_time: string;
+  end_time: string;
+  allowed_visit_mode: string;
+  status: SlotStatus | string;
+  held_until?: string | null;
+  held_by_patient_id?: number | null;
+  doctor?: AppointmentDoctor | null;
 }
 
 export type AppointmentType = 'in_person' | 'telemedicine';
@@ -123,6 +145,15 @@ export interface PatientPayment {
   updated_at?: string;
 }
 
+export interface PatientInvoiceItem {
+  id?: number;
+  invoice_id?: number;
+  description: string;
+  quantity: string | number;
+  unit_price: string | number;
+  line_total?: string;
+}
+
 export interface PatientInvoice {
   id: number;
   invoice_number: string;
@@ -132,9 +163,41 @@ export interface PatientInvoice {
   issued_at: string;
   due_date: string | null;
   description: string | null;
+  items?: PatientInvoiceItem[];
   payments?: PatientPayment[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface PatientLabResult {
+  id: number;
+  lab_order_id: number;
+  test_name: string | null;
+  result_value: string | null;
+  unit: string | null;
+  reference_range: string | null;
+  status: string | null;
+  interpretation: string | null;
+  file_url: string | null;
+  result_date: string | null;
+  doctor_reviewed: boolean;
+  reviewed_at: string | null;
+  doctor?: {
+    name: string;
+  } | null;
+}
+
+export interface PatientLabOrder {
+  id: number;
+  order_number: string | null;
+  test_type: string | null;
+  test_description: string | null;
+  status: string | null;
+  order_date: string | null;
+  due_date: string | null;
+  doctor?: { name: string } | null;
+  clinic?: string | null;
+  results: PatientLabResult[];
 }
 
 export interface PatientInvoicesResponse {

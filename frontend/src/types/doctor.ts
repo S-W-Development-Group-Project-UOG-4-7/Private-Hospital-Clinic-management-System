@@ -236,6 +236,10 @@ export interface DoctorPrescription {
   patient_id: number;
   doctor_id: number | null;
   pharmacist_id: number | null;
+  appointment_id?: number | null;
+  root_prescription_id?: number | null;
+  previous_prescription_id?: number | null;
+  version?: number;
   prescription_date: string;
   status: 'pending' | 'processing' | 'dispensed' | 'cancelled';
   notes: string | null;
@@ -310,7 +314,7 @@ export interface LabOrder {
   appointment_id: number | null;
   test_type: string;
   test_description: string | null;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'ORDERED' | 'COLLECTED' | 'REPORTED' | 'REVIEWED' | 'CANCELLED';
   order_date: string;
   due_date: string | null;
   notes: string | null;
@@ -374,7 +378,7 @@ export interface UpdateLabOrderPayload {
   due_date?: string | null;
   notes?: string | null;
   instructions?: string | null;
-  status?: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  status?: 'ORDERED' | 'COLLECTED' | 'REPORTED' | 'REVIEWED' | 'CANCELLED';
 }
 
 export interface ReviewLabResultPayload {
@@ -586,4 +590,20 @@ export interface DailySummaryResponse {
   doctor_name: string;
   stats: DailySummaryStats;
   consulted_patients: ConsultedPatient[];
+}
+
+export interface ConsultationNote {
+  id: number;
+  appointment_id: number;
+  patient_id: number;
+  doctor_id: number;
+  subjective: string | null;
+  objective: string | null;
+  assessment: string | null;
+  plan: string | null;
+  diagnosis_text: string | null;
+  vitals_json: Record<string, any> | null;
+  attachments: string[] | null;
+  created_at?: string;
+  updated_at?: string;
 }

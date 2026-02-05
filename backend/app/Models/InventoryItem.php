@@ -57,6 +57,11 @@ class InventoryItem extends Model
         return $this->hasMany(DrugPurchaseItem::class);
     }
 
+    public function stockLedgers(): HasMany
+    {
+        return $this->hasMany(StockLedger::class);
+    }
+
     public function isLowStock(): bool
     {
         return $this->quantity <= $this->reorder_level;
@@ -80,4 +85,3 @@ class InventoryItem extends Model
         return $this->isExpiringSoon();
     }
 }
-

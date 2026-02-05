@@ -16,7 +16,7 @@ class PatientBillingController extends Controller
 
         $invoices = Invoice::query()
             ->where('patient_id', $user->id)
-            ->with(['payments'])
+            ->with(['payments', 'items'])
             ->orderBy('issued_at', 'desc')
             ->orderBy('id', 'desc')
             ->get();
@@ -24,6 +24,18 @@ class PatientBillingController extends Controller
         return response()->json([
             'data' => $invoices,
         ]);
+    }
+
+    public function show(Request $request, int $id)
+    {
+        $user = $request->user();
+
+        $invoice = Invoice::query()
+            ->where('patient_id', $user->id)
+            ->with(['payments', 'items', 'patient:id,first_name,last_name,email'])
+            ->findOrFail($id);
+
+        return response()->json($invoice);
     }
 
     public function pay(Request $request)

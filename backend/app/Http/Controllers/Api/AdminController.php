@@ -5,16 +5,19 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Appointment;
-use App\Models\Drug;
 use App\Models\Department;
 use App\Models\EhrRecord;
 use App\Models\Diagnosis;
 use App\Models\VitalSign;
 use App\Models\Prescription;
+use App\Models\InventoryItem;
+use App\Models\StockLedger;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Carbon\Carbon;
 
 class AdminController extends Controller
@@ -68,12 +71,21 @@ class AdminController extends Controller
 
         $user->assignRole($validated['role']);
 
+        $this->setAuditContext(
+            $request,
+            'user',
+            $user->id,
+            null,
+            $user->toArray()
+        );
+
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
 
     public function updateUser(Request $request, $id)
     {
         $user = User::findOrFail($id);
+        $before = $user->toArray();
 
         $validated = $request->validate([
             'first_name' => 'sometimes|string',
@@ -89,12 +101,21 @@ class AdminController extends Controller
             $user->syncRoles([$request->role]);
         }
 
+        $this->setAuditContext(
+            $request,
+            'user',
+            $user->id,
+            $before,
+            $user->fresh()->toArray()
+        );
+
         return response()->json(['message' => 'User updated successfully']);
     }
 
-    public function toggleUserStatus($id)
+    public function toggleUserStatus(Request $request, $id)
     {
         $user = User::findOrFail($id);
+        $before = $user->toArray();
 
         $currentUser = Auth::user();
         if ($currentUser && $user->id === $currentUser->id) {
@@ -103,6 +124,14 @@ class AdminController extends Controller
 
         $user->is_active = !$user->is_active;
         $user->save();
+
+        $this->setAuditContext(
+            $request,
+            'user',
+            $user->id,
+            $before,
+            $user->fresh()->toArray()
+        );
 
         $status = $user->is_active ? 'activated' : 'deactivated';
         return response()->json(['message' => "User account $status."]);
@@ -170,16 +199,17 @@ class AdminController extends Controller
 
     public function getInventory()
     {
-        $inventory = Drug::select('id', 'name', 'stock_quantity', 'expiry_date')
-            ->orderBy('stock_quantity', 'asc')
+        $inventory = InventoryItem::select('id', 'name', 'quantity', 'expiry_date', 'reorder_level')
+            ->orderBy('quantity', 'asc')
             ->get()
-            ->map(function($drug) {
+            ->map(function($item) {
+                $threshold = $item->reorder_level ?? 10;
                 return [
-                    'id' => $drug->id,
-                    'name' => $drug->name,
-                    'stock' => $drug->stock_quantity,
-                    'status' => $drug->stock_quantity < 10 ? 'Low Stock' : 'In Stock',
-                    'expiry' => $drug->expiry_date
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'stock' => $item->quantity,
+                    'status' => $item->quantity <= $threshold ? 'Low Stock' : 'In Stock',
+                    'expiry' => optional($item->expiry_date)->format('Y-m-d'),
                 ];
             });
 
@@ -192,29 +222,56 @@ class AdminController extends Controller
             'name' => 'required|string',
             'stock_quantity' => 'required|integer|min:0',
             'expiry_date' => 'required|date',
+            'reorder_level' => 'nullable|integer|min:0',
+            'unit_price' => 'nullable|numeric|min:0',
+            'selling_price' => 'nullable|numeric|min:0',
         ]);
 
-        $drug = Drug::create($validated);
-        return response()->json(['message' => 'Medicine added successfully', 'drug' => $drug]);
+        $item = InventoryItem::create([
+            'name' => $validated['name'],
+            'quantity' => $validated['stock_quantity'],
+            'expiry_date' => $validated['expiry_date'],
+            'reorder_level' => $validated['reorder_level'] ?? 10,
+            'unit_price' => $validated['unit_price'] ?? 0,
+            'selling_price' => $validated['selling_price'] ?? 0,
+            'is_active' => true,
+        ]);
+
+        $this->setAuditContext($request, 'inventory_item', $item->id, null, $item->toArray());
+        return response()->json(['message' => 'Medicine added successfully', 'drug' => $item]);
     }
 
     public function updateDrug(Request $request, $id)
     {
-        $drug = Drug::findOrFail($id);
+        $item = InventoryItem::findOrFail($id);
+        $before = $item->toArray();
         $validated = $request->validate([
             'name' => 'required|string',
             'stock_quantity' => 'required|integer|min:0',
             'expiry_date' => 'required|date',
+            'reorder_level' => 'nullable|integer|min:0',
+            'unit_price' => 'nullable|numeric|min:0',
+            'selling_price' => 'nullable|numeric|min:0',
         ]);
 
-        $drug->update($validated);
-        return response()->json(['message' => 'Medicine updated successfully', 'drug' => $drug]);
+        $item->update([
+            'name' => $validated['name'],
+            'quantity' => $validated['stock_quantity'],
+            'expiry_date' => $validated['expiry_date'],
+            'reorder_level' => $validated['reorder_level'] ?? $item->reorder_level,
+            'unit_price' => $validated['unit_price'] ?? $item->unit_price,
+            'selling_price' => $validated['selling_price'] ?? $item->selling_price,
+        ]);
+        $this->setAuditContext($request, 'inventory_item', $item->id, $before, $item->fresh()->toArray());
+        return response()->json(['message' => 'Medicine updated successfully', 'drug' => $item]);
     }
 
-    public function deleteDrug($id)
+    public function deleteDrug(Request $request, $id)
     {
-        $drug = Drug::findOrFail($id);
-        $drug->delete();
+        $item = InventoryItem::findOrFail($id);
+        $before = $item->toArray();
+        $item->delete();
+        $this->setAuditContext($request, 'inventory_item', $id, $before, null);
         return response()->json(['message' => 'Medicine deleted successfully']);
     }
 
@@ -249,12 +306,14 @@ class AdminController extends Controller
         ]);
 
         $dept = Department::create($validated);
+        $this->setAuditContext($request, 'department', $dept->id, null, $dept->toArray());
         return response()->json(['message' => 'Department created', 'department' => $dept]);
     }
 
     public function updateDepartment(Request $request, $id)
     {
         $dept = Department::findOrFail($id);
+        $before = $dept->toArray();
         $validated = $request->validate([
             'name' => 'required|string|unique:departments,name,' . $id,
             'description' => 'nullable|string',
@@ -262,16 +321,19 @@ class AdminController extends Controller
         ]);
 
         $dept->update($validated);
+        $this->setAuditContext($request, 'department', $dept->id, $before, $dept->fresh()->toArray());
         return response()->json(['message' => 'Department updated', 'department' => $dept]);
     }
 
-    public function deleteDepartment($id)
+    public function deleteDepartment(Request $request, $id)
     {
         $dept = Department::findOrFail($id);
+        $before = $dept->toArray();
         if ($dept->doctors()->exists()) {
              return response()->json(['message' => 'Cannot delete department with assigned doctors.'], 400);
         }
         $dept->delete();
+        $this->setAuditContext($request, 'department', $id, $before, null);
         return response()->json(['message' => 'Department deleted']);
     }
 
@@ -306,6 +368,7 @@ class AdminController extends Controller
     public function updateAppointment(Request $request, $id)
     {
         $appointment = Appointment::findOrFail($id);
+        $before = $appointment->toArray();
 
         $validated = $request->validate([
             'appointment_date' => 'sometimes|date',
@@ -320,16 +383,20 @@ class AdminController extends Controller
 
         $appointment->update($validated);
 
+        $this->setAuditContext($request, 'appointment', $appointment->id, $before, $appointment->fresh()->toArray());
+
         return response()->json([
             'message' => 'Appointment updated successfully',
             'appointment' => $appointment->fresh(['doctor', 'department', 'patient'])
         ]);
     }
 
-    public function deleteAppointment($id)
+    public function deleteAppointment(Request $request, $id)
     {
         $appointment = Appointment::findOrFail($id);
+        $before = $appointment->toArray();
         $appointment->delete();
+        $this->setAuditContext($request, 'appointment', $id, $before, null);
         return response()->json(['message' => 'Appointment deleted successfully']);
     }
 
@@ -681,6 +748,308 @@ class AdminController extends Controller
             ],
             'department_reports' => $departmentReports,
             'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+    // ==========================================
+    // 7. ADMIN REPORTING (CSV SUPPORT)
+    // ==========================================
+
+    public function reportAppointments(Request $request)
+    {
+        $validated = $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'group_by' => 'nullable|in:day,department,doctor',
+            'format' => 'nullable|in:json,csv',
+        ]);
+
+        $groupBy = $validated['group_by'] ?? 'day';
+        $startDate = $validated['start_date'] ?? null;
+        $endDate = $validated['end_date'] ?? null;
+
+        $base = Appointment::query()
+            ->when($startDate, fn ($q) => $q->whereDate('appointment_date', '>=', $startDate))
+            ->when($endDate, fn ($q) => $q->whereDate('appointment_date', '<=', $endDate));
+
+        if ($groupBy === 'department') {
+            $rows = $base->leftJoin('departments', 'appointments.department_id', '=', 'departments.id')
+                ->selectRaw('departments.id as department_id, departments.name as department_name')
+                ->selectRaw('count(*) as total')
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as completed", [Appointment::STATUS_COMPLETED])
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as cancelled", [Appointment::STATUS_CANCELLED])
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as no_show", [Appointment::STATUS_NO_SHOW])
+                ->groupBy('departments.id', 'departments.name')
+                ->orderByDesc('total')
+                ->get();
+        } elseif ($groupBy === 'doctor') {
+            $rows = $base->leftJoin('users as doctors', 'appointments.doctor_id', '=', 'doctors.id')
+                ->selectRaw('doctors.id as doctor_id')
+                ->selectRaw("trim(coalesce(doctors.first_name, '') || ' ' || coalesce(doctors.last_name, '')) as doctor_name")
+                ->selectRaw('count(*) as total')
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as completed", [Appointment::STATUS_COMPLETED])
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as cancelled", [Appointment::STATUS_CANCELLED])
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as no_show", [Appointment::STATUS_NO_SHOW])
+                ->groupBy('doctors.id', 'doctors.first_name', 'doctors.last_name')
+                ->orderByDesc('total')
+                ->get();
+        } else {
+            $rows = $base->selectRaw('date(appointment_date) as day')
+                ->selectRaw('count(*) as total')
+                ->selectRaw("sum(case when status = ? then 1 else 0 end) as completed", [Appointment::STATUS_COMPLETED])
+                ->selectRaw("sum(case when status = ? then 1 else 0 end) as cancelled", [Appointment::STATUS_CANCELLED])
+                ->selectRaw("sum(case when status = ? then 1 else 0 end) as no_show", [Appointment::STATUS_NO_SHOW])
+                ->groupBy('day')
+                ->orderBy('day')
+                ->get();
+        }
+
+        if (($validated['format'] ?? 'json') === 'csv') {
+            return $this->streamCsv('appointments_report.csv', $rows->toArray());
+        }
+
+        return response()->json([
+            'filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'group_by' => $groupBy,
+            ],
+            'data' => $rows,
+            'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+    public function reportRevenue(Request $request)
+    {
+        $validated = $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'group_by' => 'nullable|in:day,month',
+            'format' => 'nullable|in:json,csv',
+        ]);
+
+        $groupBy = $validated['group_by'] ?? 'day';
+        $startDate = $validated['start_date'] ?? null;
+        $endDate = $validated['end_date'] ?? null;
+
+        $dateExpression = $groupBy === 'month' ? "to_char(date(coalesce(paid_at, created_at)), 'YYYY-MM')" : 'date(coalesce(paid_at, created_at))';
+
+        $rows = Payment::query()
+            ->where('status', 'paid')
+            ->when($startDate, fn ($q) => $q->whereDate(DB::raw('coalesce(paid_at, created_at)'), '>=', $startDate))
+            ->when($endDate, fn ($q) => $q->whereDate(DB::raw('coalesce(paid_at, created_at)'), '<=', $endDate))
+            ->selectRaw("$dateExpression as period")
+            ->selectRaw('count(*) as payments')
+            ->selectRaw('sum(amount) as revenue')
+            ->groupBy('period')
+            ->orderBy('period')
+            ->get();
+
+        if (($validated['format'] ?? 'json') === 'csv') {
+            return $this->streamCsv('revenue_report.csv', $rows->toArray());
+        }
+
+        return response()->json([
+            'filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'group_by' => $groupBy,
+            ],
+            'data' => $rows,
+            'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+    public function reportNoShowRates(Request $request)
+    {
+        $validated = $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'group_by' => 'nullable|in:day,department,doctor',
+            'format' => 'nullable|in:json,csv',
+        ]);
+
+        $groupBy = $validated['group_by'] ?? 'day';
+        $startDate = $validated['start_date'] ?? null;
+        $endDate = $validated['end_date'] ?? null;
+
+        $base = Appointment::query()
+            ->when($startDate, fn ($q) => $q->whereDate('appointment_date', '>=', $startDate))
+            ->when($endDate, fn ($q) => $q->whereDate('appointment_date', '<=', $endDate));
+
+        if ($groupBy === 'department') {
+            $rows = $base->leftJoin('departments', 'appointments.department_id', '=', 'departments.id')
+                ->selectRaw('departments.id as department_id, departments.name as department_name')
+                ->selectRaw('count(*) as total')
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as no_show", [Appointment::STATUS_NO_SHOW])
+                ->groupBy('departments.id', 'departments.name')
+                ->orderByDesc('no_show')
+                ->get()
+                ->map(function ($row) {
+                    $row->rate = $row->total > 0 ? round(($row->no_show / $row->total) * 100, 2) : 0;
+                    return $row;
+                });
+        } elseif ($groupBy === 'doctor') {
+            $rows = $base->leftJoin('users as doctors', 'appointments.doctor_id', '=', 'doctors.id')
+                ->selectRaw('doctors.id as doctor_id')
+                ->selectRaw("trim(coalesce(doctors.first_name, '') || ' ' || coalesce(doctors.last_name, '')) as doctor_name")
+                ->selectRaw('count(*) as total')
+                ->selectRaw("sum(case when appointments.status = ? then 1 else 0 end) as no_show", [Appointment::STATUS_NO_SHOW])
+                ->groupBy('doctors.id', 'doctors.first_name', 'doctors.last_name')
+                ->orderByDesc('no_show')
+                ->get()
+                ->map(function ($row) {
+                    $row->rate = $row->total > 0 ? round(($row->no_show / $row->total) * 100, 2) : 0;
+                    return $row;
+                });
+        } else {
+            $rows = $base->selectRaw('date(appointment_date) as day')
+                ->selectRaw('count(*) as total')
+                ->selectRaw("sum(case when status = ? then 1 else 0 end) as no_show", [Appointment::STATUS_NO_SHOW])
+                ->groupBy('day')
+                ->orderBy('day')
+                ->get()
+                ->map(function ($row) {
+                    $row->rate = $row->total > 0 ? round(($row->no_show / $row->total) * 100, 2) : 0;
+                    return $row;
+                });
+        }
+
+        if (($validated['format'] ?? 'json') === 'csv') {
+            return $this->streamCsv('no_show_report.csv', $rows->toArray());
+        }
+
+        return response()->json([
+            'filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'group_by' => $groupBy,
+            ],
+            'data' => $rows,
+            'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+    public function reportInventoryValuation(Request $request)
+    {
+        $validated = $request->validate([
+            'include_inactive' => 'nullable|boolean',
+            'format' => 'nullable|in:json,csv',
+        ]);
+
+        $includeInactive = (bool) ($validated['include_inactive'] ?? false);
+
+        $items = InventoryItem::query()
+            ->when(!$includeInactive, fn ($q) => $q->where('is_active', true))
+            ->orderBy('name')
+            ->get()
+            ->map(function (InventoryItem $item) {
+                $costValue = (float) $item->unit_price * (int) $item->quantity;
+                $sellValue = (float) $item->selling_price * (int) $item->quantity;
+
+                return [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'quantity' => $item->quantity,
+                    'unit_price' => $item->unit_price,
+                    'selling_price' => $item->selling_price,
+                    'cost_value' => round($costValue, 2),
+                    'sell_value' => round($sellValue, 2),
+                    'is_active' => $item->is_active,
+                    'expiry_date' => $item->expiry_date?->format('Y-m-d'),
+                ];
+            });
+
+        if (($validated['format'] ?? 'json') === 'csv') {
+            return $this->streamCsv('inventory_valuation.csv', $items->toArray());
+        }
+
+        return response()->json([
+            'summary' => [
+                'total_cost_value' => round($items->sum('cost_value'), 2),
+                'total_sell_value' => round($items->sum('sell_value'), 2),
+                'items' => $items->count(),
+            ],
+            'data' => $items,
+            'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+    public function reportStockMovement(Request $request)
+    {
+        $validated = $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'type' => 'nullable|in:PURCHASE,DISPENSE,ADJUST',
+            'format' => 'nullable|in:json,csv',
+        ]);
+
+        $startDate = $validated['start_date'] ?? null;
+        $endDate = $validated['end_date'] ?? null;
+        $type = $validated['type'] ?? null;
+
+        $rows = StockLedger::query()
+            ->with(['inventoryItem', 'performer'])
+            ->when($type, fn ($q) => $q->where('type', $type))
+            ->when($startDate, fn ($q) => $q->whereDate('created_at', '>=', $startDate))
+            ->when($endDate, fn ($q) => $q->whereDate('created_at', '<=', $endDate))
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (StockLedger $ledger) {
+                return [
+                    'id' => $ledger->id,
+                    'item' => $ledger->inventoryItem?->name,
+                    'type' => $ledger->type,
+                    'quantity' => $ledger->quantity,
+                    'cost_price' => $ledger->cost_price,
+                    'sell_price' => $ledger->sell_price,
+                    'performed_by' => $ledger->performer?->name,
+                    'reason' => $ledger->reason,
+                    'created_at' => $ledger->created_at?->toDateTimeString(),
+                ];
+            });
+
+        if (($validated['format'] ?? 'json') === 'csv') {
+            return $this->streamCsv('stock_movement.csv', $rows->toArray());
+        }
+
+        return response()->json([
+            'filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'type' => $type,
+            ],
+            'data' => $rows,
+            'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+    private function setAuditContext(Request $request, string $entityType, ?int $entityId, ?array $before, ?array $after): void
+    {
+        $request->attributes->set('audit.entity_type', $entityType);
+        $request->attributes->set('audit.entity_id', $entityId);
+        $request->attributes->set('audit.before', $before);
+        $request->attributes->set('audit.after', $after);
+    }
+
+    private function streamCsv(string $filename, array $rows): StreamedResponse
+    {
+        $headers = [];
+        if (!empty($rows)) {
+            $headers = array_keys((array) $rows[0]);
+        }
+
+        return response()->streamDownload(function () use ($rows, $headers): void {
+            $handle = fopen('php://output', 'w');
+            if ($headers) {
+                fputcsv($handle, $headers);
+            }
+            foreach ($rows as $row) {
+                fputcsv($handle, array_values((array) $row));
+            }
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
         ]);
     }
 }

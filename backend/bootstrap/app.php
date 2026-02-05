@@ -23,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // It is good practice to add these two as well:
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+
+            // Audit log middleware for sensitive actions
+            'audit' => \App\Http\Middleware\AuditAction::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

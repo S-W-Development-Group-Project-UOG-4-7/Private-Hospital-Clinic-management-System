@@ -26,7 +26,7 @@ import type {
   ReceptionistDashboardStats,
   ReceptionistDoctor,
   ReceptionistPatient,
-  ClinicSlotAvailability,
+  ReceptionistSlot,
   Referral,
 } from '../../types/receptionist';
 
@@ -114,20 +114,13 @@ const ReceptionistDashboard: React.FC = () => {
     doctor_id: '',
     appointment_date: '',
     appointment_time: '',
+    slot_id: '',
     type: 'in_person' as 'in_person' | 'telemedicine',
     status: 'scheduled' as 'scheduled' | 'completed' | 'cancelled',
   });
-  const [availableDoctors, setAvailableDoctors] = useState<ReceptionistDoctor[]>([]);
-  const [availableDoctorsLoading, setAvailableDoctorsLoading] = useState(false);
-  const [availableDoctorsError, setAvailableDoctorsError] = useState<string | null>(null);
-
-  const [slotCalendar, setSlotCalendar] = useState<ClinicSlotAvailability[]>([]);
+  const [slotCalendar, setSlotCalendar] = useState<ReceptionistSlot[]>([]);
   const [slotCalendarLoading, setSlotCalendarLoading] = useState(false);
   const [slotCalendarError, setSlotCalendarError] = useState<string | null>(null);
-  const [slotClinicId, setSlotClinicId] = useState<number | null>(null);
-  const [slotClinicName, setSlotClinicName] = useState<string | null>(null);
-  const [slotClinicLoading, setSlotClinicLoading] = useState(false);
-  const [slotClinicError, setSlotClinicError] = useState<string | null>(null);
 
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueDate, setQueueDate] = useState(() => {
@@ -160,6 +153,7 @@ const ReceptionistDashboard: React.FC = () => {
     amount: '',
     description: '',
     due_date: '',
+    items: [{ description: '', quantity: '1', unit_price: '' }],
   });
 
   const currencyFormatter = useMemo(
@@ -171,6 +165,15 @@ const ReceptionistDashboard: React.FC = () => {
       }),
     []
   );
+
+  const invoiceItemsTotal = useMemo(() => {
+    return (invoiceForm.items || []).reduce((sum, item) => {
+      const qty = Number(item.quantity || 0);
+      const price = Number(item.unit_price || 0);
+      if (!Number.isFinite(qty) || !Number.isFinite(price)) return sum;
+      return sum + qty * price;
+    }, 0);
+  }, [invoiceForm.items]);
 
   const queueDoctors = useMemo(() => {
     const departmentId = Number(queueDepartmentFilter);
@@ -258,45 +261,6 @@ const ReceptionistDashboard: React.FC = () => {
     }
   }, []);
 
-  const loadAvailableDoctors = useCallback(async (params: { department_id: number; date: string; time: string }) => {
-    setAvailableDoctorsLoading(true);
-    setAvailableDoctorsError(null);
-    try {
-      const resp = await receptionistApi.doctors.list({
-        department_id: params.department_id,
-        date: params.date,
-        time: params.time,
-        available_only: true,
-        is_active: true,
-      });
-      const doctorData = Array.isArray(resp.data) ? resp.data : [];
-      setAvailableDoctors(doctorData);
-
-      if (!editingAppointment) {
-        const nextDoctor = doctorData
-          .slice()
-          .sort((a, b) => {
-            const aCount = a.appointment_count ?? 0;
-            const bCount = b.appointment_count ?? 0;
-            if (aCount !== bCount) return aCount - bCount;
-            const aName = `${a.first_name || ''} ${a.last_name || ''}`.trim();
-            const bName = `${b.first_name || ''} ${b.last_name || ''}`.trim();
-            return aName.localeCompare(bName);
-          })[0];
-
-        setAppointmentForm((prev) => ({
-          ...prev,
-          doctor_id: nextDoctor ? String(nextDoctor.id) : '',
-        }));
-      }
-    } catch (e: any) {
-      setAvailableDoctors([]);
-      setAvailableDoctorsError(e?.message || 'Failed to load available doctors');
-    } finally {
-      setAvailableDoctorsLoading(false);
-    }
-  }, [editingAppointment]);
-
   const loadPatients = useCallback(async (page = 1) => {
     setError(null);
     setPatientsLoading(true);
@@ -327,12 +291,14 @@ const ReceptionistDashboard: React.FC = () => {
 
   const slotSummaries = useMemo(() => {
     return slotCalendar
-      .map((slot) => ({
-        time: slot.time,
-        available: slot.available_count,
-      }))
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .slice()
+      .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
   }, [slotCalendar]);
+
+  const selectedSlot = useMemo(() => {
+    if (!appointmentForm.slot_id) return null;
+    return slotCalendar.find((slot) => String(slot.id) === appointmentForm.slot_id) || null;
+  }, [appointmentForm.slot_id, slotCalendar]);
 
   const loadAppointmentPatients = useCallback(async (search = '') => {
     setAppointmentPatientsLoading(true);
@@ -417,39 +383,6 @@ const ReceptionistDashboard: React.FC = () => {
   }, [loadDoctors, loadDepartments, loadStats]);
 
   useEffect(() => {
-    let isActive = true;
-    const loadClinics = async () => {
-      setSlotClinicLoading(true);
-      setSlotClinicError(null);
-      try {
-        const resp = await receptionistApi.clinics.list();
-        const clinics = Array.isArray(resp.data) ? resp.data : [];
-        const opdClinic = clinics.find((clinic) => clinic.name?.toLowerCase() === 'opd');
-        const selected = opdClinic || clinics[0];
-        if (isActive) {
-          setSlotClinicId(selected?.id ?? null);
-          setSlotClinicName(selected?.name ?? null);
-        }
-      } catch (e: any) {
-        if (isActive) {
-          setSlotClinicId(null);
-          setSlotClinicName(null);
-          setSlotClinicError(e?.message || 'Failed to load clinics');
-        }
-      } finally {
-        if (isActive) {
-          setSlotClinicLoading(false);
-        }
-      }
-    };
-
-    loadClinics();
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  useEffect(() => {
     if (active === 'patients') {
       loadPatients(1);
     }
@@ -504,53 +437,22 @@ const ReceptionistDashboard: React.FC = () => {
   useEffect(() => {
     if (!appointmentModalOpen) return;
     const departmentId = Number(appointmentForm.department_id);
-    if (!Number.isFinite(departmentId) || departmentId <= 0) {
-      setAvailableDoctors([]);
-      return;
-    }
-    if (!appointmentForm.appointment_date || !appointmentForm.appointment_time) {
-      setAvailableDoctors([]);
-      return;
-    }
-
-    loadAvailableDoctors({
-      department_id: departmentId,
-      date: appointmentForm.appointment_date,
-      time: appointmentForm.appointment_time,
-    });
-  }, [
-    appointmentModalOpen,
-    appointmentForm.department_id,
-    appointmentForm.appointment_date,
-    appointmentForm.appointment_time,
-    loadAvailableDoctors,
-  ]);
-
-  useEffect(() => {
-    if (!appointmentModalOpen) return;
-    const departmentId = Number(appointmentForm.department_id);
     if (!appointmentForm.appointment_date || !Number.isFinite(departmentId) || departmentId <= 0) {
       setSlotCalendar([]);
       setSlotCalendarError(null);
       setSlotCalendarLoading(false);
       return;
     }
-    if (!slotClinicId) {
-      setSlotCalendar([]);
-      setSlotCalendarError(slotClinicError || 'No clinic available for slots');
-      setSlotCalendarLoading(false);
-      return;
-    }
 
     setSlotCalendarLoading(true);
     setSlotCalendarError(null);
+    const visitMode = appointmentForm.type === 'telemedicine' ? 'ONLINE' : 'PHYSICAL';
     receptionistApi.slots
       .list({
-        clinic_id: slotClinicId,
         date: appointmentForm.appointment_date,
         department_id: departmentId,
-        include_all: true,
-        include_unassigned: slotClinicName?.toLowerCase() === 'opd',
+        visit_mode: visitMode,
+        available_only: true,
       })
       .then((resp) => {
         setSlotCalendar(Array.isArray(resp.data) ? resp.data : []);
@@ -566,9 +468,25 @@ const ReceptionistDashboard: React.FC = () => {
     appointmentModalOpen,
     appointmentForm.appointment_date,
     appointmentForm.department_id,
-    slotClinicId,
-    slotClinicError,
+    appointmentForm.type,
   ]);
+
+  useEffect(() => {
+    if (!appointmentModalOpen) return;
+    if (!appointmentForm.slot_id) return;
+
+    const selected = slotCalendar.find((slot) => String(slot.id) === appointmentForm.slot_id);
+    if (!selected) return;
+
+    const nextDoctorId = selected.doctor_id ? String(selected.doctor_id) : '';
+
+    setAppointmentForm((prev) => ({
+      ...prev,
+      appointment_time: selected.start_time?.slice(0, 5) || prev.appointment_time,
+      doctor_id: nextDoctorId,
+    }));
+
+  }, [appointmentModalOpen, appointmentForm.slot_id, slotCalendar]);
 
   const openCreatePatient = () => {
     setEditingPatient(null);
@@ -649,10 +567,10 @@ const ReceptionistDashboard: React.FC = () => {
       doctor_id: '',
       appointment_date: '',
       appointment_time: '',
+      slot_id: '',
       type: 'in_person',
       status: 'scheduled',
     });
-    setAvailableDoctors([]);
     setAppointmentPatientSearch('');
     loadAppointmentPatients('');
     setAppointmentModalOpen(true);
@@ -666,6 +584,7 @@ const ReceptionistDashboard: React.FC = () => {
       doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
       appointment_date: appt.appointment_date || '',
       appointment_time: (appt.appointment_time || '').slice(0, 5),
+      slot_id: '',
       type: appt.type || 'in_person',
       status: appt.status || 'scheduled',
     });
@@ -677,8 +596,6 @@ const ReceptionistDashboard: React.FC = () => {
     if (appointmentSaving) return;
     setAppointmentModalOpen(false);
     setEditingAppointment(null);
-    setAvailableDoctors([]);
-    setAvailableDoctorsError(null);
     setSlotCalendar([]);
     setSlotCalendarError(null);
     setSlotCalendarLoading(false);
@@ -698,8 +615,8 @@ const ReceptionistDashboard: React.FC = () => {
         setError('Department is required');
         return;
       }
-      if (!appointmentForm.doctor_id) {
-        setError('No available doctor for the selected time');
+      if (!editingAppointment && !appointmentForm.slot_id) {
+        setError('Please select an available time slot');
         return;
       }
 
@@ -718,9 +635,10 @@ const ReceptionistDashboard: React.FC = () => {
         const created = await receptionistApi.appointments.create({
           patient_id: patientId,
           department_id: Number(appointmentForm.department_id),
-          doctor_id: Number(appointmentForm.doctor_id),
+          doctor_id: appointmentForm.doctor_id ? Number(appointmentForm.doctor_id) : undefined,
           appointment_date: appointmentForm.appointment_date,
           appointment_time: appointmentForm.appointment_time,
+          slot_id: Number(appointmentForm.slot_id),
           type: appointmentForm.type,
           status: appointmentForm.status,
         });
@@ -823,8 +741,66 @@ const ReceptionistDashboard: React.FC = () => {
     }
   };
 
+  const callNextInQueue = async () => {
+    setError(null);
+    try {
+      await receptionistApi.queue.callNext({
+        date: queueDate,
+        department_id: queueDepartmentFilter ? Number(queueDepartmentFilter) : undefined,
+        doctor_id: queueDoctorFilter && queueDoctorFilter !== '0' ? Number(queueDoctorFilter) : queueDoctorFilter === '0' ? 0 : undefined,
+      });
+      toast.success('Called next patient');
+      await loadQueue();
+      await loadStats();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to call next patient');
+    }
+  };
+
+  const skipQueueEntry = async (entry: QueueEntry) => {
+    setError(null);
+    try {
+      await receptionistApi.queue.skip(entry.id);
+      toast.success('Patient skipped to end of queue');
+      await loadQueue();
+      await loadStats();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to skip queue entry');
+    }
+  };
+
+  const requeueEntry = async (entry: QueueEntry) => {
+    setError(null);
+    try {
+      await receptionistApi.queue.requeue(entry.id);
+      toast.success('Patient requeued');
+      await loadQueue();
+      await loadStats();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to requeue entry');
+    }
+  };
+
+  const markNoShow = async (entry: QueueEntry) => {
+    setError(null);
+    try {
+      await receptionistApi.queue.markNoShow(entry.id);
+      toast.success('Marked as no-show');
+      await loadQueue();
+      await loadStats();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to mark no-show');
+    }
+  };
+
   const openCreateInvoice = () => {
-    setInvoiceForm({ patient_id: '', amount: '', description: '', due_date: '' });
+    setInvoiceForm({
+      patient_id: '',
+      amount: '',
+      description: '',
+      due_date: '',
+      items: [{ description: '', quantity: '1', unit_price: '' }],
+    });
     setInvoiceModalOpen(true);
   };
 
@@ -839,9 +815,22 @@ const ReceptionistDashboard: React.FC = () => {
     setInvoiceSaving(true);
     try {
       const patientId = Number(invoiceForm.patient_id);
-      const amount = Number(invoiceForm.amount);
-      if (!Number.isFinite(patientId) || !Number.isFinite(amount) || amount <= 0) {
-        setError('Invalid patient id or amount');
+      const normalizedItems = (invoiceForm.items || [])
+        .map((item) => ({
+          description: item.description.trim(),
+          quantity: Number(item.quantity || 0),
+          unit_price: Number(item.unit_price || 0),
+        }))
+        .filter((item) => item.description !== '' && Number.isFinite(item.quantity) && item.quantity > 0 && Number.isFinite(item.unit_price) && item.unit_price >= 0);
+
+      const amount = Number(invoiceItemsTotal);
+
+      if (!Number.isFinite(patientId) || patientId <= 0) {
+        setError('Invalid patient id');
+        return;
+      }
+      if (normalizedItems.length === 0 || !Number.isFinite(amount) || amount <= 0) {
+        setError('Add at least one valid line item');
         return;
       }
       await receptionistApi.invoices.create({
@@ -849,6 +838,7 @@ const ReceptionistDashboard: React.FC = () => {
         amount,
         description: invoiceForm.description.trim() === '' ? null : invoiceForm.description.trim(),
         due_date: invoiceForm.due_date.trim() === '' ? null : invoiceForm.due_date.trim(),
+        items: normalizedItems,
       });
       toast.success('Invoice created');
       closeInvoiceModal();
@@ -887,6 +877,15 @@ const ReceptionistDashboard: React.FC = () => {
     const patientName = buildPatientName(invoice);
     const amountValue = Number(invoice.amount ?? 0);
     const amount = currencyFormatter.format(Number.isFinite(amountValue) ? amountValue : 0);
+    const items = Array.isArray(invoice.items) ? invoice.items : [];
+    const itemsRows = items
+      .map((item) => {
+        const qty = Number(item.quantity ?? 0);
+        const unitPrice = Number(item.unit_price ?? 0);
+        const lineTotal = Number(item.line_total ?? qty * unitPrice);
+        return `<tr><td>${item.description}</td><td>${qty}</td><td>${unitPrice.toFixed(2)}</td><td>${lineTotal.toFixed(2)}</td></tr>`;
+      })
+      .join('');
 
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) {
@@ -918,6 +917,10 @@ const ReceptionistDashboard: React.FC = () => {
           .summary { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-top: 16px; }
           .summary-row { display: flex; justify-content: space-between; margin: 8px 0; }
           .total { font-size: 18px; font-weight: 700; }
+          .items { margin-top: 20px; }
+          .items table { width: 100%; border-collapse: collapse; }
+          .items th, .items td { border-bottom: 1px solid #e5e7eb; padding: 8px; text-align: left; font-size: 12px; }
+          .items th { text-transform: uppercase; color: #6b7280; letter-spacing: 0.04em; }
           .status { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 999px; font-size: 12px; text-transform: uppercase; }
           .status-unpaid { background: #fee2e2; color: #991b1b; }
           .status-paid { background: #dcfce7; color: #166534; }
@@ -971,6 +974,8 @@ const ReceptionistDashboard: React.FC = () => {
             <span>${amount}</span>
           </div>
         </div>
+
+        ${itemsRows ? `<div class="items"><table><thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>${itemsRows}</tbody></table></div>` : ''}
 
         ${invoice.description ? `<div class="summary"><div class="label">Notes</div><div class="value">${invoice.description}</div></div>` : ''}
 
@@ -1784,6 +1789,12 @@ const ReceptionistDashboard: React.FC = () => {
                     Check-in
                   </button>
                   <button
+                    onClick={callNextInQueue}
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-2 rounded-lg transition"
+                  >
+                    Call Next
+                  </button>
+                  <button
                     onClick={async () => {
                       if (!window.confirm('Clear all queue entries for the selected date and filters? This cannot be undone.')) return;
                       try {
@@ -1923,6 +1934,8 @@ const ReceptionistDashboard: React.FC = () => {
                                         ? 'bg-teal-50 text-teal-700'
                                         : q.status === 'in_consultation'
                                           ? 'bg-orange-100 text-orange-800'
+                                          : q.status === 'no_show'
+                                            ? 'bg-gray-100 text-gray-700'
                                           : q.status === 'completed'
                                             ? 'bg-green-100 text-green-800'
                                             : 'bg-red-100 text-red-800'
@@ -1941,6 +1954,13 @@ const ReceptionistDashboard: React.FC = () => {
                                       Start
                                     </button>
                                     <button
+                                      onClick={() => skipQueueEntry(q)}
+                                      disabled={q.status !== 'waiting'}
+                                      className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                    >
+                                      Skip
+                                    </button>
+                                    <button
                                       onClick={() => setQueueStatus(q, 'completed')}
                                       disabled={q.status === 'completed' || q.status === 'cancelled'}
                                       className="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
@@ -1953,6 +1973,20 @@ const ReceptionistDashboard: React.FC = () => {
                                       className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
                                     >
                                       Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => markNoShow(q)}
+                                      disabled={q.status === 'completed' || q.status === 'cancelled' || q.status === 'no_show'}
+                                      className="bg-gray-500 hover:bg-gray-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                    >
+                                      No-show
+                                    </button>
+                                    <button
+                                      onClick={() => requeueEntry(q)}
+                                      disabled={q.status === 'waiting'}
+                                      className="bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                    >
+                                      Requeue
                                     </button>
                                   </div>
                                 </td>
@@ -2505,8 +2539,9 @@ const ReceptionistDashboard: React.FC = () => {
                         ...p,
                         department_id: value,
                         doctor_id: '',
+                        appointment_time: '',
+                        slot_id: '',
                       }));
-                      setAvailableDoctors([]);
                     }}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
@@ -2527,18 +2562,25 @@ const ReceptionistDashboard: React.FC = () => {
                     type="date"
                     required
                     value={appointmentForm.appointment_date}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_date: e.target.value }))}
+                    onChange={(e) =>
+                      setAppointmentForm((p) => ({
+                        ...p,
+                        appointment_date: e.target.value,
+                        appointment_time: '',
+                        slot_id: '',
+                      }))
+                    }
                     className="w-full px-3 py-2 border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Time (auto)</label>
                   <input
                     type="time"
-                    required
                     value={appointmentForm.appointment_time}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_time: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -2550,8 +2592,6 @@ const ReceptionistDashboard: React.FC = () => {
                     <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
                       Select a department and date to load available slots.
                     </div>
-                  ) : slotClinicLoading ? (
-                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading clinic slots...</div>
                   ) : slotCalendarLoading ? (
                     <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading available slots...</div>
                   ) : slotSummaries.length === 0 ? (
@@ -2561,25 +2601,31 @@ const ReceptionistDashboard: React.FC = () => {
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                       {slotSummaries.map((slot) => {
-                        const isSelected = appointmentForm.appointment_time === slot.time;
-                        const isDisabled = slot.available === 0;
+                        const isSelected = appointmentForm.slot_id === String(slot.id);
                         return (
                           <button
-                            key={slot.time}
+                            key={slot.id}
                             type="button"
-                            disabled={isDisabled}
-                            onClick={() => setAppointmentForm((p) => ({ ...p, appointment_time: slot.time }))}
+                            onClick={() =>
+                              setAppointmentForm((p) => ({
+                                ...p,
+                                slot_id: String(slot.id),
+                                appointment_time: slot.start_time?.slice(0, 5) || '',
+                              }))
+                            }
                             className={`rounded-lg border px-3 py-2 text-left transition ${
                               isSelected
                                 ? 'border-teal-600 bg-teal-600 text-white'
-                                : isDisabled
-                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
                                 : 'border-gray-200 bg-white hover:border-teal-300 hover:bg-teal-50 text-gray-800'
                             }`}
                           >
-                            <div className="text-sm font-semibold">{slot.time}</div>
-                            <div className={`text-xs ${isSelected ? 'text-teal-100' : isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {slot.available > 0 ? `${slot.available} available` : 'Fully booked'}
+                            <div className="text-sm font-semibold">{slot.start_time?.slice(0, 5)}</div>
+                            <div className={`text-xs ${isSelected ? 'text-teal-100' : 'text-gray-500'}`}>
+                              {slot.doctor
+                                ? `${slot.doctor.first_name || ''} ${slot.doctor.last_name || ''}`.trim() || `Doctor #${slot.doctor_id}`
+                                : slot.doctor_id
+                                ? `Doctor #${slot.doctor_id}`
+                                : 'Auto assigned'}
                             </div>
                           </button>
                         );
@@ -2595,29 +2641,19 @@ const ReceptionistDashboard: React.FC = () => {
                     disabled
                     className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
                   >
-                    {!appointmentForm.department_id || !appointmentForm.appointment_date || !appointmentForm.appointment_time ? (
-                      <option value="">Select department, date, and time</option>
-                    ) : availableDoctorsLoading ? (
-                      <option value="">Loading doctors...</option>
-                    ) : availableDoctors.length === 0 ? (
-                      <option value="">No available doctors</option>
+                    {!appointmentForm.department_id || !appointmentForm.appointment_date || !appointmentForm.slot_id ? (
+                      <option value="">Select department, date, and a time slot</option>
+                    ) : selectedSlot?.doctor ? (
+                      <option value={selectedSlot.doctor_id}>
+                        {`${selectedSlot.doctor.first_name || ''} ${selectedSlot.doctor.last_name || ''}`.trim() ||
+                          `Doctor #${selectedSlot.doctor_id}`}
+                      </option>
+                    ) : selectedSlot?.doctor_id ? (
+                      <option value={selectedSlot.doctor_id}>Doctor #{selectedSlot.doctor_id}</option>
                     ) : (
-                      <>
-                        {appointmentForm.doctor_id &&
-                          !availableDoctors.some((doc) => String(doc.id) === appointmentForm.doctor_id) && (
-                            <option value={appointmentForm.doctor_id}>Current doctor</option>
-                          )}
-                        {availableDoctors.map((doc) => (
-                          <option key={doc.id} value={doc.id}>
-                            {`${doc.first_name || ''} ${doc.last_name || ''}`.trim()} • ${doc.appointment_count ?? 0} appts
-                          </option>
-                        ))}
-                      </>
+                      <option value="">Auto assigned</option>
                     )}
                   </select>
-                  {availableDoctorsError && (
-                    <div className="text-xs text-red-600 mt-1">{availableDoctorsError}</div>
-                  )}
                   <div className="text-xs text-gray-500 mt-1">
                     Doctor is auto-selected with the lowest appointment load.
                   </div>
@@ -2626,7 +2662,14 @@ const ReceptionistDashboard: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                   <select
                     value={appointmentForm.type}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, type: e.target.value as any }))}
+                    onChange={(e) =>
+                      setAppointmentForm((p) => ({
+                        ...p,
+                        type: e.target.value as any,
+                        appointment_time: '',
+                        slot_id: '',
+                      }))
+                    }
                     className="w-full px-3 py-2 border rounded-lg"
                   >
                     <option value="in_person">In Person</option>
@@ -2777,14 +2820,94 @@ const ReceptionistDashboard: React.FC = () => {
                 />
               </div>
               <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Line Items *</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInvoiceForm((p) => ({
+                        ...p,
+                        items: [...(p.items || []), { description: '', quantity: '1', unit_price: '' }],
+                      }))
+                    }
+                    className="text-sm text-teal-600 hover:text-teal-700"
+                  >
+                    Add Item
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(invoiceForm.items || []).map((item, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Description"
+                        value={item.description}
+                        onChange={(e) =>
+                          setInvoiceForm((p) => {
+                            const items = [...(p.items || [])];
+                            items[index] = { ...items[index], description: e.target.value };
+                            return { ...p, items };
+                          })
+                        }
+                        className="md:col-span-2 px-3 py-2 border rounded-lg"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Qty"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          setInvoiceForm((p) => {
+                            const items = [...(p.items || [])];
+                            items[index] = { ...items[index], quantity: e.target.value };
+                            return { ...p, items };
+                          })
+                        }
+                        className="px-3 py-2 border rounded-lg"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Unit Price"
+                          value={item.unit_price}
+                          onChange={(e) =>
+                            setInvoiceForm((p) => {
+                              const items = [...(p.items || [])];
+                              items[index] = { ...items[index], unit_price: e.target.value };
+                              return { ...p, items };
+                            })
+                          }
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setInvoiceForm((p) => {
+                              const items = [...(p.items || [])];
+                              items.splice(index, 1);
+                              return { ...p, items };
+                            })
+                          }
+                          className="px-3 py-2 border rounded-lg text-red-600 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
                 <input
                   type="number"
                   step="0.01"
-                  required
-                  value={invoiceForm.amount}
-                  onChange={(e) => setInvoiceForm((p) => ({ ...p, amount: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  readOnly
+                  value={invoiceItemsTotal.toFixed(2)}
+                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
                 />
               </div>
               <div>

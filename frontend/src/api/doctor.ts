@@ -46,6 +46,25 @@ export const doctorApi = {
     },
   },
 
+  consultations: {
+    show: async (appointmentId: number): Promise<{ appointment_id: number; note: any | null }> => {
+      const response = await http.get<{ appointment_id: number; note: any | null }>(`${API_ENDPOINTS.DOCTOR_CONSULTATION_SHOW(String(appointmentId))}`);
+      return response.data;
+    },
+    save: async (appointmentId: number, payload: Partial<{ subjective: string; objective: string; assessment: string; plan: string; diagnosis_text: string; vitals_json: Record<string, any>; attachments: string[] }>): Promise<any> => {
+      const response = await http.post(`${API_ENDPOINTS.DOCTOR_CONSULTATION_SAVE(String(appointmentId))}`, payload);
+      return response.data;
+    },
+    start: async (appointmentId: number): Promise<DoctorAppointment> => {
+      const response = await http.post<DoctorAppointment>(API_ENDPOINTS.DOCTOR_CONSULTATION_START(String(appointmentId)));
+      return mapAppointmentStatus(response.data);
+    },
+    complete: async (appointmentId: number): Promise<DoctorAppointment> => {
+      const response = await http.post<DoctorAppointment>(API_ENDPOINTS.DOCTOR_CONSULTATION_COMPLETE(String(appointmentId)));
+      return mapAppointmentStatus(response.data);
+    },
+  },
+
   appointments: {
     list: async (params?: { date?: string; status?: string; patient_name?: string }): Promise<DoctorAppointmentsResponse> => {
       const response = await http.get<DoctorAppointmentsResponse>(API_ENDPOINTS.DOCTOR_APPOINTMENTS, { params });

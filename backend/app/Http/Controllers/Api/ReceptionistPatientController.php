@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\PatientProfile;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -121,6 +122,20 @@ class ReceptionistPatientController extends Controller
             ]
         );
 
+        AuditLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'receptionist_patient_created',
+            'entity_type' => 'patient',
+            'entity_id' => $patient->id,
+            'changes' => [
+                'patient_id' => $patientId,
+                'first_name' => $patient->first_name,
+                'last_name' => $patient->last_name,
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
+
         return response()->json($patient->load('patientProfile'), 201);
     }
 
@@ -130,6 +145,18 @@ class ReceptionistPatientController extends Controller
             ->role('patient')
             ->with('patientProfile')
             ->findOrFail($id);
+
+        AuditLog::create([
+            'user_id' => request()->user()?->id,
+            'action' => 'receptionist_patient_viewed',
+            'entity_type' => 'patient',
+            'entity_id' => $patient->id,
+            'changes' => [
+                'patient_id' => $patient->patientProfile?->patient_id,
+            ],
+            'ip_address' => request()->ip(),
+            'user_agent' => (string) request()->userAgent(),
+        ]);
 
         return response()->json($patient);
     }
@@ -168,6 +195,16 @@ class ReceptionistPatientController extends Controller
             );
         }
 
+        AuditLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'receptionist_patient_updated',
+            'entity_type' => 'patient',
+            'entity_id' => $patient->id,
+            'changes' => $validated,
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
+
         return response()->json($patient->fresh()->load('patientProfile'));
     }
 
@@ -179,6 +216,18 @@ class ReceptionistPatientController extends Controller
 
         $patient->is_active = false;
         $patient->save();
+
+        AuditLog::create([
+            'user_id' => request()->user()?->id,
+            'action' => 'receptionist_patient_deactivated',
+            'entity_type' => 'patient',
+            'entity_id' => $patient->id,
+            'changes' => [
+                'is_active' => false,
+            ],
+            'ip_address' => request()->ip(),
+            'user_agent' => (string) request()->userAgent(),
+        ]);
 
         return response()->json([
             'message' => 'Patient deactivated successfully',

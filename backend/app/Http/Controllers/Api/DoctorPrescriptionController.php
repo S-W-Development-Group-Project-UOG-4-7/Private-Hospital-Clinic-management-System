@@ -76,6 +76,18 @@ class DoctorPrescriptionController extends Controller
         //     }
         // }
 
+        if (! empty($validated['appointment_id'])) {
+            $appointment = \App\Models\Appointment::query()
+                ->where('id', (int) $validated['appointment_id'])
+                ->where('doctor_id', $doctor->id)
+                ->where('patient_id', (int) $validated['patient_id'])
+                ->first();
+
+            if (! $appointment) {
+                return response()->json(['message' => 'Appointment not found for this doctor/patient.'], 403);
+            }
+        }
+
         DB::beginTransaction();
         try {
             // Generate prescription number
@@ -86,6 +98,7 @@ class DoctorPrescriptionController extends Controller
                 'patient_id' => $validated['patient_id'],
                 'doctor_id' => $doctor->id,
                 'clinic_id' => $validated['clinic_id'] ?? null,
+                'appointment_id' => $validated['appointment_id'] ?? null,
                 'prescription_date' => $validated['prescription_date'],
                 'status' => 'pending',
                 'notes' => $validated['notes'] ?? null,
@@ -257,15 +270,23 @@ class DoctorPrescriptionController extends Controller
 
         DB::beginTransaction();
         try {
-            // Update prescription
-            $prescription->update([
+            $rootId = $prescription->root_prescription_id ?? $prescription->id;
+            $nextVersion = (int) ($prescription->version ?? 1) + 1;
+
+            $newPrescription = Prescription::create([
+                'prescription_number' => 'RX-' . strtoupper(Str::random(8)),
+                'patient_id' => $prescription->patient_id,
+                'doctor_id' => $doctor->id,
+                'clinic_id' => $prescription->clinic_id,
+                'appointment_id' => $prescription->appointment_id,
                 'prescription_date' => $validated['prescription_date'],
+                'status' => 'pending',
                 'notes' => $validated['notes'] ?? null,
                 'instructions' => $validated['instructions'] ?? null,
+                'root_prescription_id' => $rootId,
+                'previous_prescription_id' => $prescription->id,
+                'version' => $nextVersion,
             ]);
-
-            // Delete existing items and recreate them
-            $prescription->items()->delete();
 
             // Create new prescription items
             foreach ($validated['items'] as $item) {
@@ -295,7 +316,7 @@ class DoctorPrescriptionController extends Controller
                 $resolvedQuantity = (int) max(1, $calculatedQuantity ?? ($item['quantity'] ?? 1));
 
                 PrescriptionItem::create([
-                    'prescription_id' => $prescription->id,
+                    'prescription_id' => $newPrescription->id,
                     'inventory_item_id' => $inventoryItemId,
                     'medicine_name' => $medicineName,
                     'quantity' => $resolvedQuantity,
@@ -316,7 +337,7 @@ class DoctorPrescriptionController extends Controller
             DB::commit();
 
             return response()->json(
-                $prescription->fresh()->load([
+                $newPrescription->fresh()->load([
                     'patient:id,first_name,last_name,email',
                     'patient.patientProfile:user_id,phone,guardian_phone',
                     'doctor',

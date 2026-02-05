@@ -1667,6 +1667,7 @@ const PharmacistDashboard: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   prescription.status === 'dispensed' ? 'bg-green-100 text-green-800' :
+                                  prescription.status === 'partial' ? 'bg-blue-100 text-blue-800' :
                                   prescription.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                                   prescription.status === 'held' ? 'bg-orange-100 text-orange-800' :
                                   'bg-red-100 text-red-800'
@@ -1684,7 +1685,7 @@ const PharmacistDashboard: React.FC = () => {
                                 >
                                   View
                                 </button>
-                                {prescription.status === 'pending' && (
+                                {(prescription.status === 'pending' || prescription.status === 'partial') && (
                                   <>
                                     <button
                                       onClick={() => handleViewPrescription(prescription)}
@@ -2320,6 +2321,8 @@ const PharmacistDashboard: React.FC = () => {
                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${
                                       prescription.status === 'dispensed'
                                         ? 'bg-green-100 text-green-700'
+                                        : prescription.status === 'partial'
+                                        ? 'bg-blue-100 text-blue-700'
                                         : prescription.status === 'pending'
                                         ? 'bg-yellow-100 text-yellow-700'
                                         : 'bg-gray-100 text-gray-700'
@@ -2929,6 +2932,8 @@ const PharmacistDashboard: React.FC = () => {
                         className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${
                           selectedPrescription.status === 'dispensed'
                             ? 'bg-green-100 text-green-700'
+                            : selectedPrescription.status === 'partial'
+                            ? 'bg-blue-100 text-blue-700'
                             : selectedPrescription.status === 'pending'
                             ? 'bg-yellow-100 text-yellow-700'
                             : selectedPrescription.status === 'held'
@@ -3102,7 +3107,7 @@ const PharmacistDashboard: React.FC = () => {
                         </div>
                       )}
 
-                      {selectedPrescription.status === 'pending' && (
+                      {(selectedPrescription.status === 'pending' || selectedPrescription.status === 'partial') && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Notes to include with invoice (optional)
@@ -3142,7 +3147,7 @@ const PharmacistDashboard: React.FC = () => {
                       >
                         Close
                       </button>
-                      {selectedPrescription.status === 'pending' && (
+                      {(selectedPrescription.status === 'pending' || selectedPrescription.status === 'partial') && (
                         <button
                           onClick={handleDispense}
                           disabled={dispensing}

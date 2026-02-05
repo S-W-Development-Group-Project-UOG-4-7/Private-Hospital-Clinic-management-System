@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Clinic;
+use App\Models\Department;
 
 class Referral extends Model
 {
@@ -14,6 +16,8 @@ class Referral extends Model
         'patient_id',
         'referred_by_doctor_id',
         'referred_to_doctor_id',
+        'to_department_id',
+        'clinic_id',
         'type',
         'external_provider',
         'reason',
@@ -41,6 +45,16 @@ class Referral extends Model
     public function referredToDoctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'referred_to_doctor_id');
+    }
+
+    public function toDepartment(): BelongsTo
+    {
+        return $this->belongsTo(Department::class, 'to_department_id');
+    }
+
+    public function clinic(): BelongsTo
+    {
+        return $this->belongsTo(Clinic::class);
     }
 
     public function createdBy(): BelongsTo

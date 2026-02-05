@@ -22,7 +22,11 @@ export const API_ENDPOINTS = {
 
   // Patient Portal
   PATIENT_PROFILE: `${API_BASE_URL}/api/patient/profile`,
+  PATIENT_ME: `${API_BASE_URL}/api/patient/me`,
+  PATIENT_PASSWORD: `${API_BASE_URL}/api/patient/password`,
   PATIENT_DEPARTMENTS: `${API_BASE_URL}/api/patient/departments`,
+  PATIENT_DOCTORS: `${API_BASE_URL}/api/patient/doctors`,
+  PATIENT_SLOTS: `${API_BASE_URL}/api/patient/slots`,
   PATIENT_APPOINTMENTS: `${API_BASE_URL}/api/patient/appointments`,
   PATIENT_TELECONSULTATIONS: `${API_BASE_URL}/api/patient/teleconsultations`,
   PATIENT_EHR: `${API_BASE_URL}/api/patient/ehr`,
@@ -31,6 +35,7 @@ export const API_ENDPOINTS = {
   PATIENT_FEEDBACK: `${API_BASE_URL}/api/patient/feedback`,
   PATIENT_NOTIFICATIONS: `${API_BASE_URL}/api/patient/notifications`,
   PATIENT_PRESCRIPTIONS: `${API_BASE_URL}/api/patient/prescriptions`,
+  PATIENT_LAB_RESULTS: `${API_BASE_URL}/api/patient/lab-results`,
   PATIENT_QUEUE_STATUS: `${API_BASE_URL}/api/patient/queue/status`,
   PATIENT_QUEUE_CLINIC: `${API_BASE_URL}/api/patient/queue/clinic`,
 
@@ -95,6 +100,10 @@ export const API_ENDPOINTS = {
   // Doctor Portal
   DOCTOR_APPOINTMENTS: `${API_BASE_URL}/api/doctor/appointments`,
   DOCTOR_APPOINTMENT_STATUS: (id: string) => `${API_BASE_URL}/api/doctor/appointments/${id}/status`,
+  DOCTOR_CONSULTATION_SHOW: (id: string) => `${API_BASE_URL}/api/doctor/appointments/${id}/consultation`,
+  DOCTOR_CONSULTATION_SAVE: (id: string) => `${API_BASE_URL}/api/doctor/appointments/${id}/consultation`,
+  DOCTOR_CONSULTATION_START: (id: string) => `${API_BASE_URL}/api/doctor/appointments/${id}/consultation/start`,
+  DOCTOR_CONSULTATION_COMPLETE: (id: string) => `${API_BASE_URL}/api/doctor/appointments/${id}/consultation/complete`,
   DOCTOR_TELECONSULTATION_START: `${API_BASE_URL}/api/doctor/teleconsultations/start`,
   DOCTOR_TELECONSULTATION_END: (id: string) => `${API_BASE_URL}/api/doctor/teleconsultations/${id}/end`,
   DOCTOR_PATIENT_EHR: (patientId: string) => `${API_BASE_URL}/api/doctor/patients/${patientId}/ehr`,

@@ -2,39 +2,34 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { patientApi } from '../../api/patient';
-import { API_ENDPOINTS } from '../../config/api';
 import type {
-  CreateAppointmentPayload,
   CreateFeedbackPayload,
   CreatePaymentPayload,
   PatientEhrRecord,
   PatientFeedback,
   PatientInvoice,
+  PatientLabOrder,
   PatientNotification,
   PatientPrescription,
   PatientTeleconsultation,
   PatientAppointment,
   PatientProfileResponse,
-  UpdateAppointmentPayload,
   QueueStatusResponse,
+  PatientSlot,
 } from '../../types/patient';
-import { Bell, Calendar, Clock, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Users, Video, X } from 'lucide-react';
+import { Bell, Calendar, Clock, CreditCard, FileText, FlaskConical, LayoutDashboard, LogOut, Menu, MessageSquare, Pill, UserCircle, Users, X } from 'lucide-react';
 
 type SectionKey =
   | 'overview'
+  | 'queue_status'
   | 'profile'
   | 'appointments'
   | 'medical_records'
+  | 'lab_results'
   | 'prescriptions'
-  | 'telemedicine'
   | 'billing'
   | 'feedback'
   | 'notifications';
-
-type ClinicSlotAvailability = {
-  time: string;
-  available_count: number;
-};
 
 const safeParseJson = (value: string | null) => {
   if (!value) return null;
@@ -57,7 +52,6 @@ const PatientDashboard: React.FC = () => {
 
   const [profileData, setProfileData] = useState<PatientProfileResponse | null>(null);
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
-  const [clinics, setClinics] = useState<{ id: number; name: string }[]>([]);
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
@@ -69,10 +63,16 @@ const PatientDashboard: React.FC = () => {
   const [ehrLoading, setEhrLoading] = useState(false);
   const [ehrRecords, setEhrRecords] = useState<PatientEhrRecord[]>([]);
   const [ehrTab, setEhrTab] = useState<'diagnosis' | 'lab_report'>('diagnosis');
+  const [labOrdersLoaded, setLabOrdersLoaded] = useState(false);
+  const [labOrdersLoading, setLabOrdersLoading] = useState(false);
+  const [labOrders, setLabOrders] = useState<PatientLabOrder[]>([]);
+  const [selectedLabOrder, setSelectedLabOrder] = useState<PatientLabOrder | null>(null);
 
   const [billingLoaded, setBillingLoaded] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [invoices, setInvoices] = useState<PatientInvoice[]>([]);
+  const [selectedInvoice, setSelectedInvoice] = useState<PatientInvoice | null>(null);
+  const [invoiceDetailsLoading, setInvoiceDetailsLoading] = useState(false);
 
   const [feedbackLoaded, setFeedbackLoaded] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -93,15 +93,35 @@ const PatientDashboard: React.FC = () => {
   // Queue status state
   const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(null);
   const [queueStatusLoading, setQueueStatusLoading] = useState(false);
+  const [appointmentQueueStatus, setAppointmentQueueStatus] = useState<{
+    is_today: boolean;
+    current_number: number | null;
+    my_position: number | null;
+    estimated_wait_minutes: number | null;
+  } | null>(null);
+  const [appointmentQueueLoading, setAppointmentQueueLoading] = useState(false);
 
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [profileForm, setProfileForm] = useState({
+    first_name: '',
+    last_name: '',
     email: '',
     phone: '',
     date_of_birth: '',
     gender: '',
     address: '',
+    nic_passport: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relationship: '',
   });
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    password: '',
+    password_confirmation: '',
+  });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
   const [appointmentSaving, setAppointmentSaving] = useState(false);
@@ -115,14 +135,11 @@ const PatientDashboard: React.FC = () => {
     type: 'in_person' as 'in_person' | 'telemedicine',
     reason: '',
   });
-
-  const [slotCalendar, setSlotCalendar] = useState<ClinicSlotAvailability[]>([]);
-  const [slotCalendarLoading, setSlotCalendarLoading] = useState(false);
-  const [slotCalendarError, setSlotCalendarError] = useState<string | null>(null);
-  const [slotClinicId, setSlotClinicId] = useState<number | null>(null);
-  const [slotClinicName, setSlotClinicName] = useState<string | null>(null);
-  const [slotClinicLoading, setSlotClinicLoading] = useState(false);
-  const [slotClinicError, setSlotClinicError] = useState<string | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<PatientSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [heldSlotId, setHeldSlotId] = useState<number | null>(null);
+  const [slotHoldLoading, setSlotHoldLoading] = useState(false);
 
   const authUser = useMemo(() => safeParseJson(localStorage.getItem('authUser')), []);
 
@@ -140,11 +157,17 @@ const PatientDashboard: React.FC = () => {
         const profile = await patientApi.profile.get();
         setProfileData(profile);
         setProfileForm({
+          first_name: profile.user.first_name || '',
+          last_name: profile.user.last_name || '',
           email: profile.user.email || '',
-          phone: profile.profile.phone || '',
+          phone: profile.profile.phone || profile.user.phone || '',
           date_of_birth: (profile.profile.date_of_birth as unknown as string) || '',
           gender: profile.profile.gender || '',
           address: profile.profile.address || '',
+          nic_passport: profile.profile.nic_passport || '',
+          emergency_contact_name: profile.profile.emergency_contact_name || '',
+          emergency_contact_phone: profile.profile.emergency_contact_phone || '',
+          emergency_contact_relationship: profile.profile.emergency_contact_relationship || '',
         });
       } catch (e: any) {
         setError(e?.message || 'Failed to load profile');
@@ -196,6 +219,25 @@ const PatientDashboard: React.FC = () => {
     setSelectedPrescription(null);
   };
 
+  const openInvoiceDetails = async (invoice: PatientInvoice) => {
+    setError(null);
+    setSelectedInvoice(invoice);
+    setInvoiceDetailsLoading(true);
+    try {
+      const details = await patientApi.billing.show(invoice.id);
+      setSelectedInvoice(details);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load invoice');
+    } finally {
+      setInvoiceDetailsLoading(false);
+    }
+  };
+
+  const closeInvoiceDetails = () => {
+    if (invoiceDetailsLoading) return;
+    setSelectedInvoice(null);
+  };
+
   const loadTeleconsultations = useCallback(async () => {
     if (teleconsultationsLoaded || teleconsultationsLoading) return;
     setError(null);
@@ -225,6 +267,21 @@ const PatientDashboard: React.FC = () => {
       setEhrLoading(false);
     }
   }, [ehrLoaded, ehrLoading]);
+
+  const loadLabOrders = useCallback(async () => {
+    if (labOrdersLoaded || labOrdersLoading) return;
+    setError(null);
+    setLabOrdersLoading(true);
+    try {
+      const resp = await patientApi.labResults.list();
+      setLabOrders(Array.isArray(resp.data) ? resp.data : []);
+      setLabOrdersLoaded(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load lab results');
+    } finally {
+      setLabOrdersLoading(false);
+    }
+  }, [labOrdersLoaded, labOrdersLoading]);
 
   const loadBilling = useCallback(async () => {
     if (billingLoaded || billingLoading) return;
@@ -299,6 +356,18 @@ const PatientDashboard: React.FC = () => {
     }
   }, []);
 
+  const loadAppointmentQueueStatus = useCallback(async (appointmentId: number) => {
+    setAppointmentQueueLoading(true);
+    try {
+      const resp = await patientApi.queue.appointmentStatus(appointmentId);
+      setAppointmentQueueStatus(resp);
+    } catch (e: any) {
+      setAppointmentQueueStatus(null);
+    } finally {
+      setAppointmentQueueLoading(false);
+    }
+  }, []);
+
   // Load queue status on mount and periodically
   useEffect(() => {
     loadQueueStatus();
@@ -307,11 +376,19 @@ const PatientDashboard: React.FC = () => {
   }, [loadQueueStatus]);
 
   useEffect(() => {
-    if (active === 'telemedicine') {
-      loadTeleconsultations();
-    }
     if (active === 'medical_records') {
       loadEhr();
+    }
+    if (active === 'lab_results') {
+      loadLabOrders();
+    }
+    if (active === 'queue_status') {
+      const todayAppointments = queueStatus?.todays_appointments || [];
+      if (todayAppointments.length > 0) {
+        loadAppointmentQueueStatus(todayAppointments[0].id);
+      } else {
+        setAppointmentQueueStatus(null);
+      }
     }
     if (active === 'billing') {
       loadBilling();
@@ -325,7 +402,7 @@ const PatientDashboard: React.FC = () => {
     if (active === 'prescriptions') {
       loadPrescriptions();
     }
-  }, [active, loadTeleconsultations, loadEhr, loadBilling, loadFeedback, loadNotificationsLazy, loadPrescriptions]);
+  }, [active, loadTeleconsultations, loadEhr, loadLabOrders, loadBilling, loadFeedback, loadNotificationsLazy, loadPrescriptions, loadAppointmentQueueStatus, queueStatus]);
 
   const loadDepartments = useCallback(async () => {
     setDepartmentsLoading(true);
@@ -340,116 +417,40 @@ const PatientDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!appointmentModalOpen || editingAppointment) return;
+    if (!appointmentModalOpen) return;
     loadDepartments();
-  }, [appointmentModalOpen, editingAppointment, loadDepartments]);
+  }, [appointmentModalOpen, loadDepartments]);
 
   useEffect(() => {
-    if (!appointmentModalOpen || editingAppointment) return;
-    let isActive = true;
-
-    const loadClinics = async () => {
-      setSlotClinicLoading(true);
-      setSlotClinicError(null);
-      try {
-        const response = await fetch(API_ENDPOINTS.CLINICS);
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(json?.message || 'Failed to load clinics');
-        }
-        const clinics = Array.isArray(json.data) ? json.data : [];
-        const opdClinic = clinics.find((clinic: any) => clinic?.name?.toLowerCase() === 'opd');
-        const selected = opdClinic || clinics[0];
-        if (isActive) {
-          setSlotClinicId(selected?.id ?? null);
-          setSlotClinicName(selected?.name ?? null);
-          setAppointmentForm((prev) => ({
-            ...prev,
-            clinic_id: selected?.id ? String(selected.id) : '',
-          }));
-        }
-      } catch (e: any) {
-        if (isActive) {
-          setSlotClinicId(null);
-          setSlotClinicName(null);
-          setSlotClinicError(e?.message || 'Failed to load clinics');
-        }
-      } finally {
-        if (isActive) {
-          setSlotClinicLoading(false);
-        }
-      }
-    };
-
-    loadClinics();
-    return () => {
-      isActive = false;
-    };
-  }, [appointmentModalOpen, editingAppointment]);
-
-  useEffect(() => {
-    if (!appointmentModalOpen || editingAppointment) return;
+    if (!appointmentModalOpen) return;
     const departmentId = Number(appointmentForm.department_id);
     if (!appointmentForm.appointment_date || !Number.isFinite(departmentId) || departmentId <= 0) {
-      setSlotCalendar([]);
-      setSlotCalendarError(null);
-      setSlotCalendarLoading(false);
-      return;
-    }
-    if (!slotClinicId) {
-      setSlotCalendar([]);
-      setSlotCalendarError(slotClinicError || 'No clinic available for slots');
-      setSlotCalendarLoading(false);
+      setAvailableSlots([]);
+      setSlotsError(null);
+      setSlotsLoading(false);
       return;
     }
 
-    let isActive = true;
-    setSlotCalendarLoading(true);
-    setSlotCalendarError(null);
-
-    const fetchSlots = async () => {
-      try {
-        const params = new URLSearchParams();
-        params.append('date', appointmentForm.appointment_date);
-        params.append('department_id', String(departmentId));
-        params.append('include_all', 'true');
-        if (slotClinicName?.toLowerCase() === 'opd') {
-          params.append('include_unassigned', 'true');
-        }
-        const url = `${API_ENDPOINTS.CLINIC_SLOTS(slotClinicId)}?${params.toString()}`;
-        const response = await fetch(url);
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(json?.message || 'Failed to load time slots');
-        }
-        if (isActive) {
-          setSlotCalendar(Array.isArray(json.slots) ? json.slots : []);
-        }
-      } catch (e: any) {
-        if (isActive) {
-          setSlotCalendar([]);
-          setSlotCalendarError(e?.message || 'Failed to load time slots');
-        }
-      } finally {
-        if (isActive) {
-          setSlotCalendarLoading(false);
-        }
-      }
-    };
-
-    fetchSlots();
-    return () => {
-      isActive = false;
-    };
-  }, [
-    appointmentModalOpen,
-    editingAppointment,
-    appointmentForm.appointment_date,
-    appointmentForm.department_id,
-    slotClinicId,
-    slotClinicError,
-    slotClinicName,
-  ]);
+    setSlotsLoading(true);
+    setSlotsError(null);
+    patientApi.slots
+      .list({
+        date: appointmentForm.appointment_date,
+        department_id: departmentId,
+        visit_mode: 'PHYSICAL',
+        available_only: true,
+      })
+      .then((resp) => {
+        setAvailableSlots(Array.isArray(resp.data) ? resp.data : []);
+      })
+      .catch((e: any) => {
+        setAvailableSlots([]);
+        setSlotsError(e?.message || 'Failed to load available slots');
+      })
+      .finally(() => {
+        setSlotsLoading(false);
+      });
+  }, [appointmentModalOpen, appointmentForm.appointment_date, appointmentForm.department_id]);
 
   const refreshAppointments = async () => {
     setError(null);
@@ -480,15 +481,6 @@ const PatientDashboard: React.FC = () => {
     [appointments, today]
   );
 
-  const slotSummaries = useMemo(() => {
-    return slotCalendar
-      .map((slot) => ({
-        time: slot.time,
-        available: slot.available_count,
-      }))
-      .sort((a, b) => a.time.localeCompare(b.time));
-  }, [slotCalendar]);
-
   const openCreateAppointment = () => {
     setEditingAppointment(null);
     setAppointmentForm({
@@ -500,33 +492,25 @@ const PatientDashboard: React.FC = () => {
       type: 'in_person',
       reason: '',
     });
-    setSlotCalendar([]);
-    setSlotCalendarError(null);
+    setAvailableSlots([]);
+    setSlotsError(null);
+    setHeldSlotId(null);
     setAppointmentModalOpen(true);
   };
 
   const openEditAppointment = (appt: PatientAppointment) => {
     setEditingAppointment(appt);
     setAppointmentForm({
-      clinic_id: appt.clinic_id ? String(appt.clinic_id) : '',
-      department_id: '',
+      clinic_id: '',
+      department_id: appt.department_id ? String(appt.department_id) : '',
       doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
       appointment_date: appt.appointment_date || '',
-      appointment_time: (appt.appointment_time || '').slice(0, 5),
+      appointment_time: '',
       type: appt.type || 'in_person',
       reason: appt.reason || '',
     });
-    // When editing, load clinics so the select is populated
-    (async () => {
-      try {
-        const resp = await fetch(API_ENDPOINTS.CLINICS);
-        const json = await resp.json();
-        setClinics(Array.isArray(json.data) ? json.data : []);
-      } catch (e) {
-        // non-blocking
-      }
-    })();
-
+    setHeldSlotId(null);
+    setAvailableSlots([]);
     setAppointmentModalOpen(true);
   };
 
@@ -536,40 +520,44 @@ const PatientDashboard: React.FC = () => {
     setEditingAppointment(null);
   };
 
+  const holdSlot = async (slot: PatientSlot) => {
+    if (slotHoldLoading) return;
+    setSlotsError(null);
+    setSlotHoldLoading(true);
+    try {
+      await patientApi.slots.hold(slot.id, { visit_mode: 'PHYSICAL' });
+      setHeldSlotId(slot.id);
+      setAppointmentForm((p) => ({ ...p, appointment_time: (slot.start_time || '').slice(0, 5) }));
+      setAvailableSlots((prev) =>
+        prev.map((s) => (s.id === slot.id ? { ...s, status: 'HELD' } : s))
+      );
+    } catch (e: any) {
+      setSlotsError(e?.message || 'Failed to hold slot');
+    } finally {
+      setSlotHoldLoading(false);
+    }
+  };
+
   const submitAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setAppointmentSaving(true);
 
     try {
-      const doctorIdValue = appointmentForm.doctor_id.trim() === '' ? null : Number(appointmentForm.doctor_id);
-      const departmentIdValue =
-        appointmentForm.department_id.trim() === '' ? null : Number(appointmentForm.department_id);
-      const clinicIdValue =
-        appointmentForm.clinic_id.trim() === '' ? (slotClinicId ?? null) : Number(appointmentForm.clinic_id);
-
-      const base: CreateAppointmentPayload = {
-        clinic_id: Number.isFinite(clinicIdValue as any) ? (clinicIdValue as number) : null,
-        department_id: Number.isFinite(departmentIdValue as any) ? (departmentIdValue as number) : null,
-        doctor_id: Number.isFinite(doctorIdValue as any) ? (doctorIdValue as number) : null,
-        appointment_date: appointmentForm.appointment_date,
-        appointment_time: appointmentForm.appointment_time,
-        type: appointmentForm.type,
-        reason: appointmentForm.reason.trim() === '' ? null : appointmentForm.reason.trim(),
-      };
+      if (!heldSlotId) {
+        throw new Error('Please select a time slot before continuing.');
+      }
 
       if (editingAppointment) {
-        const payload: UpdateAppointmentPayload = {
-          clinic_id: base.clinic_id ?? null,
-          doctor_id: base.doctor_id ?? null,
-          appointment_date: base.appointment_date,
-          appointment_time: base.appointment_time,
-          type: base.type,
-          reason: base.reason ?? null,
-        };
-        await patientApi.appointments.update(editingAppointment.id, payload);
+        await patientApi.appointments.reschedule(editingAppointment.id, {
+          slot_id: heldSlotId,
+          reason: appointmentForm.reason.trim() === '' ? null : appointmentForm.reason.trim(),
+        });
       } else {
-        await patientApi.appointments.create(base);
+        await patientApi.slots.confirm(heldSlotId, {
+          visit_mode: 'PHYSICAL',
+          reason: appointmentForm.reason.trim() === '' ? undefined : appointmentForm.reason.trim(),
+        });
       }
 
       closeAppointmentModal();
@@ -586,7 +574,7 @@ const PatientDashboard: React.FC = () => {
     if (!window.confirm('Cancel this appointment?')) return;
     setError(null);
     try {
-      await patientApi.appointments.update(appt.id, { status: 'cancelled' });
+      await patientApi.appointments.cancel(appt.id);
       await refreshAppointments();
     } catch (e: any) {
       setError(e?.message || 'Failed to cancel appointment');
@@ -609,11 +597,17 @@ const PatientDashboard: React.FC = () => {
     setError(null);
     try {
       const payload = {
+        first_name: profileForm.first_name.trim() === '' ? undefined : profileForm.first_name.trim(),
+        last_name: profileForm.last_name.trim() === '' ? undefined : profileForm.last_name.trim(),
         email: profileForm.email.trim() === '' ? undefined : profileForm.email.trim(),
         phone: profileForm.phone.trim() === '' ? null : profileForm.phone.trim(),
         date_of_birth: profileForm.date_of_birth.trim() === '' ? null : profileForm.date_of_birth.trim(),
         gender: profileForm.gender.trim() === '' ? null : profileForm.gender.trim(),
         address: profileForm.address.trim() === '' ? null : profileForm.address.trim(),
+        nic_passport: profileForm.nic_passport.trim() === '' ? null : profileForm.nic_passport.trim(),
+        emergency_contact_name: profileForm.emergency_contact_name.trim() === '' ? null : profileForm.emergency_contact_name.trim(),
+        emergency_contact_phone: profileForm.emergency_contact_phone.trim() === '' ? null : profileForm.emergency_contact_phone.trim(),
+        emergency_contact_relationship: profileForm.emergency_contact_relationship.trim() === '' ? null : profileForm.emergency_contact_relationship.trim(),
       };
       const updated = await patientApi.profile.update(payload);
       setProfileData(updated);
@@ -623,7 +617,36 @@ const PatientDashboard: React.FC = () => {
     }
   };
 
-  const patientName = profileData?.user?.name || authUser?.name || 'Patient';
+  const submitPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setPasswordMessage(null);
+    setPasswordSaving(true);
+    try {
+      const payload = {
+        current_password: passwordForm.current_password,
+        password: passwordForm.password,
+        password_confirmation: passwordForm.password_confirmation,
+      };
+      const resp = await patientApi.profile.updatePassword(payload);
+      setPasswordMessage(resp.message || 'Password updated.');
+      setPasswordForm({
+        current_password: '',
+        password: '',
+        password_confirmation: '',
+      });
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update password');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
+  const patientName =
+    profileData?.user?.name ||
+    `${profileData?.user?.first_name || ''} ${profileData?.user?.last_name || ''}`.trim() ||
+    authUser?.name ||
+    'Patient';
   const patientEmail = profileData?.user?.email || authUser?.email || '';
 
   const formatMoney = (value: string | number) => {
@@ -728,23 +751,32 @@ const PatientDashboard: React.FC = () => {
           <span className="text-sm font-medium">Appointments</span>
         </button>
         <button
+          onClick={() => setActive('queue_status')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'queue_status' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+        >
+          <Clock className="w-5 h-5" />
+          <span className="text-sm font-medium">Queue Status</span>
+        </button>
+        <button
           onClick={() => setActive('medical_records')}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'medical_records' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
         >
+          <FileText className="w-5 h-5" />
           <span className="text-sm font-medium">Medical Records</span>
+        </button>
+        <button
+          onClick={() => setActive('lab_results')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'lab_results' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+        >
+          <FlaskConical className="w-5 h-5" />
+          <span className="text-sm font-medium">Lab Results</span>
         </button>
         <button
           onClick={() => setActive('prescriptions')}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'prescriptions' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
         >
+          <Pill className="w-5 h-5" />
           <span className="text-sm font-medium">Prescriptions</span>
-        </button>
-        <button
-          onClick={() => setActive('telemedicine')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'telemedicine' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-        >
-          <Video className="w-5 h-5" />
-          <span className="text-sm font-medium">Telemedicine</span>
         </button>
         <button
           onClick={() => setActive('billing')}
@@ -851,12 +883,33 @@ const PatientDashboard: React.FC = () => {
                 </button>
                 <button
                   onClick={() => {
+                    setActive('queue_status');
+                    setMobileNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'queue_status' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                >
+                  <Clock className="w-5 h-5" />
+                  <span className="text-sm font-medium">Queue Status</span>
+                </button>
+                <button
+                  onClick={() => {
                     setActive('medical_records');
                     setMobileNavOpen(false);
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'medical_records' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
                 >
+                  <FileText className="w-5 h-5" />
                   <span className="text-sm font-medium">Medical Records</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActive('lab_results');
+                    setMobileNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'lab_results' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                >
+                  <FlaskConical className="w-5 h-5" />
+                  <span className="text-sm font-medium">Lab Results</span>
                 </button>
                 <button
                   onClick={() => {
@@ -865,16 +918,8 @@ const PatientDashboard: React.FC = () => {
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'prescriptions' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
                 >
+                  <Pill className="w-5 h-5" />
                   <span className="text-sm font-medium">Prescriptions</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setActive('telemedicine');
-                    setMobileNavOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${active === 'telemedicine' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
-                >
-                  <span className="text-sm font-medium">Telemedicine</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1062,25 +1107,6 @@ const PatientDashboard: React.FC = () => {
                 </motion.div>
 
                 {/* Telemedicine */}
-                <motion.div 
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.4 }}
-                  className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
-                >
-                  <div className="mb-6">
-                    <Video className="w-12 h-12 text-teal-500 mb-4" />
-                    <h2 className="text-xl font-bold text-gray-800 mb-3">Telemedicine</h2>
-                    <p className="text-gray-600">Join virtual consultations</p>
-                  </div>
-                  <button
-                    onClick={() => setActive('telemedicine')}
-                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
-                  >
-                    Start Consultation
-                  </button>
-                </motion.div>
-
                 {/* Billing */}
                 <motion.div 
                   initial={{ opacity: 0, y: 50 }}
@@ -1230,6 +1256,54 @@ const PatientDashboard: React.FC = () => {
             </div>
           )}
 
+          {active === 'queue_status' && (
+            <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Queue Status</h2>
+                  <p className="text-gray-600 text-sm">Live updates for today’s appointment</p>
+                </div>
+              </div>
+              {queueStatusLoading || appointmentQueueLoading ? (
+                <div className="text-center py-10">Loading...</div>
+              ) : queueStatus?.todays_appointments?.length ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-500 uppercase">Current Number</div>
+                      <div className="text-xl font-semibold text-gray-900">{appointmentQueueStatus?.current_number ?? '-'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-500 uppercase">My Position</div>
+                      <div className="text-xl font-semibold text-gray-900">{appointmentQueueStatus?.my_position ?? '-'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-500 uppercase">Estimated Wait</div>
+                      <div className="text-xl font-semibold text-gray-900">
+                        {appointmentQueueStatus?.estimated_wait_minutes != null ? `~${appointmentQueueStatus.estimated_wait_minutes}m` : '-'}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-500 uppercase">Today</div>
+                      <div className="text-xl font-semibold text-gray-900">Yes</div>
+                    </div>
+                  </div>
+                  <div className="border rounded-lg p-4">
+                    <div className="text-sm font-semibold text-gray-900 mb-1">Today’s Appointment</div>
+                    <div className="text-sm text-gray-600">
+                      {queueStatus.todays_appointments[0]?.time || '-'} • {queueStatus.todays_appointments[0]?.clinic || 'OPD'}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Doctor: {queueStatus.todays_appointments[0]?.doctor || 'Any available doctor'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-gray-600">No appointments scheduled for today.</div>
+              )}
+            </div>
+          )}
+
           {active === 'profile' && (
             <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl">
               {profileLoading ? (
@@ -1252,12 +1326,23 @@ const PatientDashboard: React.FC = () => {
                   <form onSubmit={saveProfile} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                         <input
                           type="text"
-                          value={patientName}
-                          disabled
-                          className="w-full px-3 py-2 border rounded-lg bg-gray-50"
+                          value={profileForm.first_name}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))}
+                          disabled={!profileEditMode}
+                          className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                        <input
+                          type="text"
+                          value={profileForm.last_name}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))}
+                          disabled={!profileEditMode}
+                          className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
                         />
                       </div>
                       <div>
@@ -1300,6 +1385,16 @@ const PatientDashboard: React.FC = () => {
                           className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
                         />
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">NIC/Passport</label>
+                        <input
+                          type="text"
+                          value={profileForm.nic_passport}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, nic_passport: e.target.value }))}
+                          disabled={!profileEditMode}
+                          className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
+                        />
+                      </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                         <textarea
@@ -1307,6 +1402,36 @@ const PatientDashboard: React.FC = () => {
                           onChange={(e) => setProfileForm((p) => ({ ...p, address: e.target.value }))}
                           disabled={!profileEditMode}
                           rows={3}
+                          className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Name</label>
+                        <input
+                          type="text"
+                          value={profileForm.emergency_contact_name}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, emergency_contact_name: e.target.value }))}
+                          disabled={!profileEditMode}
+                          className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Phone</label>
+                        <input
+                          type="text"
+                          value={profileForm.emergency_contact_phone}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, emergency_contact_phone: e.target.value }))}
+                          disabled={!profileEditMode}
+                          className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Relationship</label>
+                        <input
+                          type="text"
+                          value={profileForm.emergency_contact_relationship}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, emergency_contact_relationship: e.target.value }))}
+                          disabled={!profileEditMode}
                           className={`w-full px-3 py-2 border rounded-lg ${profileEditMode ? '' : 'bg-gray-50'}`}
                         />
                       </div>
@@ -1330,6 +1455,53 @@ const PatientDashboard: React.FC = () => {
                       </div>
                     )}
                   </form>
+
+                  <div className="border-t mt-8 pt-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Change Password</h3>
+                    <form onSubmit={submitPasswordChange} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                          <input
+                            type="password"
+                            value={passwordForm.current_password}
+                            onChange={(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                          <input
+                            type="password"
+                            value={passwordForm.password}
+                            onChange={(e) => setPasswordForm((p) => ({ ...p, password: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                          <input
+                            type="password"
+                            value={passwordForm.password_confirmation}
+                            onChange={(e) => setPasswordForm((p) => ({ ...p, password_confirmation: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          />
+                        </div>
+                      </div>
+                      {passwordMessage && (
+                        <div className="text-sm text-green-600">{passwordMessage}</div>
+                      )}
+                      <div className="flex gap-3">
+                        <button
+                          type="submit"
+                          disabled={passwordSaving}
+                          className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
+                        >
+                          {passwordSaving ? 'Updating...' : 'Update Password'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>
@@ -1449,84 +1621,6 @@ const PatientDashboard: React.FC = () => {
             </div>
           )}
 
-          {active === 'telemedicine' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Telemedicine</h2>
-                <p className="text-gray-600 text-sm">Your scheduled teleconsultations</p>
-              </div>
-
-              {teleconsultationsLoading ? (
-                <div className="text-center py-12">Loading...</div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Scheduled</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Doctor</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {teleconsultations.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="px-6 py-8 text-center text-gray-600">No teleconsultations found.</td>
-                          </tr>
-                        ) : (
-                          teleconsultations.map((t) => {
-                            const doctorName = t.doctor
-                              ? `${t.doctor.first_name || ''} ${t.doctor.last_name || ''}`.trim() || t.doctor.email || 'Doctor'
-                              : t.doctor_id
-                                ? `Doctor #${t.doctor_id}`
-                                : '-';
-
-                            return (
-                              <tr key={t.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 text-sm text-gray-900">{t.scheduled_at}</td>
-                                <td className="px-6 py-4 text-sm text-gray-600">{doctorName}</td>
-                                <td className="px-6 py-4">
-                                  <span
-                                    className={`px-2 py-1 rounded text-xs ${
-                                      t.status === 'scheduled'
-                                        ? 'bg-teal-100 text-teal-800'
-                                        : t.status === 'cancelled'
-                                          ? 'bg-red-100 text-red-800'
-                                          : 'bg-gray-100 text-gray-800'
-                                    }`}
-                                  >
-                                    {t.status}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                  {t.meeting_url && t.status === 'scheduled' ? (
-                                    <a
-                                      href={t.meeting_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
-                                    >
-                                      <Video className="w-4 h-4" />
-                                      Join
-                                    </a>
-                                  ) : (
-                                    <span className="text-sm text-gray-500">-</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {active === 'medical_records' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1586,6 +1680,59 @@ const PatientDashboard: React.FC = () => {
             </div>
           )}
 
+          {active === 'lab_results' && (
+            <div className="space-y-6 max-w-5xl">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Lab Results</h2>
+                <p className="text-gray-600 text-sm">View your lab orders and results</p>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Test</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {labOrdersLoading ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-gray-600">Loading...</td>
+                        </tr>
+                      ) : labOrders.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-gray-600">No lab results found.</td>
+                        </tr>
+                      ) : (
+                        labOrders.map((order) => (
+                          <tr key={order.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 text-sm text-gray-900">{order.order_number || `#${order.id}`}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{order.test_type || order.test_description || '-'}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{order.status || 'pending'}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{order.order_date || '-'}</td>
+                            <td className="px-6 py-4">
+                              <button
+                                onClick={() => setSelectedLabOrder(order)}
+                                className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {active === 'billing' && (
             <div className="space-y-6">
               <div>
@@ -1642,16 +1789,22 @@ const PatientDashboard: React.FC = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                  {remaining > 0 && inv.status !== 'cancelled' ? (
+                                  <div className="flex flex-wrap gap-2">
                                     <button
-                                      onClick={() => payInvoice(inv)}
-                                      className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                                      onClick={() => openInvoiceDetails(inv)}
+                                      className="bg-white border border-gray-300 hover:border-gray-400 text-gray-700 font-semibold px-3 py-1.5 rounded-full text-xs transition duration-300"
                                     >
-                                      Pay
+                                      View
                                     </button>
-                                  ) : (
-                                    <span className="text-sm text-gray-500">-</span>
-                                  )}
+                                    {remaining > 0 && inv.status !== 'cancelled' ? (
+                                      <button
+                                        onClick={() => payInvoice(inv)}
+                                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
+                                      >
+                                        Pay
+                                      </button>
+                                    ) : null}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1875,94 +2028,6 @@ const PatientDashboard: React.FC = () => {
               </button>
             </div>
 
-            {editingAppointment ? (
-            <form onSubmit={submitAppointment} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Clinic (optional)</label>
-                  <select
-                    value={appointmentForm.clinic_id}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, clinic_id: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
-                    <option value="">Default (OPD)</option>
-                    {clinics.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Doctor ID (optional)</label>
-                  <input
-                    type="number"
-                    value={appointmentForm.doctor_id}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, doctor_id: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    placeholder="e.g. 12"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
-                    value={appointmentForm.type}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, type: e.target.value as any }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
-                    <option value="in_person">In Person</option>
-                    <option value="telemedicine">Telemedicine</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={appointmentForm.appointment_date}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_date: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
-                  <input
-                    type="time"
-                    required
-                    value={appointmentForm.appointment_time}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_time: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                  <textarea
-                    value={appointmentForm.reason}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, reason: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={3}
-                    placeholder="Describe your symptoms or reason for visit"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  type="submit"
-                  disabled={appointmentSaving}
-                  className="flex-1 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
-                >
-                  {appointmentSaving ? 'Saving...' : editingAppointment ? 'Update' : 'Create'}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeAppointmentModal}
-                  disabled={appointmentSaving}
-                  className="flex-1 bg-transparent border-2 border-gray-300 hover:border-gray-400 disabled:opacity-60 text-gray-800 font-bold py-3 px-6 rounded-full transition duration-300"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-            ) : (
             <form onSubmit={submitAppointment} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1977,6 +2042,8 @@ const PatientDashboard: React.FC = () => {
                         department_id: value,
                         appointment_time: '',
                       }));
+                      setHeldSlotId(null);
+                      setAvailableSlots([]);
                     }}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
@@ -1997,83 +2064,67 @@ const PatientDashboard: React.FC = () => {
                     type="date"
                     required
                     value={appointmentForm.appointment_date}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_date: e.target.value }))}
+                    onChange={(e) => {
+                      setAppointmentForm((p) => ({ ...p, appointment_date: e.target.value, appointment_time: '' }));
+                      setHeldSlotId(null);
+                    }}
                     className="w-full px-3 py-2 border rounded-lg"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value="in_person"
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
+                  >
+                    <option value="in_person">In Person</option>
+                  </select>
+                </div>
                 <div className="md:col-span-2">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">Time Slot Calendar</label>
-                    <span className="text-xs text-gray-500">Click a slot to auto-fill time</span>
+                    <label className="block text-sm font-medium text-gray-700">Available Slots</label>
+                    <span className="text-xs text-gray-500">Select a slot to hold it for 5 minutes</span>
                   </div>
                   {!appointmentForm.department_id || !appointmentForm.appointment_date ? (
                     <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
-                      Select a department and date to load available slots.
+                      Select department and date to load slots.
                     </div>
-                  ) : slotClinicLoading ? (
-                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading clinic slots...</div>
-                  ) : slotCalendarLoading ? (
+                  ) : slotsLoading ? (
                     <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading available slots...</div>
-                  ) : slotSummaries.length === 0 ? (
+                  ) : availableSlots.length === 0 ? (
                     <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
                       No slots available for the selected date.
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                      {slotSummaries.map((slot) => {
-                        const isSelected = appointmentForm.appointment_time === slot.time;
-                        const isDisabled = slot.available === 0;
+                      {availableSlots.map((slot) => {
+                        const isSelected = heldSlotId === slot.id;
                         return (
                           <button
-                            key={slot.time}
+                            key={slot.id}
                             type="button"
-                            disabled={isDisabled}
-                            onClick={() => setAppointmentForm((p) => ({ ...p, appointment_time: slot.time }))}
+                            disabled={slotHoldLoading}
+                            onClick={() => holdSlot(slot)}
                             className={`rounded-lg border px-3 py-2 text-left transition ${
                               isSelected
                                 ? 'border-teal-600 bg-teal-600 text-white'
-                                : isDisabled
-                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
                                 : 'border-gray-200 bg-white hover:border-teal-300 hover:bg-teal-50 text-gray-800'
                             }`}
                           >
-                            <div className="text-sm font-semibold">{slot.time}</div>
-                            <div className={`text-xs ${isSelected ? 'text-teal-100' : isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {slot.available > 0 ? `${slot.available} available` : 'Fully booked'}
+                            <div className="text-sm font-semibold">{(slot.start_time || '').slice(0, 5)}</div>
+                            <div className={`text-xs ${isSelected ? 'text-teal-100' : 'text-gray-500'}`}>
+                              {isSelected ? 'Held' : 'Available'}
                             </div>
                           </button>
                         );
                       })}
                     </div>
                   )}
-                  {slotCalendarError && <div className="text-xs text-red-600 mt-2">{slotCalendarError}</div>}
-                  {!appointmentForm.appointment_time && slotSummaries.length > 0 && (
-                    <div className="text-xs text-gray-500 mt-2">Select a time slot to continue.</div>
+                  {slotsError && <div className="text-xs text-red-600 mt-2">{slotsError}</div>}
+                  {!heldSlotId && availableSlots.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-2">Select a slot to continue.</div>
                   )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Doctor (Auto Assigned)</label>
-                  <select
-                    value=""
-                    disabled
-                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
-                  >
-                    <option value="">Assigned at booking</option>
-                  </select>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Doctor is auto-selected with the lowest appointment load.
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
-                    value={appointmentForm.type}
-                    onChange={(e) => setAppointmentForm((p) => ({ ...p, type: e.target.value as any }))}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
-                    <option value="in_person">In Person</option>
-                    <option value="telemedicine">Telemedicine</option>
-                  </select>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
@@ -2090,10 +2141,10 @@ const PatientDashboard: React.FC = () => {
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  disabled={appointmentSaving || !appointmentForm.appointment_time}
+                  disabled={appointmentSaving || !heldSlotId}
                   className="flex-1 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                 >
-                  {appointmentSaving ? 'Saving...' : 'Create'}
+                  {appointmentSaving ? 'Saving...' : editingAppointment ? 'Reschedule' : 'Create'}
                 </button>
                 <button
                   type="button"
@@ -2105,7 +2156,171 @@ const PatientDashboard: React.FC = () => {
                 </button>
               </div>
             </form>
-            ) }
+          </div>
+        </div>
+      )}
+
+      {selectedLabOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Lab Order Details</h2>
+                <p className="text-gray-600 text-sm">{selectedLabOrder.order_number || `#${selectedLabOrder.id}`}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedLabOrder(null)}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase">Test</div>
+                <div className="text-sm font-semibold text-gray-900">{selectedLabOrder.test_type || '-'}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase">Status</div>
+                <div className="text-sm font-semibold text-gray-900">{selectedLabOrder.status || 'pending'}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase">Order Date</div>
+                <div className="text-sm font-semibold text-gray-900">{selectedLabOrder.order_date || '-'}</div>
+              </div>
+            </div>
+
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 border-b bg-gray-50">
+                <div className="text-sm font-semibold text-gray-900">Results</div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Test</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Range</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Report</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {selectedLabOrder.results.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-6 text-center text-gray-600">No results yet.</td>
+                      </tr>
+                    ) : (
+                      selectedLabOrder.results.map((res) => (
+                        <tr key={res.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">{res.test_name || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {res.result_value ?? '-'} {res.unit || ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{res.reference_range || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{res.result_date || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {res.file_url ? (
+                              <a className="text-teal-600 hover:text-teal-700 underline" href={res.file_url} target="_blank" rel="noreferrer">
+                                Download
+                              </a>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Invoice Details</h2>
+                <p className="text-gray-600 text-sm">{selectedInvoice.invoice_number}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeInvoiceDetails}
+                className="p-2 rounded-lg hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {invoiceDetailsLoading ? (
+              <div className="text-center py-10">Loading...</div>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-xs text-gray-500 uppercase">Amount</div>
+                    <div className="text-sm font-semibold text-gray-900">{formatMoney(selectedInvoice.amount)}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-xs text-gray-500 uppercase">Status</div>
+                    <div className="text-sm font-semibold text-gray-900">{selectedInvoice.status}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-xs text-gray-500 uppercase">Issued</div>
+                    <div className="text-sm font-semibold text-gray-900">{selectedInvoice.issued_at}</div>
+                  </div>
+                </div>
+
+                <div className="bg-white border rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-gray-50">
+                    <div className="text-sm font-semibold text-gray-900">Payments</div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-white">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {(selectedInvoice.payments || []).length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-4 py-6 text-center text-gray-600">No payments yet.</td>
+                          </tr>
+                        ) : (
+                          (selectedInvoice.payments || []).map((p) => (
+                            <tr key={p.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{formatMoney(p.amount)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{p.method}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{p.paid_at || '-'}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => window.print()}
+                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-full transition duration-300"
+                  >
+                    Print
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

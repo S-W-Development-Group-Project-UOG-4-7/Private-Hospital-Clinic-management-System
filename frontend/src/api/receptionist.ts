@@ -21,7 +21,7 @@ import type {
   UpdateReceptionistAppointmentPayload,
   UpdateReceptionistPatientPayload,
   UpdateReferralPayload,
-  ClinicSlotAvailability,
+  ReceptionistSlot,
 } from '../types/receptionist';
 import { mapAppointmentStatus } from '../utils/appointmentStatus';
 
@@ -263,6 +263,39 @@ export const receptionistApi = {
 
       return handleJson<QueueEntry>(response);
     },
+    callNext: async (params?: { date?: string; doctor_id?: number; department_id?: number }): Promise<QueueEntry> => {
+      const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_QUEUE}/call-next`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(params || {}),
+      });
+
+      return handleJson<QueueEntry>(response);
+    },
+    skip: async (id: number): Promise<QueueEntry> => {
+      const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_QUEUE}/${id}/skip`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+
+      return handleJson<QueueEntry>(response);
+    },
+    requeue: async (id: number): Promise<QueueEntry> => {
+      const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_QUEUE}/${id}/requeue`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+
+      return handleJson<QueueEntry>(response);
+    },
+    markNoShow: async (id: number): Promise<QueueEntry> => {
+      const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_QUEUE}/${id}/no-show`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+
+      return handleJson<QueueEntry>(response);
+    },
     clear: async (params?: { date?: string; doctor_id?: number; department_id?: number }): Promise<{ deleted: number }> => {
       const response = await fetch(`${API_ENDPOINTS.RECEPTIONIST_QUEUE}/clear`, {
         method: 'POST',
@@ -429,20 +462,20 @@ export const receptionistApi = {
   },
 
   slots: {
-    list: async (params: { clinic_id: number; date: string; department_id?: number; doctor_id?: number; include_all?: boolean; include_unassigned?: boolean }): Promise<{ data: ClinicSlotAvailability[] }> => {
+    list: async (params: { date: string; department_id?: number; doctor_id?: number; visit_mode?: string; available_only?: boolean }): Promise<{ data: ReceptionistSlot[] }> => {
       const queryParams = new URLSearchParams();
       queryParams.append('date', params.date);
       if (params.department_id) queryParams.append('department_id', String(params.department_id));
       if (params.doctor_id) queryParams.append('doctor_id', String(params.doctor_id));
-      if (params.include_all) queryParams.append('include_all', 'true');
-      if (params.include_unassigned) queryParams.append('include_unassigned', 'true');
+      if (params.visit_mode) queryParams.append('visit_mode', params.visit_mode);
+      if (params.available_only !== undefined) queryParams.append('available_only', params.available_only ? '1' : '0');
 
-      const url = `${API_ENDPOINTS.CLINIC_SLOTS(params.clinic_id)}?${queryParams.toString()}`;
+      const url = `${API_ENDPOINTS.SLOTS}?${queryParams.toString()}`;
       const response = await fetch(url, {
         headers: getAuthHeaders(),
       });
-      const data = await handleJson<{ slots?: ClinicSlotAvailability[] }>(response);
-      return { data: Array.isArray(data.slots) ? data.slots : [] };
+      const data = await handleJson<{ data?: ReceptionistSlot[] }>(response);
+      return { data: Array.isArray(data.data) ? data.data : [] };
     },
   },
 };

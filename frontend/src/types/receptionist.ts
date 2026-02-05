@@ -78,7 +78,7 @@ export interface ReceptionistAppointmentCreateResponse {
   queue_entry?: QueueEntry | null;
 }
 
-export type QueueStatus = 'waiting' | 'in_consultation' | 'completed' | 'cancelled';
+export type QueueStatus = 'waiting' | 'in_consultation' | 'completed' | 'cancelled' | 'no_show';
 
 export interface QueueEntry {
   id: number;
@@ -99,6 +99,15 @@ export interface QueueEntry {
 }
 
 export type InvoiceStatus = 'unpaid' | 'partial' | 'paid' | 'cancelled';
+
+export interface InvoiceItem {
+  id?: number;
+  invoice_id?: number;
+  description: string;
+  quantity: string | number;
+  unit_price: string | number;
+  line_total?: string;
+}
 
 export interface Payment {
   id: number;
@@ -122,6 +131,7 @@ export interface Invoice {
   issued_at: string;
   due_date: string | null;
   description: string | null;
+  items?: InvoiceItem[];
   patient?: ReceptionistUserSummary;
   payments?: Payment[];
   created_at?: string;
@@ -209,8 +219,9 @@ export interface CreateReceptionistAppointmentPayload {
   doctor_id?: number | null;
   department_id?: number | null;
   clinic?: string | null;
-  appointment_date: string;
-  appointment_time: string;
+  appointment_date?: string;
+  appointment_time?: string;
+  slot_id?: number;
   type?: AppointmentType;
   status?: AppointmentStatus;
   reason?: string | null;
@@ -240,10 +251,11 @@ export interface CheckInPayload {
 
 export interface CreateInvoicePayload {
   patient_id: number;
-  amount: number;
+  amount?: number;
   issued_at?: string;
   due_date?: string | null;
   description?: string | null;
+  items?: InvoiceItem[];
 }
 
 export interface CreatePaymentPayload {

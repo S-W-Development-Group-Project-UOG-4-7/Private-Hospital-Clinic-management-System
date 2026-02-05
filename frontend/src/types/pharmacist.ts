@@ -13,7 +13,7 @@ export interface PharmacistPrescription {
   patient_name: string;
   doctor_id: number;
   doctor_name: string;
-  status: 'pending' | 'dispensed' | 'held' | 'rejected';
+  status: 'pending' | 'dispensed' | 'partial' | 'held' | 'rejected';
   created_at: string;
   updated_at: string;
   items: PharmacistPrescriptionItem[];
@@ -43,6 +43,7 @@ export interface PharmacistPrescriptionItem {
   duration?: string;
   duration_days?: number;
   quantity: number;
+  dispensed_quantity?: number;
   instructions?: string;
   // Additional fields from API
   inventory_item?: {

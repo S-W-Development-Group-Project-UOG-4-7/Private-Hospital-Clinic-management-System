@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DrugPurchase;
 use App\Models\DrugPurchaseItem;
 use App\Models\InventoryItem;
+use App\Models\StockLedger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -130,6 +131,18 @@ class DrugPurchaseController extends Controller
                 
                 // Update inventory
                 $inventoryItem->increment('quantity', $item->quantity);
+
+                StockLedger::create([
+                    'inventory_item_id' => $inventoryItem->id,
+                    'type' => 'PURCHASE',
+                    'quantity' => $item->quantity,
+                    'ref_type' => 'drug_purchase',
+                    'ref_id' => $purchase->id,
+                    'cost_price' => $item->unit_price,
+                    'sell_price' => $inventoryItem->selling_price,
+                    'performed_by' => $request->user()?->id,
+                    'reason' => 'purchase_receive',
+                ]);
                 
                 // Update expiry date and batch number if provided
                 if ($item->expiry_date) {
@@ -162,4 +175,3 @@ class DrugPurchaseController extends Controller
         return response()->json(['message' => 'Drug purchase deleted successfully']);
     }
 }
-

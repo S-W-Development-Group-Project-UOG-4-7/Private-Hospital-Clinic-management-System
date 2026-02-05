@@ -28,6 +28,7 @@ const RegisterPage: React.FC = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isUnder18, setIsUnder18] = useState(false);
@@ -106,6 +107,7 @@ const RegisterPage: React.FC = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -125,7 +127,10 @@ const RegisterPage: React.FC = () => {
       }
 
       await register(registrationData);
-      navigate('/login');
+      setSuccessMessage('Account created successfully. You can now log in.');
+      setTimeout(() => {
+        navigate('/login');
+      }, 1200);
     } catch (err) {
       setError((err as Error).message || 'Unable to register right now.');
     } finally {
@@ -172,6 +177,11 @@ const RegisterPage: React.FC = () => {
             {error && (
               <div className="px-4 py-3 mb-6 text-sm text-red-800 border border-red-200 rounded-lg bg-red-50">
                 {error}
+              </div>
+            )}
+            {successMessage && (
+              <div className="px-4 py-3 mb-6 text-sm text-green-800 border border-green-200 rounded-lg bg-green-50">
+                {successMessage}
               </div>
             )}
 

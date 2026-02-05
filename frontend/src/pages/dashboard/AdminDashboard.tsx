@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { 
   Users, Stethoscope, Building2, UserCog, 
-  ArrowUpRight, Bell, Search, Menu, BarChart3 // <--- Added BarChart3 icon
+  ArrowUpRight, Bell, Search, Menu, BarChart3, Package, AlertTriangle, Clock, DollarSign
 } from 'lucide-react';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 
@@ -29,6 +29,14 @@ interface ApiResponse {
   chart_data: ChartDataPoint[];
 }
 
+interface InventorySummary {
+  items: number;
+  total_cost_value: number;
+  total_sell_value: number;
+  low_stock: number;
+  expiring_soon: number;
+}
+
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,6 +50,13 @@ const AdminDashboard: React.FC = () => {
 
   // State for Chart
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [inventorySummary, setInventorySummary] = useState<InventorySummary>({
+    items: 0,
+    total_cost_value: 0,
+    total_sell_value: 0,
+    low_stock: 0,
+    expiring_soon: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(true); // For mobile responsiveness
 
@@ -55,10 +70,35 @@ const AdminDashboard: React.FC = () => {
     if (isMainPage) {
       const fetchStats = async () => {
         try {
-          const res = await api.get<ApiResponse>('/admin/dashboard-stats');
+          const [res, valuationRes, inventoryRes] = await Promise.all([
+            api.get<ApiResponse>('/admin/dashboard-stats'),
+            api.get('/admin/reports/inventory-valuation'),
+            api.get('/admin/inventory'),
+          ]);
           
           setStats(res.data.counts);
           setChartData(res.data.chart_data);
+
+          const valuationSummary = (valuationRes.data as any)?.summary || {};
+          const inventoryItems = Array.isArray(inventoryRes.data) ? inventoryRes.data : [];
+          const lowStockCount = inventoryItems.filter((item: any) => (item?.stock ?? 0) < 10).length;
+
+          const today = new Date();
+          const cutoff = new Date();
+          cutoff.setDate(today.getDate() + 30);
+          const expiringSoon = inventoryItems.filter((item: any) => {
+            if (!item?.expiry) return false;
+            const expiryDate = new Date(item.expiry);
+            return !Number.isNaN(expiryDate.getTime()) && expiryDate <= cutoff;
+          }).length;
+
+          setInventorySummary({
+            items: valuationSummary.items ?? inventoryItems.length,
+            total_cost_value: valuationSummary.total_cost_value ?? 0,
+            total_sell_value: valuationSummary.total_sell_value ?? 0,
+            low_stock: lowStockCount,
+            expiring_soon: expiringSoon,
+          });
           setLoading(false);
         } catch (error) {
           console.error("Error loading stats:", error);
@@ -170,6 +210,55 @@ const AdminDashboard: React.FC = () => {
                             <h3 className="text-2xl font-bold text-gray-900 mt-2">{loading ? '...' : stats.total_departments}</h3>
                         </div>
                         <div className="p-2 bg-orange-50 rounded-lg text-orange-600"><Building2 size={20} /></div>
+                    </div>
+                </div>
+              </div>
+
+              {/* Inventory Snapshot */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Inventory Items</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-2">{loading ? '...' : inventorySummary.items}</h3>
+                        </div>
+                        <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><Package size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Low Stock</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-2">{loading ? '...' : inventorySummary.low_stock}</h3>
+                        </div>
+                        <div className="p-2 bg-red-50 rounded-lg text-red-600"><AlertTriangle size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Expiring Soon</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-2">{loading ? '...' : inventorySummary.expiring_soon}</h3>
+                        </div>
+                        <div className="p-2 bg-yellow-50 rounded-lg text-yellow-600"><Clock size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Stock Cost Value</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-2">{loading ? '...' : inventorySummary.total_cost_value}</h3>
+                        </div>
+                        <div className="p-2 bg-green-50 rounded-lg text-green-600"><DollarSign size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Stock Sell Value</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-2">{loading ? '...' : inventorySummary.total_sell_value}</h3>
+                        </div>
+                        <div className="p-2 bg-teal-50 rounded-lg text-teal-600"><DollarSign size={20} /></div>
                     </div>
                 </div>
               </div>

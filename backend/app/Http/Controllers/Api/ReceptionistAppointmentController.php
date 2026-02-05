@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\PatientProfile;
 use App\Models\QueueEntry;
+use App\Models\Slot;
 use App\Models\User;
 use App\Models\Department; // <--- ADDED IMPORT
 use App\Services\TelemedSessionService;
@@ -59,10 +60,11 @@ class ReceptionistAppointmentController extends Controller
         $validated = $request->validate([
             'patient_id' => ['nullable', 'max:50', 'required_without:patient_code'],
             'patient_code' => ['nullable', 'string', 'max:50', 'required_without:patient_id'],
+            'slot_id' => ['nullable', 'integer', 'exists:slots,id'],
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
             'department_id' => ['required', 'integer', 'exists:departments,id'],
-            'appointment_date' => ['required', 'date'],
-            'appointment_time' => ['required'],
+            'appointment_date' => ['required_without:slot_id', 'date'],
+            'appointment_time' => ['required_without:slot_id'],
             'visit_mode' => ['nullable', Rule::in([Appointment::VISIT_MODE_PHYSICAL, Appointment::VISIT_MODE_ONLINE])],
             'type' => ['nullable', Rule::in(['in_person', 'telemedicine'])],
             'status' => ['nullable', Rule::in([
@@ -117,8 +119,6 @@ class ReceptionistAppointmentController extends Controller
         $isWalkIn = (bool) ($validated['is_walk_in'] ?? false);
 
         return DB::transaction(function () use ($validated, $patientId, $isWalkIn, $request) {
-            $appointmentDate = $validated['appointment_date'];
-            $appointmentTime = $validated['appointment_time'];
             $status = Appointment::normalizeStatus($validated['status'] ?? Appointment::STATUS_CONFIRMED);
             $departmentId = $validated['department_id'];
 
@@ -129,6 +129,37 @@ class ReceptionistAppointmentController extends Controller
                 $visitMode = ($validated['type'] ?? null) === 'telemedicine'
                     ? Appointment::VISIT_MODE_ONLINE
                     : Appointment::VISIT_MODE_PHYSICAL;
+            }
+
+            $slot = null;
+            if (! empty($validated['slot_id'])) {
+                $slot = Slot::query()->lockForUpdate()->findOrFail((int) $validated['slot_id']);
+
+                if ($slot->status === 'BOOKED') {
+                    return response()->json([
+                        'message' => 'Selected slot is already booked.',
+                    ], 422);
+                }
+
+                if ($slot->status === 'HELD' && $slot->isHoldExpired()) {
+                    $slot->status = 'AVAILABLE';
+                    $slot->held_by_patient_id = null;
+                    $slot->held_until = null;
+                    $slot->save();
+                }
+
+                if ($slot->status === 'HELD' && ! $slot->isHoldExpired() && $slot->held_by_patient_id) {
+                    return response()->json([
+                        'message' => 'Selected slot is currently held by a patient.',
+                    ], 422);
+                }
+
+                $appointmentDate = $slot->date->format('Y-m-d');
+                $appointmentTime = $slot->start_time;
+                $doctorId = $slot->doctor_id;
+            } else {
+                $appointmentDate = $validated['appointment_date'];
+                $appointmentTime = $validated['appointment_time'];
             }
 
             $scheduledStart = CarbonImmutable::parse($appointmentDate . ' ' . $appointmentTime);
@@ -170,6 +201,12 @@ class ReceptionistAppointmentController extends Controller
                         'message' => 'Selected doctor does not belong to the chosen department.',
                     ], 422);
                 }
+            }
+
+            if ($slot && $visitMode !== '' && ! $this->slotAllowsVisitMode($slot, $visitMode)) {
+                return response()->json([
+                    'message' => 'Selected slot does not support the chosen visit mode.',
+                ], 422);
             }
 
             if (! empty($doctorId) && in_array($status, Appointment::blockingStatuses(), true)) {
@@ -255,7 +292,7 @@ class ReceptionistAppointmentController extends Controller
                 'clinic' => 'OPD',
                 'appointment_number' => $nextAppointmentNumber,
                 'appointment_date' => $appointmentDate,
-                'appointment_time' => $validated['appointment_time'],
+                'appointment_time' => $appointmentTime,
                 'scheduled_start' => $scheduledStart,
                 'scheduled_end' => $scheduledEnd,
                 'type' => $visitMode === Appointment::VISIT_MODE_ONLINE ? 'telemedicine' : 'in_person',
@@ -270,6 +307,13 @@ class ReceptionistAppointmentController extends Controller
 
             if ($visitMode === Appointment::VISIT_MODE_ONLINE && $status !== Appointment::STATUS_REQUESTED) {
                 (new TelemedSessionService())->createForAppointment($appointment);
+            }
+
+            if ($slot) {
+                $slot->status = 'BOOKED';
+                $slot->held_until = null;
+                $slot->held_by_patient_id = null;
+                $slot->save();
             }
 
             // --- QUEUE GENERATION (Kept as is) ---
@@ -513,5 +557,16 @@ class ReceptionistAppointmentController extends Controller
                 'message' => 'Appointment deleted successfully',
             ]);
         });
+    }
+
+    private function slotAllowsVisitMode(Slot $slot, string $visitMode): bool
+    {
+        $allowed = strtoupper((string) ($slot->allowed_visit_mode ?? ''));
+
+        if ($allowed === '' || $allowed === 'BOTH') {
+            return true;
+        }
+
+        return $allowed === strtoupper($visitMode);
     }
 }

@@ -10,6 +10,62 @@ use Illuminate\Http\Request;
 class PatientQueueController extends Controller
 {
     /**
+     * Queue status for a specific appointment (patient-only).
+     */
+    public function appointmentStatus(Request $request, int $appointmentId)
+    {
+        $user = $request->user();
+
+        $appointment = Appointment::query()
+            ->where('patient_id', $user->id)
+            ->findOrFail($appointmentId);
+
+        $today = now()->toDateString();
+        $isToday = $appointment->appointment_date === $today;
+
+        if (! $isToday) {
+            return response()->json([
+                'is_today' => false,
+                'current_number' => null,
+                'my_position' => null,
+                'estimated_wait_minutes' => null,
+            ]);
+        }
+
+        $queueEntry = QueueEntry::query()
+            ->where('appointment_id', $appointment->id)
+            ->whereDate('queue_date', $today)
+            ->first();
+
+        $currentNumber = QueueEntry::query()
+            ->whereDate('queue_date', $today)
+            ->whereIn('status', ['in_consultation', 'in_progress'])
+            ->orderBy('queue_number')
+            ->value('queue_number');
+
+        $myPosition = null;
+        $estimatedWait = null;
+
+        if ($queueEntry && $queueEntry->queue_number) {
+            $peopleAhead = QueueEntry::query()
+                ->whereDate('queue_date', $today)
+                ->whereIn('status', ['waiting', 'scheduled'])
+                ->where('queue_number', '<', $queueEntry->queue_number)
+                ->count();
+
+            $avgMinutes = 15;
+            $myPosition = $peopleAhead + 1;
+            $estimatedWait = $peopleAhead * $avgMinutes;
+        }
+
+        return response()->json([
+            'is_today' => true,
+            'current_number' => $currentNumber,
+            'my_position' => $myPosition,
+            'estimated_wait_minutes' => $estimatedWait,
+        ]);
+    }
+    /**
      * Get the patient's current queue position and queue information
      */
     public function status(Request $request)

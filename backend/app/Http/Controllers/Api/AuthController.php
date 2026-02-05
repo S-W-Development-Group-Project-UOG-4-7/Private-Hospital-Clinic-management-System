@@ -59,18 +59,21 @@ class AuthController extends Controller
             $suffix++;
         }
 
-        // Build user data depending on whether a "name" column exists
+        // Always set required user fields for this schema (first_name/last_name/username)
         $userData = [
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
+            'first_name' => $firstName,
+            'last_name' => $lastName ?: 'Patient',
+            'username' => $username,
         ];
 
         if (Schema::hasColumn('users', 'name')) {
             $userData['name'] = $fullName;
-        } else {
-            $userData['first_name'] = $firstName;
-            $userData['last_name'] = $lastName ?: 'Patient';
-            $userData['username'] = $username;
+        }
+
+        if (array_key_exists('phone', $data)) {
+            $userData['phone'] = $data['phone'];
         }
 
         $user = User::create($userData);
