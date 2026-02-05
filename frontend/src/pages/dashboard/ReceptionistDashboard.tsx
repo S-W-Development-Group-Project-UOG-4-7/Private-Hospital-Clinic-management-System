@@ -558,8 +558,33 @@ const ReceptionistDashboard: React.FC = () => {
   const setQueueStatus = async (entry: QueueEntry, status: string) => {
     setError(null);
     try {
-      await receptionistApi.queue.updateStatus(entry.id, status);
-      toast.success('Queue updated');
+      // Check if this is a scheduled appointment that needs to be checked in first
+      const entryId = String(entry.id);
+      if (entryId.startsWith('appt_')) {
+        // This is a scheduled appointment, not yet checked in
+        // Check in the patient first, then update status if needed
+        const appointmentId = parseInt(entryId.replace('appt_', ''), 10);
+        const doctorId = entry.doctor_id || entry.appointment?.doctor_id;
+        
+        if (!doctorId) {
+          setError('Please select a doctor for this appointment before checking in.');
+          return;
+        }
+        
+        await receptionistApi.queue.checkIn({
+          patient_id: entry.patient_id,
+          doctor_id: doctorId,
+          appointment_id: appointmentId,
+          queue_date: queueDate,
+        });
+        
+        toast.success('Patient checked in');
+      } else {
+        // This is an existing queue entry, update its status
+        await receptionistApi.queue.updateStatus(entry.id, status);
+        toast.success('Queue updated');
+      }
+      
       await loadQueue();
       await loadStats();
     } catch (e: any) {
@@ -1540,35 +1565,51 @@ const ReceptionistDashboard: React.FC = () => {
                                           ? 'bg-orange-100 text-orange-800'
                                           : q.status === 'completed'
                                             ? 'bg-green-100 text-green-800'
-                                            : 'bg-red-100 text-red-800'
+                                            : q.status === 'scheduled'
+                                              ? 'bg-blue-100 text-blue-800'
+                                              : 'bg-red-100 text-red-800'
                                     }`}
                                   >
-                                    {q.status}
+                                    {q.status === 'scheduled' ? 'Not Checked-in' : q.status}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4">
                                   <div className="flex gap-2">
-                                    <button
-                                      onClick={() => setQueueStatus(q, 'in_consultation')}
-                                      disabled={q.status !== 'waiting'}
-                                      className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
-                                    >
-                                      Start
-                                    </button>
-                                    <button
-                                      onClick={() => setQueueStatus(q, 'completed')}
-                                      disabled={q.status === 'completed' || q.status === 'cancelled'}
-                                      className="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
-                                    >
-                                      Complete
-                                    </button>
-                                    <button
-                                      onClick={() => setQueueStatus(q, 'cancelled')}
-                                      disabled={q.status === 'completed' || q.status === 'cancelled'}
-                                      className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
-                                    >
-                                      Cancel
-                                    </button>
+                                    {/* Show Check-in button for scheduled appointments */}
+                                    {String(q.id).startsWith('appt_') && (
+                                      <button
+                                        onClick={() => setQueueStatus(q, 'waiting')}
+                                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                      >
+                                        Check-in
+                                      </button>
+                                    )}
+                                    {/* Show queue control buttons for checked-in entries */}
+                                    {!String(q.id).startsWith('appt_') && (
+                                      <>
+                                        <button
+                                          onClick={() => setQueueStatus(q, 'in_consultation')}
+                                          disabled={q.status !== 'waiting'}
+                                          className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                        >
+                                          Start
+                                        </button>
+                                        <button
+                                          onClick={() => setQueueStatus(q, 'completed')}
+                                          disabled={q.status === 'completed' || q.status === 'cancelled'}
+                                          className="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                        >
+                                          Complete
+                                        </button>
+                                        <button
+                                          onClick={() => setQueueStatus(q, 'cancelled')}
+                                          disabled={q.status === 'completed' || q.status === 'cancelled'}
+                                          className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs transition"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

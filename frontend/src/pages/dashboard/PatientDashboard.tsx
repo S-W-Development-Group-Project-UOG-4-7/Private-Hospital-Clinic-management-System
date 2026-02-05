@@ -397,7 +397,13 @@ const PatientDashboard: React.FC = () => {
         };
         await patientApi.appointments.update(editingAppointment.id, payload);
       } else {
-        await patientApi.appointments.create(base);
+        const response = await patientApi.appointments.create(base);
+        // Show queue number if available
+        if (response?.queue_entry?.queue_number) {
+          alert(`Appointment booked successfully!\n\nYour Queue Number: ${response.queue_entry.queue_number}\n\nPlease arrive on time for your appointment.`);
+        } else if (response?.message) {
+          alert(response.message);
+        }
       }
 
       closeAppointmentModal();

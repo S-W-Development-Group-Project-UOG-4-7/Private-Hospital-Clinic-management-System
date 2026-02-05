@@ -66,6 +66,23 @@ export interface PatientAppointmentsResponse {
   data: PatientAppointment[];
 }
 
+export interface QueueEntryResponse {
+  id: number;
+  appointment_id: number;
+  patient_id: number;
+  doctor_id: number | null;
+  queue_date: string;
+  queue_number: number;
+  status: string;
+  checked_in_at: string | null;
+}
+
+export interface CreateAppointmentResponse {
+  appointment: PatientAppointment;
+  queue_entry: QueueEntryResponse | null;
+  message: string;
+}
+
 export type TeleconsultationStatus = 'scheduled' | 'completed' | 'cancelled';
 
 export interface PatientTeleconsultation {

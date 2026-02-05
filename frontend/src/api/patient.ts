@@ -1,6 +1,7 @@
 import { API_ENDPOINTS } from '../config/api';
 import type {
   CreateAppointmentPayload,
+  CreateAppointmentResponse,
   CreateFeedbackPayload,
   CreatePaymentPayload,
   CreatePaymentResponse,
@@ -81,13 +82,13 @@ export const patientApi = {
       return handleJson<PatientAppointmentsResponse>(response);
     },
 
-    create: async (payload: CreateAppointmentPayload): Promise<PatientAppointment> => {
+    create: async (payload: CreateAppointmentPayload): Promise<CreateAppointmentResponse> => {
       const response = await fetch(API_ENDPOINTS.PATIENT_APPOINTMENTS, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
-      return handleJson<PatientAppointment>(response);
+      return handleJson<CreateAppointmentResponse>(response);
     },
 
     update: async (id: number, payload: UpdateAppointmentPayload): Promise<PatientAppointment> => {

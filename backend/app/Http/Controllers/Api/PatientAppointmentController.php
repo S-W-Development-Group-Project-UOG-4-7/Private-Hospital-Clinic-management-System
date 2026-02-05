@@ -102,18 +102,79 @@ class PatientAppointmentController extends Controller
             }
         }
 
-        $appointment = Appointment::create([
-            'patient_id' => $user->id,
-            'clinic_id' => $clinicId ?? null,
-            'doctor_id' => $validated['doctor_id'] ?? null,
-            'appointment_date' => $validated['appointment_date'],
-            'appointment_time' => $validated['appointment_time'],
-            'type' => $validated['type'] ?? 'in_person',
-            'status' => 'scheduled',
-            'reason' => $validated['reason'] ?? null,
-        ]);
+        return DB::transaction(function () use ($user, $validated, $clinicId) {
+            // Generate appointment number
+            $appointmentDate = $validated['appointment_date'];
+            $lastAppointmentNumber = Appointment::query()
+                ->whereDate('appointment_date', $appointmentDate)
+                ->orderByDesc('appointment_number')
+                ->lockForUpdate()
+                ->value('appointment_number');
 
-        return response()->json($appointment->load('doctor'), 201);
+            $nextAppointmentNumber = ((int) ($lastAppointmentNumber ?? 0)) + 1;
+
+            // Create the appointment
+            $appointment = Appointment::create([
+                'patient_id' => $user->id,
+                'clinic_id' => $clinicId ?? null,
+                'doctor_id' => $validated['doctor_id'] ?? null,
+                'appointment_number' => $nextAppointmentNumber,
+                'appointment_date' => $appointmentDate,
+                'appointment_time' => $validated['appointment_time'],
+                'type' => $validated['type'] ?? 'in_person',
+                'status' => 'scheduled',
+                'reason' => $validated['reason'] ?? null,
+            ]);
+
+            // Automatically add patient to the queue
+            $queueDate = $appointmentDate;
+            $doctorId = $validated['doctor_id'] ?? null;
+
+            // Check if already in queue for this appointment
+            $alreadyInQueue = QueueEntry::query()
+                ->where('appointment_id', $appointment->id)
+                ->whereDate('queue_date', $queueDate)
+                ->whereIn('status', ['waiting', 'in_consultation', 'completed'])
+                ->exists();
+
+            $queueEntry = null;
+
+            if (! $alreadyInQueue) {
+                // Get the next queue number for the doctor (or unassigned queue)
+                $lastQueueNumber = QueueEntry::query()
+                    ->whereDate('queue_date', $queueDate)
+                    ->where(function ($q) use ($doctorId) {
+                        if ($doctorId) {
+                            $q->where('doctor_id', $doctorId);
+                        } else {
+                            $q->whereNull('doctor_id');
+                        }
+                    })
+                    ->orderByDesc('queue_number')
+                    ->lockForUpdate()
+                    ->value('queue_number');
+
+                $nextQueueNumber = ((int) ($lastQueueNumber ?? 0)) + 1;
+
+                $queueEntry = QueueEntry::create([
+                    'appointment_id' => $appointment->id,
+                    'patient_id' => $user->id,
+                    'doctor_id' => $doctorId,
+                    'queue_date' => $queueDate,
+                    'queue_number' => $nextQueueNumber,
+                    'status' => 'waiting',
+                    'checked_in_at' => now(),
+                ]);
+            }
+
+            return response()->json([
+                'appointment' => $appointment->load('doctor'),
+                'queue_entry' => $queueEntry,
+                'message' => $queueEntry 
+                    ? "Appointment booked successfully! Your queue number is {$queueEntry->queue_number}."
+                    : 'Appointment booked successfully!',
+            ], 201);
+        });
     }
 
     public function show(Request $request, int $id)

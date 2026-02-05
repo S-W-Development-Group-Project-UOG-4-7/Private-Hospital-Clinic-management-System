@@ -65,15 +65,15 @@ export interface ReceptionistAppointmentCreateResponse {
   queue_entry?: QueueEntry | null;
 }
 
-export type QueueStatus = 'waiting' | 'in_consultation' | 'completed' | 'cancelled';
+export type QueueStatus = 'waiting' | 'in_consultation' | 'completed' | 'cancelled' | 'scheduled';
 
 export interface QueueEntry {
-  id: number;
+  id: number | string;
   appointment_id: number | null;
   patient_id: number;
   doctor_id: number | null;
   queue_date: string;
-  queue_number: number;
+  queue_number: number | null;
   status: QueueStatus;
   checked_in_at: string | null;
   checked_out_at: string | null;
@@ -81,6 +81,7 @@ export interface QueueEntry {
   patient?: ReceptionistUserSummary;
   doctor?: ReceptionistUserSummary | null;
   appointment?: ReceptionistAppointment | null;
+  queue_entry?: any; // The original queue entry when merged
   created_at?: string;
   updated_at?: string;
 }

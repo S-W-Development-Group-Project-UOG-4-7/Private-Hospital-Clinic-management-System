@@ -213,8 +213,18 @@ export const receptionistApi = {
       return handleJson<QueueEntry>(response);
     },
 
-    updateStatus: async (id: number, status: string): Promise<QueueEntry> => {
-      const response = await fetch(API_ENDPOINTS.RECEPTIONIST_QUEUE_STATUS(id), {
+    updateStatus: async (id: number | string, status: string): Promise<QueueEntry> => {
+      // Extract numeric ID if prefixed (e.g., 'queue_1' -> 1)
+      let numericId: number;
+      if (typeof id === 'string' && id.startsWith('queue_')) {
+        numericId = parseInt(id.replace('queue_', ''), 10);
+      } else if (typeof id === 'string') {
+        numericId = parseInt(id, 10);
+      } else {
+        numericId = id;
+      }
+      
+      const response = await fetch(API_ENDPOINTS.RECEPTIONIST_QUEUE_STATUS(numericId), {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ status }),

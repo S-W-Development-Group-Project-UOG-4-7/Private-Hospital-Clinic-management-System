@@ -25,14 +25,14 @@ class AdminController extends Controller
 
     public function getUsers()
     {
-        // FIX: Use 'roles' (Spatie relationship) instead of 'role' (Scope conflict)
+        // We load 'roles' (plural) from Spatie, and 'department'
         $users = User::with(['roles', 'department'])->latest()->get()->map(function ($user) {
             return [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
                 'username' => $user->username,
                 'email' => $user->email,
-                // Get the first role name from the collection
+                // Safely get the first role name
                 'role' => $user->roles->first()->name ?? 'patient',
                 'department' => $user->department->name ?? '-',
                 'is_active' => $user->is_active,
@@ -66,6 +66,7 @@ class AdminController extends Controller
             'department_id' => $validated['department_id'] ?? null,
         ]);
 
+        // Assign role using Spatie
         $user->assignRole($validated['role']);
 
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
@@ -126,7 +127,7 @@ class AdminController extends Controller
             ];
         }
 
-        // 2. Counts - Using Spatie scopes (User::role) is correct here
+        // 2. Counts - Using Spatie scopes (User::role)
         $totalUsers = User::count();
         $totalPatients = User::role('patient')->count();
         $totalDoctors = User::role('doctor')->count();
