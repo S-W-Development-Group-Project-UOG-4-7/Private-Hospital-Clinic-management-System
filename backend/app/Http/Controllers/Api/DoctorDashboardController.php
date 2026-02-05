@@ -24,7 +24,7 @@ class DoctorDashboardController extends Controller
         $completedAppointments = Appointment::query()
             ->where('doctor_id', $doctor->id)
             ->whereDate('appointment_date', $date)
-            ->where('status', 'completed')
+            ->where('status', Appointment::STATUS_COMPLETED)
             ->with(['patient:id,first_name,last_name,email', 'patient.patientProfile:user_id,phone,gender,date_of_birth'])
             ->orderBy('appointment_time', 'asc')
             ->get();
@@ -60,8 +60,8 @@ class DoctorDashboardController extends Controller
         $stats = [
             'total_appointments' => $allAppointments->count(),
             'completed_consultations' => $completedAppointments->count(),
-            'pending_appointments' => $allAppointments->where('status', 'scheduled')->count(),
-            'cancelled_appointments' => $allAppointments->where('status', 'cancelled')->count(),
+            'pending_appointments' => $allAppointments->whereIn('status', Appointment::activeScheduleStatuses())->count(),
+            'cancelled_appointments' => $allAppointments->where('status', Appointment::STATUS_CANCELLED)->count(),
             'prescriptions_issued' => $prescriptionsToday->count(),
             'lab_orders_placed' => $labOrdersToday->count(),
             'referrals_made' => $referralsToday->count(),

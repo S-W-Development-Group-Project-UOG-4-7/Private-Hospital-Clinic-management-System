@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
 use App\Models\User;
 use App\Models\PatientProfile;
 use Illuminate\Http\Request;
@@ -81,7 +82,7 @@ class PatientController extends Controller
 
         // Get the last completed appointment (last consulting date)
         $lastConsultation = $user->appointments()
-            ->where('status', 'completed')
+            ->where('status', Appointment::STATUS_COMPLETED)
             ->orderBy('appointment_date', 'desc')
             ->orderBy('appointment_time', 'desc')
             ->first();

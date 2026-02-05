@@ -12,8 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            $table->unsignedBigInteger('department_id')->nullable()->after('doctor_id');
-            $table->foreign('department_id')->references('id')->on('departments')->onDelete('set null');
+            if (! Schema::hasColumn('appointments', 'department_id')) {
+                $table->unsignedBigInteger('department_id')->nullable()->after('doctor_id');
+                $table->foreign('department_id')->references('id')->on('departments')->onDelete('set null');
+            }
         });
     }
 
@@ -23,8 +25,10 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            $table->dropForeign(['department_id']);
-            $table->dropColumn('department_id');
+            if (Schema::hasColumn('appointments', 'department_id')) {
+                $table->dropForeign(['department_id']);
+                $table->dropColumn('department_id');
+            }
         });
     }
 };

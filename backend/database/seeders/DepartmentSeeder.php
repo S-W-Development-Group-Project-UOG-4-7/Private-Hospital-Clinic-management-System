@@ -11,6 +11,7 @@ class DepartmentSeeder extends Seeder
     {
         // define the departments
         $departments = [
+            ['name' => 'OPD', 'description' => 'Outpatient Department'],
             ['name' => 'Cardiology', 'description' => 'Heart and cardiovascular system'],
             ['name' => 'Neurology', 'description' => 'Nervous system disorders'],
             ['name' => 'Pediatrics', 'description' => 'Medical care for infants and children'],

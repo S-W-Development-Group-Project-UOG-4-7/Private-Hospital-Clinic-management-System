@@ -23,15 +23,18 @@ import type {
   LabOrder,
   LabResult,
   CreateLabOrderPayload,
+  UpdateLabOrderPayload,
   ReviewLabResultPayload,
   ReferralsResponse,
   Referral,
   CreateReferralPayload,
   ClinicsResponse,
+  ClinicReferralsResponse,
   CreateClinicReferralPayload,
   PatientRecord,
   DailySummaryResponse,
 } from '../types/doctor';
+import { mapAppointmentStatus } from '../utils/appointmentStatus';
 
 export const doctorApi = {
   dashboard: {
@@ -46,17 +49,20 @@ export const doctorApi = {
   appointments: {
     list: async (params?: { date?: string; status?: string; patient_name?: string }): Promise<DoctorAppointmentsResponse> => {
       const response = await http.get<DoctorAppointmentsResponse>(API_ENDPOINTS.DOCTOR_APPOINTMENTS, { params });
-      return response.data;
+      return {
+        ...response.data,
+        data: Array.isArray(response.data.data) ? response.data.data.map(mapAppointmentStatus) : [],
+      };
     },
 
     show: async (id: number): Promise<DoctorAppointment> => {
       const response = await http.get<DoctorAppointment>(`${API_ENDPOINTS.DOCTOR_APPOINTMENTS}/${id}`);
-      return response.data;
+      return mapAppointmentStatus(response.data);
     },
 
     updateStatus: async (id: number, payload: UpdateAppointmentStatusPayload): Promise<DoctorAppointment> => {
       const response = await http.put<DoctorAppointment>(API_ENDPOINTS.DOCTOR_APPOINTMENT_STATUS(String(id)), payload);
-      return response.data;
+      return mapAppointmentStatus(response.data);
     },
   },
 
@@ -97,6 +103,11 @@ export const doctorApi = {
   },
 
   patients: {
+    list: async (): Promise<any> => {
+      const response = await http.get(API_ENDPOINTS.DOCTOR_PATIENTS);
+      return response.data;
+    },
+
     create: async (payload: any): Promise<any> => {
       const response = await http.post<any>(API_ENDPOINTS.DOCTOR_PATIENTS, payload);
       return response.data;
@@ -146,12 +157,12 @@ export const doctorApi = {
     },
 
     update: async (id: number, payload: CreatePrescriptionPayload): Promise<DoctorPrescription> => {
-      const response = await http.put<DoctorPrescription>(API_ENDPOINTS.DOCTOR_PRESCRIPTION_SHOW(String(id)), payload);
+      const response = await http.put<DoctorPrescription>(`${API_ENDPOINTS.DOCTOR_PRESCRIPTIONS}/${id}`, payload);
       return response.data;
     },
 
     delete: async (id: number): Promise<{ message: string }> => {
-      const response = await http.delete<{ message: string }>(API_ENDPOINTS.DOCTOR_PRESCRIPTION_SHOW(String(id)));
+      const response = await http.delete<{ message: string }>(`${API_ENDPOINTS.DOCTOR_PRESCRIPTIONS}/${id}`);
       return response.data;
     },
   },
@@ -159,6 +170,26 @@ export const doctorApi = {
   labs: {
     createOrder: async (payload: CreateLabOrderPayload): Promise<LabOrder> => {
       const response = await http.post<LabOrder>(API_ENDPOINTS.DOCTOR_LAB_ORDERS, payload);
+      return response.data;
+    },
+
+    listOrders: async (params?: { patient_id?: number; status?: string }): Promise<{ data: LabOrder[] }> => {
+      const response = await http.get<{ data: LabOrder[] }>(API_ENDPOINTS.DOCTOR_LAB_ORDERS, { params });
+      return response.data;
+    },
+
+    showOrder: async (id: number): Promise<LabOrder> => {
+      const response = await http.get<LabOrder>(API_ENDPOINTS.DOCTOR_LAB_ORDER(String(id)));
+      return response.data;
+    },
+
+    updateOrder: async (id: number, payload: UpdateLabOrderPayload): Promise<LabOrder> => {
+      const response = await http.put<LabOrder>(API_ENDPOINTS.DOCTOR_LAB_ORDER(String(id)), payload);
+      return response.data;
+    },
+
+    deleteOrder: async (id: number): Promise<{ message: string }> => {
+      const response = await http.delete<{ message: string }>(API_ENDPOINTS.DOCTOR_LAB_ORDER(String(id)));
       return response.data;
     },
 
@@ -199,11 +230,37 @@ export const doctorApi = {
       const response = await http.get<ClinicsResponse>(API_ENDPOINTS.CLINICS);
       return response.data;
     },
+    createReferral: async (payload: CreateClinicReferralPayload): Promise<void> => {
+      await http.post(API_ENDPOINTS.CLINIC_REFERRAL, payload);
+    },
+    listReferrals: async (): Promise<ClinicReferralsResponse> => {
+      const response = await http.get<ClinicReferralsResponse>(API_ENDPOINTS.CLINIC_REFERRAL);
+      return response.data;
+    },
+  },
 
-    referPatient: async (payload: CreateClinicReferralPayload): Promise<any> => {
-      const response = await http.post(API_ENDPOINTS.CLINIC_REFERRAL, payload);
+  queue: {
+    list: async (params?: { date?: string }): Promise<any> => {
+      const queryParams = new URLSearchParams();
+      if (params?.date) queryParams.append('date', params.date);
+      const url = queryParams.toString() ? `${API_ENDPOINTS.DOCTOR_QUEUE}?${queryParams.toString()}` : API_ENDPOINTS.DOCTOR_QUEUE;
+      const response = await http.get(url);
+      return response.data;
+    },
+    next: async (params?: { date?: string }): Promise<any> => {
+      const queryParams = new URLSearchParams();
+      if (params?.date) queryParams.append('date', params.date);
+      const url = queryParams.toString() ? `${API_ENDPOINTS.DOCTOR_QUEUE_NEXT}?${queryParams.toString()}` : API_ENDPOINTS.DOCTOR_QUEUE_NEXT;
+      const response = await http.get(url);
+      return response.data;
+    },
+    callNext: async (params?: { date?: string }): Promise<any> => {
+      const response = await http.post(API_ENDPOINTS.DOCTOR_QUEUE_CALL_NEXT, params || {});
+      return response.data;
+    },
+    updateStatus: async (id: number, status: string): Promise<any> => {
+      const response = await http.put(API_ENDPOINTS.DOCTOR_QUEUE_STATUS(String(id)), { status });
       return response.data;
     },
   },
 };
-

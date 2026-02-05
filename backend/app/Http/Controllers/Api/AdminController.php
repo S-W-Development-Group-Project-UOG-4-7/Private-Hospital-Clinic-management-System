@@ -147,7 +147,7 @@ class AdminController extends Controller
 
     public function getDoctorPerformance()
     {
-        $performance = Appointment::where('status', 'Completed')
+        $performance = Appointment::where('status', Appointment::STATUS_COMPLETED)
             ->select('doctor_id', DB::raw('count(*) as total_appointments'))
             ->with('doctor')
             ->groupBy('doctor_id')
@@ -391,8 +391,8 @@ class AdminController extends Controller
 
         $stats = [
             'total_appointments' => $appointments->count(),
-            'completed_appointments' => $appointments->where('status', 'Completed')->count(),
-            'cancelled_appointments' => $appointments->where('status', 'Cancelled')->count(),
+            'completed_appointments' => $appointments->where('status', Appointment::STATUS_COMPLETED)->count(),
+            'cancelled_appointments' => $appointments->where('status', Appointment::STATUS_CANCELLED)->count(),
             'total_diagnoses' => $diagnoses->count(),
             'active_diagnoses' => $diagnoses->where('status', 'active')->count(),
             'resolved_diagnoses' => $diagnoses->where('status', 'resolved')->count(),

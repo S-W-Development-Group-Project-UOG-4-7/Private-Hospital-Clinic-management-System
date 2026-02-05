@@ -61,3 +61,10 @@ Finally, we appreciate the encouragement and support from our families, friends,
 
 Nilusha's Testing Commitment
 >>>>>>> c137ee055ec83074b9ef6e1c8209415579f6e9ce
+
+**Scheduling Notes**
+- `visit_mode` indicates where the visit happens: `PHYSICAL` (in-person) or `ONLINE` (video).
+- `booking_channel` indicates how it was booked: `FRONTDESK`, `PATIENT_PORTAL`, or `SYSTEM`.
+- Example: a patient can book a hospital visit online with `visit_mode=PHYSICAL` and `booking_channel=PATIENT_PORTAL`.
+- Video sessions are created only for `visit_mode=ONLINE` appointments and follow `CREATED -> LIVE -> ENDED`.
+- Patients receive a join URL only when the session is `LIVE`; doctors can start and end sessions.

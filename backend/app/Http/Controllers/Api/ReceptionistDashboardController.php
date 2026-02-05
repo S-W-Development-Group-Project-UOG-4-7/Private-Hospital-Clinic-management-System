@@ -17,7 +17,7 @@ class ReceptionistDashboardController extends Controller
 
         $todaysAppointments = Appointment::query()
             ->whereDate('appointment_date', $today)
-            ->where('status', 'scheduled')
+            ->whereIn('status', Appointment::activeScheduleStatuses())
             ->count();
 
         $checkedInPatients = QueueEntry::query()

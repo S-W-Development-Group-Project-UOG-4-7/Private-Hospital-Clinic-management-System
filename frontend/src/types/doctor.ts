@@ -291,7 +291,8 @@ export interface CreatePrescriptionPayload {
   notes?: string | null;
   instructions?: string | null;
   items: Array<{
-    inventory_item_id: number;
+    inventory_item_id?: number | null;
+    medicine_name?: string | null;
     quantity: number;
     dosage?: string | null;
     frequency?: string | null;
@@ -361,6 +362,19 @@ export interface CreateLabOrderPayload {
   due_date?: string | null;
   notes?: string | null;
   instructions?: string | null;
+}
+
+export interface UpdateLabOrderPayload {
+  patient_id?: number | null;
+  appointment_id?: number | null;
+  clinic_id?: number | null;
+  test_type?: string | null;
+  test_description?: string | null;
+  order_date?: string | null;
+  due_date?: string | null;
+  notes?: string | null;
+  instructions?: string | null;
+  status?: 'pending' | 'in_progress' | 'completed' | 'cancelled';
 }
 
 export interface ReviewLabResultPayload {
@@ -434,6 +448,27 @@ export interface CreateClinicReferralPayload {
   notes?: string | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   preferred_appointment_date?: string | null;
+}
+
+export interface ClinicReferral {
+  id: number;
+  patient_id: number;
+  clinic_id: number;
+  clinic_name?: string | null;
+  clinic_location?: string | null;
+  reason: string;
+  clinical_summary?: string | null;
+  notes?: string | null;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+  preferred_appointment_date?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ClinicReferralsResponse {
+  success: boolean;
+  data: ClinicReferral[];
 }
 
 export interface DoctorInventoryItem {

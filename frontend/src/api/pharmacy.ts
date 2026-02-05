@@ -252,8 +252,17 @@ export const drugPurchaseApi = {
 // Pharmacist API
 export const pharmacistApi = {
   prescriptions: {
-    list: () => {
-      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS, {
+    list: (params?: { status?: string; patient_id?: number; phone?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.patient_id) queryParams.append('patient_id', params.patient_id.toString());
+      if (params?.phone) queryParams.append('phone', params.phone);
+
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS;
+
+      return fetch(url, {
         headers: getAuthHeaders(),
       }).then(handleApiResponse);
     },

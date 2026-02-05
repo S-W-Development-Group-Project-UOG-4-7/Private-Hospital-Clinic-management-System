@@ -1,10 +1,27 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import './App.css';
 
 // --- Page Imports ---
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import PortalPage from './pages/PortalPage';
+
+// Dashboards
+import AdminDashboard from './pages/dashboard/AdminDashboard';
+import DoctorDashboard from './pages/dashboard/DoctorDashboard';
+import PatientDashboard from './pages/dashboard/PatientDashboard';
+import PharmacistDashboard from './pages/dashboard/PharmacistDashboard';
+import ReceptionistDashboard from './pages/dashboard/ReceptionistDashboard';
+
+// Pharmacy Pages
+import InventoryManagement from './pages/pharmacy/InventoryManager';
+
+// Doctor Pages
+import PatientHistory from './pages/doctor/PatientHistory';
+
+// Receptionist Pages
+import ReceptionistPatientRegistration from './pages/ReceptionistPatientRegistration';
 
 // --- Admin Sub-Pages ---
 import UsersList from './pages/admin/UsersList';
@@ -26,17 +43,8 @@ import TestimonialsSection from './components/HomePage/TestimonialsSection';
 import TelemedicinePromo from './components/HomePage/TelemedicinePromo';
 import Footer from './components/HomePage/Footer';
 
-// --- Dashboard Imports ---
-import ReceptionistPatientRegistration from './pages/ReceptionistPatientRegistration';
-import PatientDashboard from './pages/dashboard/PatientDashboard';
-import DoctorDashboard from './pages/dashboard/DoctorDashboard';
-import AdminDashboard from './pages/dashboard/AdminDashboard';
-import PharmacistDashboard from './pages/dashboard/PharmacistDashboard';
-import ReceptionistDashboard from './pages/dashboard/ReceptionistDashboard';
-
 // --- Pharmacy Sub-Pages ---
 import PrescriptionProcessingView from './pages/pharmacy/PrescriptionProcessingView';
-import InventoryManagement from './pages/pharmacy/InventoryManagement';
 import SupplierManagement from './pages/pharmacy/SupplierManagement';
 import DrugPurchaseManagement from './pages/pharmacy/DrugPurchaseManagement';
 

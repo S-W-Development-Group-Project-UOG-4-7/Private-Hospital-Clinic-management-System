@@ -12,6 +12,7 @@ interface ClinicReferralFormProps {
   onSubmit: (payload: CreateClinicReferralPayload) => void;
   saving: boolean;
   initialPatientId?: number | null;
+  initialPatientInfo?: { id: number; name: string; phone?: string | null } | null;
 }
 
 const ClinicReferralForm: React.FC<ClinicReferralFormProps> = ({
@@ -20,6 +21,7 @@ const ClinicReferralForm: React.FC<ClinicReferralFormProps> = ({
   onSubmit,
   saving,
   initialPatientId,
+  initialPatientInfo,
 }) => {
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [clinicsLoading, setClinicsLoading] = useState(false);
@@ -44,6 +46,20 @@ const ClinicReferralForm: React.FC<ClinicReferralFormProps> = ({
       setFormData(prev => ({ ...prev, patient_id: initialPatientId }));
     }
   }, [initialPatientId]);
+
+  useEffect(() => {
+    if (initialPatientInfo?.id) {
+      setFormData(prev => ({ ...prev, patient_id: initialPatientInfo.id }));
+    }
+  }, [initialPatientInfo]);
+
+  const fallbackClinics: Clinic[] = [
+    { id: -1, name: 'City General Clinic', location: 'Downtown' },
+    { id: -2, name: 'Riverside Family Clinic', location: 'Riverside' },
+    { id: -3, name: 'Lakeside Medical Center', location: 'Lakeside' },
+  ];
+
+  const displayedClinics = clinics.length > 0 ? clinics : fallbackClinics;
 
   const loadClinics = async () => {
     setClinicsLoading(true);
@@ -138,8 +154,14 @@ const ClinicReferralForm: React.FC<ClinicReferralFormProps> = ({
               onChange={(e) => setFormData({ ...formData, patient_id: parseInt(e.target.value) || 0 })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-gray-100"
               required
-              readOnly={!!initialPatientId}
+              readOnly={!!initialPatientId || !!initialPatientInfo?.id}
             />
+            {initialPatientInfo && (
+              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <div className="font-semibold text-gray-900">{initialPatientInfo.name}</div>
+                <div>Phone: {initialPatientInfo.phone || 'N/A'}</div>
+              </div>
+            )}
           </div>
 
           {/* Clinic Selection */}
@@ -159,14 +181,20 @@ const ClinicReferralForm: React.FC<ClinicReferralFormProps> = ({
                 onChange={(e) => setFormData({ ...formData, clinic_id: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 required
+                disabled={clinics.length === 0}
               >
                 <option value="">Choose a clinic...</option>
-                {clinics.map((clinic) => (
-                  <option key={clinic.id} value={clinic.id}>
+                {displayedClinics.map((clinic) => (
+                  <option key={clinic.id} value={clinic.id} disabled={clinics.length === 0}>
                     {clinic.name} {clinic.location && `- ${clinic.location}`}
                   </option>
                 ))}
               </select>
+            )}
+            {clinics.length === 0 && !clinicsLoading && (
+              <p className="mt-2 text-sm text-gray-500">
+                No clinics found. Please add clinics in the admin panel to enable referrals.
+              </p>
             )}
           </div>
 

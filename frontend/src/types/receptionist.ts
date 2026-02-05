@@ -20,6 +20,11 @@ export interface ReceptionistUserSummary {
   email: string;
   username: string | null;
   is_active: boolean;
+  phone?: string | null;
+  department?: {
+    id: number;
+    name: string;
+  } | null;
 }
 
 export interface ReceptionistPatientProfile {
@@ -37,7 +42,10 @@ export interface ReceptionistPatient extends ReceptionistUserSummary {
   patient_profile?: ReceptionistPatientProfile | null;
 }
 
-export interface ReceptionistDoctor extends ReceptionistUserSummary {}
+export interface ReceptionistDoctor extends ReceptionistUserSummary {
+  appointment_count?: number;
+  is_available?: boolean;
+}
 
 export type AppointmentType = 'in_person' | 'telemedicine';
 export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled';
@@ -46,6 +54,7 @@ export interface ReceptionistAppointment {
   id: number;
   patient_id: number;
   doctor_id: number | null;
+  department_id?: number | null;
   clinic?: string | null;
   appointment_number?: number | null;
   appointment_date: string;
@@ -56,6 +65,10 @@ export interface ReceptionistAppointment {
   notes: string | null;
   patient?: ReceptionistUserSummary;
   doctor?: ReceptionistUserSummary | null;
+  department?: {
+    id: number;
+    name: string;
+  } | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -128,6 +141,32 @@ export interface DoctorSchedule {
   updated_at?: string;
 }
 
+export type SlotStatus = 'AVAILABLE' | 'HELD' | 'BOOKED';
+export type SlotVisitMode = 'BOTH' | 'PHYSICAL' | 'ONLINE';
+
+export interface ClinicSlotAvailability {
+  time: string;
+  available_count: number;
+}
+
+export interface ReceptionistSlot {
+  id: number;
+  doctor_id: number;
+  date: string;
+  start_time: string;
+  end_time: string;
+  allowed_visit_mode: SlotVisitMode;
+  status: SlotStatus | string;
+  held_until?: string | null;
+  held_by_patient_id?: number | null;
+  doctor?: {
+    id: number;
+    first_name?: string | null;
+    last_name?: string | null;
+    department_id?: number | null;
+  } | null;
+}
+
 export type ReferralType = 'internal' | 'external';
 export type ReferralStatus = 'pending' | 'accepted' | 'completed' | 'cancelled';
 
@@ -168,6 +207,7 @@ export interface UpdateReceptionistPatientPayload {
 export interface CreateReceptionistAppointmentPayload {
   patient_id: string | number;
   doctor_id?: number | null;
+  department_id?: number | null;
   clinic?: string | null;
   appointment_date: string;
   appointment_time: string;
@@ -180,6 +220,7 @@ export interface CreateReceptionistAppointmentPayload {
 export interface UpdateReceptionistAppointmentPayload {
   patient_id?: string | number;
   doctor_id?: number | null;
+  department_id?: number | null;
   clinic?: string | null;
   appointment_date?: string;
   appointment_time?: string;
@@ -192,6 +233,7 @@ export interface UpdateReceptionistAppointmentPayload {
 export interface CheckInPayload {
   patient_id: string | number;
   doctor_id: number;
+  department_id: number;
   appointment_id?: number | null;
   queue_date?: string;
 }

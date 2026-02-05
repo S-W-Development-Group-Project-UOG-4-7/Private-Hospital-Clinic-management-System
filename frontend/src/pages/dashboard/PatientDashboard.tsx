@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { patientApi } from '../../api/patient';
+import { API_ENDPOINTS } from '../../config/api';
 import type {
   CreateAppointmentPayload,
   CreateFeedbackPayload,
@@ -15,9 +16,9 @@ import type {
   PatientAppointment,
   PatientProfileResponse,
   UpdateAppointmentPayload,
+  QueueStatusResponse,
 } from '../../types/patient';
-import { Bell, Calendar, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Video, X } from 'lucide-react';
-import ClinicAppointmentForm from '../../components/ClinicAppointmentForm';
+import { Bell, Calendar, Clock, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, UserCircle, Users, Video, X } from 'lucide-react';
 
 type SectionKey =
   | 'overview'
@@ -29,6 +30,11 @@ type SectionKey =
   | 'billing'
   | 'feedback'
   | 'notifications';
+
+type ClinicSlotAvailability = {
+  time: string;
+  available_count: number;
+};
 
 const safeParseJson = (value: string | null) => {
   if (!value) return null;
@@ -52,6 +58,8 @@ const PatientDashboard: React.FC = () => {
   const [profileData, setProfileData] = useState<PatientProfileResponse | null>(null);
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
   const [clinics, setClinics] = useState<{ id: number; name: string }[]>([]);
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
   const [teleconsultationsLoaded, setTeleconsultationsLoaded] = useState(false);
   const [teleconsultationsLoading, setTeleconsultationsLoading] = useState(false);
@@ -82,6 +90,10 @@ const PatientDashboard: React.FC = () => {
   const [selectedPrescription, setSelectedPrescription] = useState<PatientPrescription | null>(null);
   const [prescriptionDetailsLoading, setPrescriptionDetailsLoading] = useState(false);
 
+  // Queue status state
+  const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(null);
+  const [queueStatusLoading, setQueueStatusLoading] = useState(false);
+
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [profileForm, setProfileForm] = useState({
     email: '',
@@ -96,12 +108,21 @@ const PatientDashboard: React.FC = () => {
   const [editingAppointment, setEditingAppointment] = useState<PatientAppointment | null>(null);
   const [appointmentForm, setAppointmentForm] = useState({
     clinic_id: '',
+    department_id: '',
     doctor_id: '',
     appointment_date: '',
     appointment_time: '',
     type: 'in_person' as 'in_person' | 'telemedicine',
     reason: '',
   });
+
+  const [slotCalendar, setSlotCalendar] = useState<ClinicSlotAvailability[]>([]);
+  const [slotCalendarLoading, setSlotCalendarLoading] = useState(false);
+  const [slotCalendarError, setSlotCalendarError] = useState<string | null>(null);
+  const [slotClinicId, setSlotClinicId] = useState<number | null>(null);
+  const [slotClinicName, setSlotClinicName] = useState<string | null>(null);
+  const [slotClinicLoading, setSlotClinicLoading] = useState(false);
+  const [slotClinicError, setSlotClinicError] = useState<string | null>(null);
 
   const authUser = useMemo(() => safeParseJson(localStorage.getItem('authUser')), []);
 
@@ -265,6 +286,26 @@ const PatientDashboard: React.FC = () => {
     }
   }, [prescriptionsLoaded, prescriptionsLoading]);
 
+  const loadQueueStatus = useCallback(async () => {
+    setQueueStatusLoading(true);
+    try {
+      const resp = await patientApi.queue.status();
+      setQueueStatus(resp);
+    } catch (e: any) {
+      // Non-blocking - queue status is optional info
+      console.warn('Failed to load queue status:', e?.message);
+    } finally {
+      setQueueStatusLoading(false);
+    }
+  }, []);
+
+  // Load queue status on mount and periodically
+  useEffect(() => {
+    loadQueueStatus();
+    const interval = setInterval(loadQueueStatus, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [loadQueueStatus]);
+
   useEffect(() => {
     if (active === 'telemedicine') {
       loadTeleconsultations();
@@ -285,6 +326,130 @@ const PatientDashboard: React.FC = () => {
       loadPrescriptions();
     }
   }, [active, loadTeleconsultations, loadEhr, loadBilling, loadFeedback, loadNotificationsLazy, loadPrescriptions]);
+
+  const loadDepartments = useCallback(async () => {
+    setDepartmentsLoading(true);
+    try {
+      const resp = await patientApi.departments.list();
+      setDepartments(Array.isArray(resp.data) ? resp.data : []);
+    } catch {
+      setDepartments([]);
+    } finally {
+      setDepartmentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!appointmentModalOpen || editingAppointment) return;
+    loadDepartments();
+  }, [appointmentModalOpen, editingAppointment, loadDepartments]);
+
+  useEffect(() => {
+    if (!appointmentModalOpen || editingAppointment) return;
+    let isActive = true;
+
+    const loadClinics = async () => {
+      setSlotClinicLoading(true);
+      setSlotClinicError(null);
+      try {
+        const response = await fetch(API_ENDPOINTS.CLINICS);
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(json?.message || 'Failed to load clinics');
+        }
+        const clinics = Array.isArray(json.data) ? json.data : [];
+        const opdClinic = clinics.find((clinic: any) => clinic?.name?.toLowerCase() === 'opd');
+        const selected = opdClinic || clinics[0];
+        if (isActive) {
+          setSlotClinicId(selected?.id ?? null);
+          setSlotClinicName(selected?.name ?? null);
+          setAppointmentForm((prev) => ({
+            ...prev,
+            clinic_id: selected?.id ? String(selected.id) : '',
+          }));
+        }
+      } catch (e: any) {
+        if (isActive) {
+          setSlotClinicId(null);
+          setSlotClinicName(null);
+          setSlotClinicError(e?.message || 'Failed to load clinics');
+        }
+      } finally {
+        if (isActive) {
+          setSlotClinicLoading(false);
+        }
+      }
+    };
+
+    loadClinics();
+    return () => {
+      isActive = false;
+    };
+  }, [appointmentModalOpen, editingAppointment]);
+
+  useEffect(() => {
+    if (!appointmentModalOpen || editingAppointment) return;
+    const departmentId = Number(appointmentForm.department_id);
+    if (!appointmentForm.appointment_date || !Number.isFinite(departmentId) || departmentId <= 0) {
+      setSlotCalendar([]);
+      setSlotCalendarError(null);
+      setSlotCalendarLoading(false);
+      return;
+    }
+    if (!slotClinicId) {
+      setSlotCalendar([]);
+      setSlotCalendarError(slotClinicError || 'No clinic available for slots');
+      setSlotCalendarLoading(false);
+      return;
+    }
+
+    let isActive = true;
+    setSlotCalendarLoading(true);
+    setSlotCalendarError(null);
+
+    const fetchSlots = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('date', appointmentForm.appointment_date);
+        params.append('department_id', String(departmentId));
+        params.append('include_all', 'true');
+        if (slotClinicName?.toLowerCase() === 'opd') {
+          params.append('include_unassigned', 'true');
+        }
+        const url = `${API_ENDPOINTS.CLINIC_SLOTS(slotClinicId)}?${params.toString()}`;
+        const response = await fetch(url);
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(json?.message || 'Failed to load time slots');
+        }
+        if (isActive) {
+          setSlotCalendar(Array.isArray(json.slots) ? json.slots : []);
+        }
+      } catch (e: any) {
+        if (isActive) {
+          setSlotCalendar([]);
+          setSlotCalendarError(e?.message || 'Failed to load time slots');
+        }
+      } finally {
+        if (isActive) {
+          setSlotCalendarLoading(false);
+        }
+      }
+    };
+
+    fetchSlots();
+    return () => {
+      isActive = false;
+    };
+  }, [
+    appointmentModalOpen,
+    editingAppointment,
+    appointmentForm.appointment_date,
+    appointmentForm.department_id,
+    slotClinicId,
+    slotClinicError,
+    slotClinicName,
+  ]);
 
   const refreshAppointments = async () => {
     setError(null);
@@ -315,26 +480,28 @@ const PatientDashboard: React.FC = () => {
     [appointments, today]
   );
 
+  const slotSummaries = useMemo(() => {
+    return slotCalendar
+      .map((slot) => ({
+        time: slot.time,
+        available: slot.available_count,
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [slotCalendar]);
+
   const openCreateAppointment = () => {
     setEditingAppointment(null);
     setAppointmentForm({
       clinic_id: '',
+      department_id: '',
       doctor_id: '',
       appointment_date: '',
       appointment_time: '',
       type: 'in_person',
       reason: '',
     });
-    // Load clinics so patient can choose clinic (default OPD is used server-side if left blank)
-    (async () => {
-      try {
-        const resp = await fetch('/api/clinics');
-        const json = await resp.json();
-        setClinics(Array.isArray(json.data) ? json.data : []);
-      } catch (e) {
-        // non-blocking
-      }
-    })();
+    setSlotCalendar([]);
+    setSlotCalendarError(null);
     setAppointmentModalOpen(true);
   };
 
@@ -342,6 +509,7 @@ const PatientDashboard: React.FC = () => {
     setEditingAppointment(appt);
     setAppointmentForm({
       clinic_id: appt.clinic_id ? String(appt.clinic_id) : '',
+      department_id: '',
       doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
       appointment_date: appt.appointment_date || '',
       appointment_time: (appt.appointment_time || '').slice(0, 5),
@@ -351,7 +519,7 @@ const PatientDashboard: React.FC = () => {
     // When editing, load clinics so the select is populated
     (async () => {
       try {
-        const resp = await fetch('/api/clinics');
+        const resp = await fetch(API_ENDPOINTS.CLINICS);
         const json = await resp.json();
         setClinics(Array.isArray(json.data) ? json.data : []);
       } catch (e) {
@@ -375,10 +543,14 @@ const PatientDashboard: React.FC = () => {
 
     try {
       const doctorIdValue = appointmentForm.doctor_id.trim() === '' ? null : Number(appointmentForm.doctor_id);
-      const clinicIdValue = appointmentForm.clinic_id.trim() === '' ? null : Number(appointmentForm.clinic_id);
+      const departmentIdValue =
+        appointmentForm.department_id.trim() === '' ? null : Number(appointmentForm.department_id);
+      const clinicIdValue =
+        appointmentForm.clinic_id.trim() === '' ? (slotClinicId ?? null) : Number(appointmentForm.clinic_id);
 
       const base: CreateAppointmentPayload = {
-        clinic_id: clinicIdValue,
+        clinic_id: Number.isFinite(clinicIdValue as any) ? (clinicIdValue as number) : null,
+        department_id: Number.isFinite(departmentIdValue as any) ? (departmentIdValue as number) : null,
         doctor_id: Number.isFinite(doctorIdValue as any) ? (doctorIdValue as number) : null,
         appointment_date: appointmentForm.appointment_date,
         appointment_time: appointmentForm.appointment_time,
@@ -407,17 +579,6 @@ const PatientDashboard: React.FC = () => {
       setError(e?.message || 'Failed to save appointment');
     } finally {
       setAppointmentSaving(false);
-    }
-  };
-
-  // Handler used when ClinicAppointmentForm completes a booking
-  const handleClinicAppointmentSuccess = async (data: any) => {
-    setAppointmentModalOpen(false);
-    try {
-      await refreshAppointments();
-      setActive('appointments');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load appointments');
     }
   };
 
@@ -940,6 +1101,90 @@ const PatientDashboard: React.FC = () => {
                   </button>
                 </motion.div>
               </div>
+
+              {/* Queue Status Section - Shows when patient has an appointment today */}
+              {queueStatus && (queueStatus.queue_entry || queueStatus.todays_appointments.length > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg shadow-lg p-6 text-white"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <Users className="w-6 h-6" />
+                    <h2 className="text-xl font-bold">Today's Queue Status</h2>
+                  </div>
+                  
+                  {queueStatus.queue_entry && (
+                    <div className="bg-white/20 rounded-lg p-4 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div>
+                          <p className="text-3xl font-bold">#{queueStatus.queue_entry.queue_number || '-'}</p>
+                          <p className="text-sm opacity-90">Your Queue Number</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold">{queueStatus.queue_stats.my_position || '-'}</p>
+                          <p className="text-sm opacity-90">Your Position</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold">{queueStatus.queue_stats.people_ahead}</p>
+                          <p className="text-sm opacity-90">People Ahead</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold">
+                            {queueStatus.queue_stats.estimated_wait_minutes != null 
+                              ? `~${queueStatus.queue_stats.estimated_wait_minutes}m`
+                              : '-'}
+                          </p>
+                          <p className="text-sm opacity-90">Est. Wait Time</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-white/30 flex items-center justify-between">
+                        <span className="text-sm">
+                          Status: <span className="font-semibold capitalize">{queueStatus.queue_entry.status.replace('_', ' ')}</span>
+                        </span>
+                        {queueStatus.queue_entry.appointment?.doctor && (
+                          <span className="text-sm">
+                            Doctor: <span className="font-semibold">Dr. {queueStatus.queue_entry.appointment.doctor.name}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {queueStatus.todays_appointments.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2 flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        Today's Appointments
+                      </h3>
+                      <div className="space-y-2">
+                        {queueStatus.todays_appointments.map((appt) => (
+                          <div key={appt.id} className="bg-white/20 rounded-lg px-4 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-bold">{appt.time.slice(0, 5)}</span>
+                              <span className="text-sm capitalize px-2 py-0.5 bg-white/20 rounded">
+                                {appt.type === 'in_person' ? 'Physical' : 'Online'}
+                              </span>
+                            </div>
+                            <div className="text-sm">
+                              <span className="mr-3">{appt.clinic}</span>
+                              <span className="capitalize font-semibold px-2 py-0.5 rounded bg-white/20">{appt.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!queueStatus.queue_entry && queueStatus.todays_appointments.length > 0 && (
+                    <p className="text-sm opacity-90 mt-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Please check in at the reception to get your queue number
+                    </p>
+                  )}
+                </motion.div>
+              )}
 
               {/* Quick Stats */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1718,7 +1963,148 @@ const PatientDashboard: React.FC = () => {
               </div>
             </form>
             ) : (
-              <ClinicAppointmentForm onSuccess={handleClinicAppointmentSuccess} />
+            <form onSubmit={submitAppointment} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
+                  <select
+                    required
+                    value={appointmentForm.department_id}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAppointmentForm((p) => ({
+                        ...p,
+                        department_id: value,
+                        appointment_time: '',
+                      }));
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="">Select department...</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                  {departmentsLoading && (
+                    <div className="text-xs text-gray-500 mt-1">Loading departments...</div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={appointmentForm.appointment_date}
+                    onChange={(e) => setAppointmentForm((p) => ({ ...p, appointment_date: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Time Slot Calendar</label>
+                    <span className="text-xs text-gray-500">Click a slot to auto-fill time</span>
+                  </div>
+                  {!appointmentForm.department_id || !appointmentForm.appointment_date ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
+                      Select a department and date to load available slots.
+                    </div>
+                  ) : slotClinicLoading ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading clinic slots...</div>
+                  ) : slotCalendarLoading ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">Loading available slots...</div>
+                  ) : slotSummaries.length === 0 ? (
+                    <div className="text-sm text-gray-500 border border-dashed rounded-lg p-3">
+                      No slots available for the selected date.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {slotSummaries.map((slot) => {
+                        const isSelected = appointmentForm.appointment_time === slot.time;
+                        const isDisabled = slot.available === 0;
+                        return (
+                          <button
+                            key={slot.time}
+                            type="button"
+                            disabled={isDisabled}
+                            onClick={() => setAppointmentForm((p) => ({ ...p, appointment_time: slot.time }))}
+                            className={`rounded-lg border px-3 py-2 text-left transition ${
+                              isSelected
+                                ? 'border-teal-600 bg-teal-600 text-white'
+                                : isDisabled
+                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-200 bg-white hover:border-teal-300 hover:bg-teal-50 text-gray-800'
+                            }`}
+                          >
+                            <div className="text-sm font-semibold">{slot.time}</div>
+                            <div className={`text-xs ${isSelected ? 'text-teal-100' : isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {slot.available > 0 ? `${slot.available} available` : 'Fully booked'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {slotCalendarError && <div className="text-xs text-red-600 mt-2">{slotCalendarError}</div>}
+                  {!appointmentForm.appointment_time && slotSummaries.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-2">Select a time slot to continue.</div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Doctor (Auto Assigned)</label>
+                  <select
+                    value=""
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700"
+                  >
+                    <option value="">Assigned at booking</option>
+                  </select>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Doctor is auto-selected with the lowest appointment load.
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={appointmentForm.type}
+                    onChange={(e) => setAppointmentForm((p) => ({ ...p, type: e.target.value as any }))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="in_person">In Person</option>
+                    <option value="telemedicine">Telemedicine</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                  <textarea
+                    value={appointmentForm.reason}
+                    onChange={(e) => setAppointmentForm((p) => ({ ...p, reason: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    rows={3}
+                    placeholder="Describe your symptoms or reason for visit"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="submit"
+                  disabled={appointmentSaving || !appointmentForm.appointment_time}
+                  className="flex-1 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
+                >
+                  {appointmentSaving ? 'Saving...' : 'Create'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeAppointmentModal}
+                  disabled={appointmentSaving}
+                  className="flex-1 bg-transparent border-2 border-gray-300 hover:border-gray-400 disabled:opacity-60 text-gray-800 font-bold py-3 px-6 rounded-full transition duration-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
             ) }
           </div>
         </div>

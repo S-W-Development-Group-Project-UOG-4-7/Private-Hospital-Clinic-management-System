@@ -16,18 +16,31 @@ class ReceptionistQueueController extends Controller
     public function index(Request $request)
     {
         $date = $request->get('date') ?: now()->toDateString();
+        $departmentId = $request->get('department_id');
 
         $startTime = $request->get('start_time');
         $endTime = $request->get('end_time');
 
         $query = QueueEntry::query()
             ->whereDate('queue_date', $date)
+            ->where(function ($q) {
+                $q->whereDoesntHave('appointment')
+                  ->orWhereHas('appointment', function ($aq) {
+                      $aq->where('visit_mode', Appointment::VISIT_MODE_PHYSICAL);
+                  });
+            })
             ->with([
                 'patient:id,first_name,last_name,email,username,is_active',
                 'doctor:id,first_name,last_name,email,username,is_active',
-                'appointment',
+                'appointment.department',
             ])
             ->orderBy('queue_number');
+
+        if (! empty($departmentId)) {
+            $query->whereHas('appointment', function ($q) use ($departmentId) {
+                $q->where('department_id', (int) $departmentId);
+            });
+        }
 
         if ($request->has('doctor_id')) {
             $doctorId = (int) $request->get('doctor_id');
@@ -43,75 +56,25 @@ class ReceptionistQueueController extends Controller
             $query->where('status', $request->get('status'));
         }
 
+        if ($startTime && $endTime) {
+            $query->whereHas('appointment', function ($q) use ($startTime, $endTime) {
+                $q->whereBetween('appointment_time', [$startTime, $endTime]);
+            });
+        } elseif ($startTime) {
+            $query->whereHas('appointment', function ($q) use ($startTime) {
+                $q->where('appointment_time', '>=', $startTime);
+            });
+        } elseif ($endTime) {
+            $query->whereHas('appointment', function ($q) use ($endTime) {
+                $q->where('appointment_time', '<=', $endTime);
+            });
+        }
+
         $entries = $query->get();
 
-        // Include scheduled appointments for the same date (even if not checked-in)
-        $appointmentIdsInQueue = $entries->pluck('appointment_id')->filter()->unique()->toArray();
-
-        $appointmentsQuery = Appointment::query()
-            ->whereDate('appointment_date', $date)
-            ->with([
-                'patient:id,first_name,last_name,email,username,is_active',
-                'doctor:id,first_name,last_name,email,username,is_active',
-            ])
-            ->orderBy('appointment_time');
-
-        if ($request->has('doctor_id')) {
-            $doctorId = (int) $request->get('doctor_id');
-            if ($doctorId === 0) {
-                $appointmentsQuery->whereNull('doctor_id');
-            } else {
-                $appointmentsQuery->where('doctor_id', $doctorId);
-            }
-        }
-
-        if (! empty($appointmentIdsInQueue)) {
-            $appointmentsQuery->whereNotIn('id', $appointmentIdsInQueue);
-        }
-
-        if ($startTime && $endTime) {
-            $appointmentsQuery->whereBetween('appointment_time', [$startTime, $endTime]);
-        } elseif ($startTime) {
-            $appointmentsQuery->where('appointment_time', '>=', $startTime);
-        } elseif ($endTime) {
-            $appointmentsQuery->where('appointment_time', '<=', $endTime);
-        }
-
-        $appointments = $appointmentsQuery->get();
-
-        // Transform appointments into queue-like items (not yet checked in)
-        $appointmentItems = $appointments->map(function ($a) {
-            return (object) [
-                'id' => 'appt_' . $a->id,
-                'queue_number' => null,
-                'queue_date' => $a->appointment_date,
-                'patient' => $a->patient ?? null,
-                'doctor' => $a->doctor ?? null,
-                'status' => $a->status ?? 'scheduled',
-                'appointment' => $a,
-            ];
-        });
-
-        // Merge checked-in entries first, then scheduled appointments
-        // Convert $entries to plain objects to avoid getKey() issues when merging
-        $entriesAsObjects = $entries->map(function ($e) {
-            return (object) [
-                'id' => 'queue_' . $e->id,
-                'queue_number' => $e->queue_number,
-                'queue_date' => $e->queue_date,
-                'patient' => $e->patient ?? null,
-                'doctor' => $e->doctor ?? null,
-                'status' => $e->status ?? 'checked_in',
-                'appointment' => $e->appointment ?? null,
-                'queue_entry' => $e,
-            ];
-        });
-
-        // Now safely merge both collections of plain objects
-        $combined = collect($entriesAsObjects)->merge($appointmentItems);
-
+        // Only return checked-in queue entries (hide scheduled appointments)
         return response()->json([
-            'data' => $combined->values()->all(),
+            'data' => $entries->values()->all(),
         ]);
     }
 
@@ -122,6 +85,7 @@ class ReceptionistQueueController extends Controller
             'patient_code' => ['nullable', 'string', 'max:50', 'required_without:patient_id'],
             'doctor_id' => ['required', 'integer', 'exists:users,id'],
             'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
+            'department_id' => ['required', 'integer', 'exists:departments,id'],
             'queue_date' => ['nullable', 'date'],
         ]);
 
@@ -162,8 +126,18 @@ class ReceptionistQueueController extends Controller
 
         $queueDate = $validated['queue_date'] ?? now()->toDateString();
         $doctorId = (int) $validated['doctor_id'];
+        $departmentId = (int) $validated['department_id'];
 
         return DB::transaction(function () use ($validated, $queueDate, $doctorId, $request, $patientId) {
+            $departmentId = (int) $validated['department_id'];
+
+            $doctor = User::query()->role('doctor')->whereKey($doctorId)->first();
+            if (! $doctor || (int) $doctor->department_id !== $departmentId) {
+                return response()->json([
+                    'message' => 'Selected doctor does not belong to the chosen department.',
+                ], 422);
+            }
+
             $max = QueueEntry::query()
                 ->whereDate('queue_date', $queueDate)
                 ->where('doctor_id', $doctorId)
@@ -180,6 +154,18 @@ class ReceptionistQueueController extends Controller
                 if ((int) $appointment->patient_id !== (int) $patientId) {
                     return response()->json([
                         'message' => 'Appointment does not belong to patient.',
+                    ], 422);
+                }
+
+                if (! empty($appointment->department_id) && (int) $appointment->department_id !== $departmentId) {
+                    return response()->json([
+                        'message' => 'Appointment does not belong to the selected department.',
+                    ], 422);
+                }
+
+                if ($appointment->visit_mode === Appointment::VISIT_MODE_ONLINE) {
+                    return response()->json([
+                        'message' => 'Online appointments cannot be checked into the physical queue.',
                     ], 422);
                 }
 
@@ -200,14 +186,31 @@ class ReceptionistQueueController extends Controller
                         'message' => 'Patient is already checked in for this appointment.',
                     ], 422);
                 }
+
+                $appointment->status = Appointment::STATUS_CHECKED_IN;
+                $appointment->save();
             } else {
+                $scheduledStart = now();
+                $scheduledEnd = now()->addMinutes(30);
+
+                if (Appointment::hasOverlap($doctorId, $scheduledStart, $scheduledEnd)) {
+                    return response()->json([
+                        'message' => 'Doctor is already booked for this time slot.',
+                    ], 422);
+                }
+
                 $appointment = Appointment::create([
                     'patient_id' => $patientId,
                     'doctor_id' => $doctorId,
+                    'department_id' => $departmentId,
                     'appointment_date' => $queueDate,
                     'appointment_time' => now()->format('H:i:s'),
+                    'scheduled_start' => $scheduledStart,
+                    'scheduled_end' => $scheduledEnd,
                     'type' => 'in_person',
-                    'status' => 'scheduled',
+                    'visit_mode' => Appointment::VISIT_MODE_PHYSICAL,
+                    'booking_channel' => Appointment::BOOKING_CHANNEL_FRONTDESK,
+                    'status' => Appointment::STATUS_CHECKED_IN,
                     'confirmed_at' => now(),
                     'is_walk_in' => true,
                 ]);
@@ -242,6 +245,15 @@ class ReceptionistQueueController extends Controller
 
         if ($validated['status'] === 'completed') {
             $entry->checked_out_at = now();
+            if ($entry->appointment) {
+                $entry->appointment->status = Appointment::STATUS_COMPLETED;
+                $entry->appointment->save();
+            }
+        }
+
+        if ($validated['status'] === 'in_consultation' && $entry->appointment) {
+            $entry->appointment->status = Appointment::STATUS_IN_PROGRESS;
+            $entry->appointment->save();
         }
 
         $entry->save();
@@ -254,6 +266,7 @@ class ReceptionistQueueController extends Controller
         $validated = $request->validate([
             'date' => ['nullable', 'date'],
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
         ]);
 
         $date = $validated['date'] ?? now()->toDateString();
@@ -262,6 +275,11 @@ class ReceptionistQueueController extends Controller
 
         if (array_key_exists('doctor_id', $validated) && $validated['doctor_id'] !== null) {
             $query->where('doctor_id', $validated['doctor_id']);
+        }
+        if (array_key_exists('department_id', $validated) && $validated['department_id'] !== null) {
+            $query->whereHas('appointment', function ($q) use ($validated) {
+                $q->where('department_id', (int) $validated['department_id']);
+            });
         }
 
         $count = $query->count();

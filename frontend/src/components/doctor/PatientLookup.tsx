@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -88,13 +88,19 @@ interface PatientLookupProps {
 const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [patientName, setPatientName] = useState('');
+  const [patientId, setPatientId] = useState('');
   const [loading, setLoading] = useState(false);
   const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [autoSearchEnabled, setAutoSearchEnabled] = useState(true);
 
-  const handleSearch = async () => {
+  const normalizedPhoneDigits = useMemo(() => phoneNumber.replace(/[^\d+]/g, '').trim(), [phoneNumber]);
+
+  const handleSearch = async (silent = false, includeName = true) => {
     if (!phoneNumber.trim()) {
-      toast.error('Please enter a phone number');
+      if (!silent) {
+        toast.error('Please enter a phone number');
+      }
       return;
     }
 
@@ -103,27 +109,51 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
     setPatientRecord(null);
 
     try {
-      const response = await doctorApi.patients.searchByPhone(phoneNumber.trim(), patientName.trim() || undefined);
+      const nameFilter = includeName ? (patientName.trim() || undefined) : undefined;
+      const response = await doctorApi.patients.searchByPhone(phoneNumber.trim(), nameFilter);
       if (response.data) {
         setPatientRecord(response.data);
+        setPatientName(`${response.data.first_name || ''} ${response.data.last_name || ''}`.trim());
+        setPatientId(String(response.data.id || ''));
       } else {
         setNotFound(true);
       }
     } catch (error: any) {
       console.error('Patient search error:', error);
-      if (error.response?.status === 404) {
+      const message = error?.message || 'Search failed. Please try again.';
+      const normalized = message.toLowerCase();
+      if (
+        normalized.includes('no patient found') ||
+        normalized.includes('patient record not found') ||
+        normalized.includes('name does not match')
+      ) {
         setNotFound(true);
-      } else {
-        toast.error('Search failed. Please try again.');
+      } else if (!silent) {
+        toast.error(message);
       }
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (!autoSearchEnabled) return;
+    if (!normalizedPhoneDigits || normalizedPhoneDigits.length < 7) {
+      setPatientRecord(null);
+      setNotFound(false);
+      setPatientId('');
+      return;
+    }
+    const timeout = setTimeout(() => {
+      handleSearch(true, false);
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [normalizedPhoneDigits, autoSearchEnabled]);
+
   const handleClose = () => {
     setPhoneNumber('');
     setPatientName('');
+    setPatientId('');
     setPatientRecord(null);
     setNotFound(false);
     onClose();
@@ -176,7 +206,7 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
         <div className="p-6">
           {/* Search Section */}
           <div className="mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <Phone className="w-4 h-4 inline mr-1" />
@@ -194,7 +224,7 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
               <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <User className="w-4 h-4 inline mr-1" />
-                  Patient Name (Optional)
+                  Patient Name
                 </label>
                 <input
                   type="text"
@@ -203,11 +233,25 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   placeholder="e.g., John Doe"
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  readOnly={!!patientRecord}
                 />
               </div>
-              <div className="flex items-end">
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <User className="w-4 h-4 inline mr-1" />
+                  Patient ID
+                </label>
+                <input
+                  type="text"
+                  value={patientId}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100"
+                  placeholder="Auto-filled"
+                />
+              </div>
+              <div className="flex items-end gap-3">
                 <button
-                  onClick={handleSearch}
+                  onClick={() => handleSearch()}
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -222,6 +266,13 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
                       <span>Search Records</span>
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAutoSearchEnabled((prev) => !prev)}
+                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  {autoSearchEnabled ? 'Auto On' : 'Auto Off'}
                 </button>
               </div>
             </div>
@@ -259,7 +310,11 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
                       <User className="w-5 h-5 text-teal-600" />
                       Patient Information
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-sm font-medium text-gray-600">Patient ID:</span>
+                        <p className="text-gray-800 font-semibold">{patientRecord.id}</p>
+                      </div>
                       <div>
                         <span className="text-sm font-medium text-gray-600">Name:</span>
                         <p className="text-gray-800 font-semibold">{patientRecord.first_name} {patientRecord.last_name}</p>
