@@ -398,6 +398,8 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->prefix('doctor')->group(func
     Route::get('queue/next', [DoctorQueueController::class, 'next']);
     Route::post('queue/call-next', [DoctorQueueController::class, 'callNext']);
     Route::put('queue/{id}/status', [DoctorQueueController::class, 'updateStatus']);
+    Route::post('queue/{id}/skip', [DoctorQueueController::class, 'skip']);
+    Route::post('queue/{id}/requeue', [DoctorQueueController::class, 'requeue']);
 });
 
 

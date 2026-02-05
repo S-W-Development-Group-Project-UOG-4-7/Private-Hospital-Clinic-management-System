@@ -833,6 +833,44 @@ const DoctorDashboardView: React.FC = () => {
     }
   };
 
+  const skipQueueEntry = async (id: number) => {
+    setError(null);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(API_ENDPOINTS.DOCTOR_QUEUE_SKIP(String(id)), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to skip queue entry');
+      await loadQueue();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to skip queue entry');
+    }
+  };
+
+  const requeueEntry = async (id: number) => {
+    setError(null);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(API_ENDPOINTS.DOCTOR_QUEUE_REQUEUE(String(id)), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to requeue patient');
+      await loadQueue();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to requeue patient');
+    }
+  };
+
   useEffect(() => {
     if (initialAppointmentFilters) {
       refreshAppointments(initialAppointmentFilters);
@@ -2247,14 +2285,14 @@ const DoctorDashboardView: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {queueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').length === 0 ? (
+                          {queueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'cancelled').length === 0 ? (
                             <tr>
                               <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
                                 No patients in queue.
                               </td>
                             </tr>
                           ) : (
-                            queueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').map((entry: any, index: number) => (
+                            queueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'cancelled').map((entry: any, index: number) => (
                               <tr key={entry.id} className={`hover:bg-gray-50 ${entry.status === 'in_consultation' || entry.status === 'in_progress' ? 'bg-teal-50' : index === 0 && entry.status === 'waiting' ? 'bg-yellow-50' : ''}`}>
                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
                                   {entry.queue_number ?? '-'}
@@ -2291,6 +2329,14 @@ const DoctorDashboardView: React.FC = () => {
                                         className="text-slate-700 hover:text-slate-900 font-medium text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded border border-slate-300"
                                       >
                                         Start
+                                      </button>
+                                    )}
+                                    {entry.status === 'waiting' && typeof entry.id === 'number' && (
+                                      <button
+                                        onClick={() => skipQueueEntry(entry.id as number)}
+                                        className="text-yellow-700 hover:text-yellow-900 font-medium text-xs bg-yellow-50 hover:bg-yellow-100 px-2 py-1 rounded border border-yellow-300"
+                                      >
+                                        Skip
                                       </button>
                                     )}
                                     {(entry.status === 'in_consultation' || entry.status === 'in_progress') && typeof entry.id === 'number' && (
@@ -2359,6 +2405,14 @@ const DoctorDashboardView: React.FC = () => {
                                         className="text-gray-600 hover:text-gray-800 font-medium text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded border border-gray-300"
                                       >
                                         No Show
+                                      </button>
+                                    )}
+                                    {entry.status === 'no_show' && typeof entry.id === 'number' && (
+                                      <button
+                                        onClick={() => requeueEntry(entry.id as number)}
+                                        className="text-teal-700 hover:text-teal-900 font-medium text-xs bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded border border-teal-300"
+                                      >
+                                        Requeue
                                       </button>
                                     )}
                                   </div>

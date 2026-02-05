@@ -40,6 +40,18 @@ const safeParseJson = (value: string | null) => {
   }
 };
 
+const formatDisplayDate = (value?: string | null) => {
+  if (!value) return '-';
+  const raw = String(value).trim();
+  if (raw === '') return '-';
+  const datePart = raw.includes('T') ? raw.split('T')[0] : raw.includes(' ') ? raw.split(' ')[0] : raw;
+  const [year, month, day] = datePart.split('-').map((part) => parseInt(part || '0', 10));
+  if (!year || !month || !day) return datePart;
+  const localDate = new Date(year, month - 1, day);
+  if (Number.isNaN(localDate.getTime())) return datePart;
+  return localDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 const PatientDashboard: React.FC = () => {
   const navigate = useNavigate();
 
@@ -512,12 +524,21 @@ const PatientDashboard: React.FC = () => {
   };
 
   const openEditAppointment = (appt: PatientAppointment) => {
+    const normalizeDateInput = (value?: string | null) => {
+      if (!value) return '';
+      const trimmed = String(value).trim();
+      if (trimmed === '') return '';
+      if (trimmed.includes('T')) return trimmed.slice(0, 10);
+      if (trimmed.includes(' ')) return trimmed.slice(0, 10);
+      return trimmed;
+    };
+
     setEditingAppointment(appt);
     setAppointmentForm({
       clinic_id: '',
       department_id: appt.department_id ? String(appt.department_id) : '',
       doctor_id: appt.doctor_id ? String(appt.doctor_id) : '',
-      appointment_date: appt.appointment_date || '',
+      appointment_date: normalizeDateInput(appt.appointment_date),
       appointment_time: '',
       type: appt.type || 'in_person',
       reason: appt.reason || '',
@@ -1568,7 +1589,7 @@ const PatientDashboard: React.FC = () => {
 
                             return (
                               <tr key={appt.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 text-sm text-gray-900">{appt.appointment_date}</td>
+                                <td className="px-6 py-4 text-sm text-gray-900">{formatDisplayDate(appt.appointment_date)}</td>
                                 <td className="px-6 py-4 text-sm text-gray-600">{(appt.appointment_time || '').slice(0, 5)}</td>
                                 <td className="px-6 py-4 text-sm text-gray-600">
                                   {appt.type === 'telemedicine' ? 'Telemedicine' : 'In Person'}

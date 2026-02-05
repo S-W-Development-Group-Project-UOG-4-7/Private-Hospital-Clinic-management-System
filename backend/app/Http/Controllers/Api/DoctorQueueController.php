@@ -293,4 +293,97 @@ class DoctorQueueController extends Controller
 
         return response()->json($entry->fresh()->load(['patient', 'patient.patientProfile', 'appointment']));
     }
+
+    public function requeue(int $id)
+    {
+        $doctor = request()->user();
+
+        $entry = QueueEntry::query()
+            ->where(function ($q) use ($doctor) {
+                $q->where('doctor_id', $doctor->id)
+                  ->orWhereHas('appointment', function ($aq) use ($doctor) {
+                      $aq->where('doctor_id', $doctor->id);
+                  })
+                  ->orWhere(function ($uq) {
+                      $uq->whereNull('doctor_id')
+                         ->where(function ($apq) {
+                             $apq->whereDoesntHave('appointment')
+                                 ->orWhereHas('appointment', function ($aq) {
+                                     $aq->whereNull('doctor_id');
+                                 });
+                         });
+                  });
+            })
+            ->findOrFail($id);
+
+        $maxQueueNumber = QueueEntry::query()
+            ->whereDate('queue_date', $entry->queue_date)
+            ->where(function ($q) use ($entry) {
+                if ($entry->doctor_id) {
+                    $q->where('doctor_id', $entry->doctor_id);
+                } else {
+                    $q->whereNull('doctor_id');
+                }
+            })
+            ->max('queue_number');
+
+        $entry->status = 'waiting';
+        $entry->queue_number = ((int) $maxQueueNumber) + 1;
+        $entry->called_at = null;
+        $entry->consultation_started_at = null;
+        $entry->checked_out_at = null;
+        $entry->completed_at = null;
+        $entry->save();
+
+        if ($entry->appointment) {
+            $entry->appointment->status = Appointment::STATUS_CONFIRMED;
+            $entry->appointment->save();
+        }
+
+        return response()->json($entry->fresh()->load(['patient', 'patient.patientProfile', 'appointment']));
+    }
+
+    public function skip(int $id)
+    {
+        $doctor = request()->user();
+
+        $entry = QueueEntry::query()
+            ->where(function ($q) use ($doctor) {
+                $q->where('doctor_id', $doctor->id)
+                  ->orWhereHas('appointment', function ($aq) use ($doctor) {
+                      $aq->where('doctor_id', $doctor->id);
+                  })
+                  ->orWhere(function ($uq) {
+                      $uq->whereNull('doctor_id')
+                         ->where(function ($apq) {
+                             $apq->whereDoesntHave('appointment')
+                                 ->orWhereHas('appointment', function ($aq) {
+                                     $aq->whereNull('doctor_id');
+                                 });
+                         });
+                  });
+            })
+            ->findOrFail($id);
+
+        if ($entry->status !== 'waiting') {
+            return response()->json(['message' => 'Only waiting entries can be skipped.'], 422);
+        }
+
+        $maxQueueNumber = QueueEntry::query()
+            ->whereDate('queue_date', $entry->queue_date)
+            ->where(function ($q) use ($entry) {
+                if ($entry->doctor_id) {
+                    $q->where('doctor_id', $entry->doctor_id);
+                } else {
+                    $q->whereNull('doctor_id');
+                }
+            })
+            ->max('queue_number');
+
+        $entry->queue_number = ((int) $maxQueueNumber) + 1;
+        $entry->called_at = now();
+        $entry->save();
+
+        return response()->json($entry->fresh()->load(['patient', 'patient.patientProfile', 'appointment']));
+    }
 }

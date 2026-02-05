@@ -1795,13 +1795,13 @@ const ReceptionistDashboard: React.FC = () => {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">Patient Queue</h2>
-                    <p className="text-gray-600 text-sm">Check-in, assign queue numbers, and update status</p>
+                    <p className="text-gray-600 text-sm">Appointments are auto-added to the queue. Use check-in for walk-ins or arrivals.</p>
                   </div>
                   <button
                     onClick={openCheckIn}
                     className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 py-2 rounded-lg transition"
                   >
-                    Check-in
+                    Walk-in / Arrived
                   </button>
                   <button
                     onClick={callNextInQueue}

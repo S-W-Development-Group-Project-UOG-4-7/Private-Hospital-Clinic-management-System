@@ -247,6 +247,9 @@ class PatientAppointmentController extends Controller
         if ($appointment instanceof \Illuminate\Http\JsonResponse) {
             return $appointment;
         }
+
+        $this->ensureQueueEntry($appointment, $user?->id);
+
         return response()->json($appointment, 201);
     }
 
@@ -436,7 +439,7 @@ class PatientAppointmentController extends Controller
                 ->where('patient_id', $user->id)
                 ->where('id', '!=', $appointment->id)
                 ->whereDate('appointment_date', $slot->date->format('Y-m-d'))
-                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->whereIn(DB::raw('UPPER(status)'), Appointment::activeScheduleStatuses())
                 ->exists();
 
             if ($alreadyBookedForDay) {
@@ -470,9 +473,69 @@ class PatientAppointmentController extends Controller
             $slot->held_by_patient_id = null;
             $slot->save();
 
+            QueueEntry::query()
+                ->where('appointment_id', $appointment->id)
+                ->delete();
+
+            $this->ensureQueueEntry($appointment, $user?->id);
+
             return response()->json([
                 'appointment' => $appointment->load(['doctor:id,first_name,last_name,email', 'department:id,name']),
             ]);
         });
+    }
+
+    private function ensureQueueEntry(Appointment $appointment, ?int $createdByUserId = null): ?QueueEntry
+    {
+        if ($appointment->visit_mode !== Appointment::VISIT_MODE_PHYSICAL) {
+            return null;
+        }
+
+        if (! in_array($appointment->status, Appointment::activeScheduleStatuses(), true)) {
+            return null;
+        }
+
+        $queueDate = $appointment->appointment_date?->format('Y-m-d') ?? (string) $appointment->appointment_date;
+        if ($queueDate === '') {
+            return null;
+        }
+
+        $existing = QueueEntry::query()
+            ->where('appointment_id', $appointment->id)
+            ->whereDate('queue_date', $queueDate)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $doctorId = $appointment->doctor_id;
+
+        $lastQueueNumber = QueueEntry::query()
+            ->whereDate('queue_date', $queueDate)
+            ->where(function ($q) use ($doctorId) {
+                if ($doctorId) {
+                    $q->where('doctor_id', $doctorId);
+                } else {
+                    $q->whereNull('doctor_id');
+                }
+            })
+            ->orderByDesc('queue_number')
+            ->lockForUpdate()
+            ->value('queue_number');
+
+        $nextQueueNumber = ((int) $lastQueueNumber) + 1;
+
+        return QueueEntry::create([
+            'appointment_id' => $appointment->id,
+            'patient_id' => $appointment->patient_id,
+            'doctor_id' => $doctorId,
+            'queue_date' => $queueDate,
+            'queue_number' => $nextQueueNumber,
+            'status' => 'waiting',
+            'priority' => 'normal',
+            'checked_in_at' => null,
+            'created_by' => $createdByUserId,
+        ]);
     }
 }

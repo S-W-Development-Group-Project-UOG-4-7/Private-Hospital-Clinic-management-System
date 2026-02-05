@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Models\QueueEntry;
 use App\Models\Slot;
 use App\Models\User;
 use App\Services\TelemedSessionService;
@@ -80,11 +81,24 @@ class SlotController extends Controller
                 $sub->selectRaw('1')
                     ->from('appointments')
                     ->whereColumn('appointments.doctor_id', 'slots.doctor_id')
-                    ->whereIn('appointments.status', Appointment::activeScheduleStatuses())
-                    ->whereNotNull('appointments.scheduled_start')
-                    ->whereNotNull('appointments.scheduled_end')
-                    ->whereRaw('appointments.scheduled_start < (slots.date + slots.end_time)')
-                    ->whereRaw('appointments.scheduled_end > (slots.date + slots.start_time)');
+                    ->whereIn(DB::raw('UPPER(appointments.status)'), Appointment::activeScheduleStatuses())
+                    ->where(function ($overlap) {
+                        $overlap->where(function ($q) {
+                            $q->whereNotNull('appointments.scheduled_start')
+                                ->whereNotNull('appointments.scheduled_end')
+                                ->whereRaw('appointments.scheduled_start < (slots.date + slots.end_time)')
+                                ->whereRaw('appointments.scheduled_end > (slots.date + slots.start_time)');
+                        })->orWhere(function ($q) {
+                            $q->where(function ($nulls) {
+                                $nulls->whereNull('appointments.scheduled_start')
+                                    ->orWhereNull('appointments.scheduled_end');
+                            })
+                                ->whereNotNull('appointments.appointment_time')
+                                ->whereRaw('appointments.appointment_date = slots.date')
+                                ->whereRaw('appointments.appointment_time >= slots.start_time')
+                                ->whereRaw('appointments.appointment_time < slots.end_time');
+                        });
+                    });
             });
         }
 
@@ -99,7 +113,7 @@ class SlotController extends Controller
                 ->selectRaw('doctor_id, COUNT(*) as total')
                 ->whereIn('doctor_id', $doctorIds)
                 ->whereDate('appointment_date', $validated['date'])
-                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->whereIn(DB::raw('UPPER(status)'), Appointment::activeScheduleStatuses())
                 ->groupBy('doctor_id')
                 ->pluck('total', 'doctor_id')
                 ->toArray();
@@ -220,7 +234,7 @@ class SlotController extends Controller
             $alreadyBookedForDay = Appointment::query()
                 ->where('patient_id', $user->id)
                 ->whereDate('appointment_date', $slot->date->format('Y-m-d'))
-                ->whereIn('status', Appointment::activeScheduleStatuses())
+                ->whereIn(DB::raw('UPPER(status)'), Appointment::activeScheduleStatuses())
                 ->exists();
 
             if ($alreadyBookedForDay) {
@@ -260,10 +274,66 @@ class SlotController extends Controller
             $slot->held_by_patient_id = null;
             $slot->save();
 
+            $this->ensureQueueEntry($appointment, $user?->id);
+
             return response()->json([
                 'appointment' => $appointment->load(['doctor:id,first_name,last_name,email', 'department:id,name']),
             ], 201);
         });
+    }
+
+    private function ensureQueueEntry(Appointment $appointment, ?int $createdByUserId = null): ?QueueEntry
+    {
+        if ($appointment->visit_mode !== Appointment::VISIT_MODE_PHYSICAL) {
+            return null;
+        }
+
+        if (! in_array($appointment->status, Appointment::activeScheduleStatuses(), true)) {
+            return null;
+        }
+
+        $queueDate = $appointment->appointment_date?->format('Y-m-d') ?? (string) $appointment->appointment_date;
+        if ($queueDate === '') {
+            return null;
+        }
+
+        $existing = QueueEntry::query()
+            ->where('appointment_id', $appointment->id)
+            ->whereDate('queue_date', $queueDate)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $doctorId = $appointment->doctor_id;
+
+        $lastQueueNumber = QueueEntry::query()
+            ->whereDate('queue_date', $queueDate)
+            ->where(function ($q) use ($doctorId) {
+                if ($doctorId) {
+                    $q->where('doctor_id', $doctorId);
+                } else {
+                    $q->whereNull('doctor_id');
+                }
+            })
+            ->orderByDesc('queue_number')
+            ->lockForUpdate()
+            ->value('queue_number');
+
+        $nextQueueNumber = ((int) $lastQueueNumber) + 1;
+
+        return QueueEntry::create([
+            'appointment_id' => $appointment->id,
+            'patient_id' => $appointment->patient_id,
+            'doctor_id' => $doctorId,
+            'queue_date' => $queueDate,
+            'queue_number' => $nextQueueNumber,
+            'status' => 'waiting',
+            'priority' => 'normal',
+            'checked_in_at' => null,
+            'created_by' => $createdByUserId,
+        ]);
     }
 
     private function slotAllowsVisitMode(Slot $slot, string $visitMode): bool

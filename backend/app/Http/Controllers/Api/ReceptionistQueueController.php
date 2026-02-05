@@ -18,6 +18,8 @@ class ReceptionistQueueController extends Controller
         $date = $request->get('date') ?: now()->toDateString();
         $departmentId = $request->get('department_id');
 
+        $this->ensureQueueEntriesForDate($date);
+
         $startTime = $request->get('start_time');
         $endTime = $request->get('end_time');
 
@@ -76,6 +78,55 @@ class ReceptionistQueueController extends Controller
         return response()->json([
             'data' => $entries->values()->all(),
         ]);
+    }
+
+    private function ensureQueueEntriesForDate(string $date): void
+    {
+        DB::transaction(function () use ($date) {
+            $appointments = Appointment::query()
+                ->whereDate('appointment_date', $date)
+                ->where('visit_mode', Appointment::VISIT_MODE_PHYSICAL)
+                ->whereIn(DB::raw('UPPER(status)'), Appointment::activeScheduleStatuses())
+                ->whereNotExists(function ($sub) use ($date) {
+                    $sub->selectRaw('1')
+                        ->from('queue_entries')
+                        ->whereColumn('queue_entries.appointment_id', 'appointments.id')
+                        ->whereDate('queue_entries.queue_date', $date);
+                })
+                ->orderBy('appointment_time')
+                ->get();
+
+            foreach ($appointments as $appointment) {
+                $doctorId = $appointment->doctor_id;
+
+                $lastQueueNumber = QueueEntry::query()
+                    ->whereDate('queue_date', $date)
+                    ->where(function ($q) use ($doctorId) {
+                        if ($doctorId) {
+                            $q->where('doctor_id', $doctorId);
+                        } else {
+                            $q->whereNull('doctor_id');
+                        }
+                    })
+                    ->orderByDesc('queue_number')
+                    ->lockForUpdate()
+                    ->value('queue_number');
+
+                $nextQueueNumber = ((int) $lastQueueNumber) + 1;
+
+                QueueEntry::create([
+                    'appointment_id' => $appointment->id,
+                    'patient_id' => $appointment->patient_id,
+                    'doctor_id' => $doctorId,
+                    'queue_date' => $date,
+                    'queue_number' => $nextQueueNumber,
+                    'status' => 'waiting',
+                    'priority' => 'normal',
+                    'checked_in_at' => null,
+                    'created_by' => null,
+                ]);
+            }
+        });
     }
 
     public function checkIn(Request $request)
@@ -138,13 +189,14 @@ class ReceptionistQueueController extends Controller
                 ], 422);
             }
 
-            $max = QueueEntry::query()
+            $lastQueueNumber = QueueEntry::query()
                 ->whereDate('queue_date', $queueDate)
                 ->where('doctor_id', $doctorId)
+                ->orderByDesc('queue_number')
                 ->lockForUpdate()
-                ->max('queue_number');
+                ->value('queue_number');
 
-            $nextNumber = ((int) $max) + 1;
+            $nextNumber = ((int) $lastQueueNumber) + 1;
 
             $appointmentId = $validated['appointment_id'] ?? null;
 

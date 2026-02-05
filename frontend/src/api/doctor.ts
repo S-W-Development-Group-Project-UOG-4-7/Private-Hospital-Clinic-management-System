@@ -281,5 +281,13 @@ export const doctorApi = {
       const response = await http.put(API_ENDPOINTS.DOCTOR_QUEUE_STATUS(String(id)), { status });
       return response.data;
     },
+    skip: async (id: number): Promise<any> => {
+      const response = await http.post(API_ENDPOINTS.DOCTOR_QUEUE_SKIP(String(id)));
+      return response.data;
+    },
+    requeue: async (id: number): Promise<any> => {
+      const response = await http.post(API_ENDPOINTS.DOCTOR_QUEUE_REQUEUE(String(id)));
+      return response.data;
+    },
   },
 };

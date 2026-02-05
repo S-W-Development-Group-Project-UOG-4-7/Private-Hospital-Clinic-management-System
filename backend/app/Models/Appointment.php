@@ -108,13 +108,29 @@ class Appointment extends Model
 
     public static function hasOverlap(int $doctorId, CarbonInterface $start, CarbonInterface $end, ?int $excludeId = null): bool
     {
+        $dateString = $start->toDateString();
+        $startTime = $start->format('H:i:s');
+        $endTime = $end->format('H:i:s');
+
         return self::query()
             ->where('doctor_id', $doctorId)
-            ->whereIn('status', self::blockingStatuses())
-            ->whereNotNull('scheduled_start')
-            ->whereNotNull('scheduled_end')
-            ->where('scheduled_start', '<', $end)
-            ->where('scheduled_end', '>', $start)
+            ->whereIn(DB::raw('UPPER(status)'), self::blockingStatuses())
+            ->where(function ($query) use ($start, $end, $dateString, $startTime, $endTime) {
+                $query->where(function ($q) use ($start, $end) {
+                    $q->whereNotNull('scheduled_start')
+                        ->whereNotNull('scheduled_end')
+                        ->where('scheduled_start', '<', $end)
+                        ->where('scheduled_end', '>', $start);
+                })->orWhere(function ($q) use ($dateString, $startTime, $endTime) {
+                    $q->where(function ($nulls) {
+                        $nulls->whereNull('scheduled_start')->orWhereNull('scheduled_end');
+                    })
+                        ->whereDate('appointment_date', $dateString)
+                        ->whereNotNull('appointment_time')
+                        ->whereTime('appointment_time', '>=', $startTime)
+                        ->whereTime('appointment_time', '<', $endTime);
+                });
+            })
             ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->exists();
     }
