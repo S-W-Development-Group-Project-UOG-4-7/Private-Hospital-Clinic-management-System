@@ -23,6 +23,12 @@ class User extends Authenticatable
     use HasFactory, Notifiable, HasApiTokens, HasRoles;
 
     /**
+     * The default guard for Spatie permissions.
+     * Must match the guard used in PermissionsSeeder.
+     */
+    protected string $guard_name = 'sanctum';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>

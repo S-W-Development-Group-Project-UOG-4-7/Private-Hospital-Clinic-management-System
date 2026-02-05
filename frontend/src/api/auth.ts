@@ -97,3 +97,31 @@ export async function fetchCurrentUser(): Promise<{ user: AuthUser }> {
     throw new Error(getErrorMessage(error));
   }
 }
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  try {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data as { message: string };
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function resetPassword(
+  token: string,
+  email: string,
+  password: string,
+  passwordConfirmation: string
+): Promise<{ message: string }> {
+  try {
+    const response = await api.post('/auth/reset-password', {
+      token,
+      email,
+      password,
+      password_confirmation: passwordConfirmation,
+    });
+    return response.data as { message: string };
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}

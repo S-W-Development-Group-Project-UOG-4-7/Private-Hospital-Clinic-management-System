@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\PatientProfile;
+use App\Mail\PasswordResetMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -291,6 +293,141 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $roleName, // This now returns a String (e.g., "admin"), not a number
         ];
+    }
+
+    /**
+     * Handle forgot password request.
+     */
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            // Return success even if user not found (security best practice)
+            return response()->json([
+                'message' => 'If an account with that email exists, we have sent a password reset link.',
+            ]);
+        }
+
+        // Generate a simple token
+        $token = Str::random(64);
+
+        // Store the reset token
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $request->email],
+            [
+                'email' => $request->email,
+                'token' => Hash::make($token),
+                'created_at' => now(),
+            ]
+        );
+
+        // Build the reset URL
+        $resetUrl = config('app.frontend_url', 'http://localhost:3000') . '/reset-password?token=' . $token . '&email=' . urlencode($request->email);
+        
+        // Get user's name for personalization
+        $userName = $user->first_name ?? $user->name ?? 'User';
+
+        // Log the reset link to console/log file (for development)
+        Log::info('===========================================');
+        Log::info('PASSWORD RESET LINK GENERATED');
+        Log::info('===========================================');
+        Log::info('Email: ' . $request->email);
+        Log::info('Reset URL: ' . $resetUrl);
+        Log::info('===========================================');
+        
+        // Output directly to terminal (stderr) for easy visibility
+        error_log('');
+        error_log('===========================================');
+        error_log('🔑 PASSWORD RESET LINK GENERATED');
+        error_log('===========================================');
+        error_log('📧 Email: ' . $request->email);
+        error_log('🔗 Reset URL: ' . $resetUrl);
+        error_log('===========================================');
+        error_log('');
+
+        // Send the password reset email
+        try {
+            Mail::to($user->email)->send(new PasswordResetMail($resetUrl, $userName));
+            
+            Log::info('Password reset email sent successfully to: ' . $request->email);
+        } catch (\Exception $e) {
+            Log::error('Failed to send password reset email', [
+                'email' => $request->email,
+                'error' => $e->getMessage(),
+            ]);
+            
+            // Still return success to not reveal if email exists
+            // But log the error for debugging
+        }
+
+        return response()->json([
+            'message' => 'If an account with that email exists, we have sent a password reset link.',
+        ]);
+    }
+
+    /**
+     * Handle password reset.
+     */
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $record = DB::table('password_reset_tokens')
+            ->where('email', $request->email)
+            ->first();
+
+        if (!$record) {
+            throw ValidationException::withMessages([
+                'email' => ['Invalid password reset request.'],
+            ]);
+        }
+
+        // Check if token is valid
+        if (!Hash::check($request->token, $record->token)) {
+            throw ValidationException::withMessages([
+                'token' => ['Invalid or expired reset token.'],
+            ]);
+        }
+
+        // Check if token is expired (1 hour)
+        if (now()->diffInMinutes($record->created_at) > 60) {
+            throw ValidationException::withMessages([
+                'token' => ['This password reset link has expired.'],
+            ]);
+        }
+
+        // Update user password
+        $user = User::where('email', $request->email)->first();
+        
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['User not found.'],
+            ]);
+        }
+
+        $user->password = Hash::make($request->password);
+        $user->save();
+
+        // Delete the reset token
+        DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+
+        // Revoke all existing tokens
+        $user->tokens()->delete();
+
+        Log::info('Password reset successful', ['user_id' => $user->id]);
+
+        return response()->json([
+            'message' => 'Password has been reset successfully. You can now login with your new password.',
+        ]);
     }
 
     private function findPatientByPhone(?string $phone): ?User

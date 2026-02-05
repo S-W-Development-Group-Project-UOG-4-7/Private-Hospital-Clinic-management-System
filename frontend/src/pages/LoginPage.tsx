@@ -10,12 +10,20 @@ const LoginPage: React.FC = () => {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
     document.title = 'Login';
+
+    // Load remembered email if exists
+    const rememberedEmail = localStorage.getItem('rememberedEmail');
+    if (rememberedEmail) {
+      setLoginId(rememberedEmail);
+      setRememberMe(true);
+    }
 
     // --- FIX START: Safe Parsing Logic ---
     const isAuthenticated = !!localStorage.getItem('authToken');
@@ -89,6 +97,13 @@ const LoginPage: React.FC = () => {
         localStorage.setItem('authUser', JSON.stringify(response.user));
       }
       // --- FIX END ---
+
+      // Handle Remember Me
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', loginId);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+      }
 
       // Route based on user role
       // Check if response.user exists before accessing role
@@ -211,6 +226,30 @@ const LoginPage: React.FC = () => {
                     )}
                   </button>
                 </div>
+              </div>
+
+              {/* Remember Me and Forgot Password */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <input
+                    id="remember-me"
+                    name="remember-me"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                  />
+                  <label htmlFor="remember-me" className="block ml-2 text-sm text-gray-700">
+                    Remember me
+                  </label>
+                </div>
+
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-teal-600 transition hover:text-teal-500"
+                >
+                  Forgot password?
+                </Link>
               </div>
 
               <button

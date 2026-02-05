@@ -5,6 +5,8 @@ import './App.css';
 // --- Page Imports ---
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import PortalPage from './pages/PortalPage';
 
 // Dashboards
@@ -95,6 +97,8 @@ const App: React.FC = () => (
     <Route path="/home" element={<Home />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
 
     {/* --- ADMIN ROUTES --- */}
     <Route
