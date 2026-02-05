@@ -1,0 +1,479 @@
+import { API_ENDPOINTS } from '../config/api';
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json',
+  };
+};
+
+// Helper function to handle API responses
+const handleApiResponse = async (response: Response) => {
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`API Error ${response.status}:`, errorText);
+    throw new Error(`HTTP ${response.status}: ${errorText}`);
+  }
+  
+  const data = await response.json();
+  console.log('API Response Data:', data);
+  return data;
+};
+
+// Prescription API
+export const prescriptionApi = {
+  getAll: (params?: { status?: string; patient_id?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.patient_id) queryParams.append('patient_id', params.patient_id.toString());
+    
+    const url = queryParams.toString() 
+      ? `${API_ENDPOINTS.PRESCRIPTIONS}?${queryParams.toString()}`
+      : API_ENDPOINTS.PRESCRIPTIONS;
+    
+    return fetch(url, {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  getById: (id: string) => {
+    return fetch(`${API_ENDPOINTS.PRESCRIPTIONS}/${id}`, {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  process: (id: string) => {
+    return fetch(API_ENDPOINTS.PRESCRIPTION_PROCESS(id), {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  update: (id: string, data: any) => {
+    return fetch(`${API_ENDPOINTS.PRESCRIPTIONS}/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+};
+
+// Inventory API
+export const inventoryApi = {
+  getAll: (params?: { search?: string; category?: string; low_stock?: boolean; expiring_soon?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.category) queryParams.append('category', params.category);
+    if (params?.low_stock) queryParams.append('low_stock', '1');
+    if (params?.expiring_soon) queryParams.append('expiring_soon', '1');
+    
+    const url = queryParams.toString() 
+      ? `${API_ENDPOINTS.PHARMACIST_INVENTORY}?${queryParams.toString()}`
+      : API_ENDPOINTS.PHARMACIST_INVENTORY;
+    
+    console.log('Fetching inventory from URL:', url);
+    return fetch(url, {
+      headers: getAuthHeaders(),
+    }).then(handleApiResponse);
+  },
+
+  getById: (id: string) => {
+    const url = `${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}`;
+    console.log('Fetching inventory item from URL:', url);
+    return fetch(url, {
+      headers: getAuthHeaders(),
+    }).then(handleApiResponse);
+  },
+
+  create: (data: any) => {
+    console.log('=== INVENTORY CREATE API CALL ===');
+    console.log('Endpoint:', API_ENDPOINTS.PHARMACIST_INVENTORY);
+    console.log('Data to send:', data);
+    console.log('Data stringified:', JSON.stringify(data));
+    console.log('Headers:', getAuthHeaders());
+    
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleApiResponse);
+  },
+
+  update: (id: string, data: any) => {
+    const url = `${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}`;
+    console.log('Updating inventory item at URL:', url, 'with data:', data);
+    return fetch(url, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleApiResponse);
+  },
+
+  delete: (id: string) => {
+    const url = `${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}`;
+    console.log('Deleting inventory item at URL:', url);
+    return fetch(url, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    }).then(handleApiResponse);
+  },
+
+  // --- ADDED THIS METHOD ---
+  dispense: (id: string, data: { quantity: number }) => {
+    // Assuming PHARMACIST_INVENTORY base URL is like '/api/pharmacist/inventory'
+    // This constructs: /api/pharmacist/inventory/{id}/dispense
+    return fetch(`${API_ENDPOINTS.PHARMACIST_INVENTORY}/${id}/dispense`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+
+  getLowStock: () => {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_LOW_STOCK, {
+      headers: getAuthHeaders(),
+    }).then(handleApiResponse);
+  },
+
+  getExpiringSoon: () => {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_EXPIRING_SOON, {
+      headers: getAuthHeaders(),
+    }).then(handleApiResponse);
+  },
+
+  getStats: () => {
+    return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_STATS, {
+      headers: getAuthHeaders(),
+    }).then(handleApiResponse);
+  },
+};
+
+// Supplier API
+export const supplierApi = {
+  getAll: (params?: { search?: string; is_active?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active ? '1' : '0');
+    
+    const url = queryParams.toString() 
+      ? `${API_ENDPOINTS.SUPPLIERS}?${queryParams.toString()}`
+      : API_ENDPOINTS.SUPPLIERS;
+    
+    return fetch(url, {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  getById: (id: string) => {
+    return fetch(`${API_ENDPOINTS.SUPPLIERS}/${id}`, {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  create: (data: any) => {
+    return fetch(API_ENDPOINTS.SUPPLIERS, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+
+  update: (id: string, data: any) => {
+    return fetch(`${API_ENDPOINTS.SUPPLIERS}/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+
+  delete: (id: string) => {
+    return fetch(`${API_ENDPOINTS.SUPPLIERS}/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+};
+
+// Drug Purchase API
+export const drugPurchaseApi = {
+  getAll: (params?: { status?: string; supplier_id?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.supplier_id) queryParams.append('supplier_id', params.supplier_id.toString());
+    
+    const url = queryParams.toString() 
+      ? `${API_ENDPOINTS.DRUG_PURCHASES}?${queryParams.toString()}`
+      : API_ENDPOINTS.DRUG_PURCHASES;
+    
+    return fetch(url, {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  getById: (id: string) => {
+    return fetch(`${API_ENDPOINTS.DRUG_PURCHASES}/${id}`, {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  create: (data: any) => {
+    return fetch(API_ENDPOINTS.DRUG_PURCHASES, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+
+  update: (id: string, data: any) => {
+    return fetch(`${API_ENDPOINTS.DRUG_PURCHASES}/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(res => res.json());
+  },
+
+  receive: (id: string) => {
+    return fetch(API_ENDPOINTS.DRUG_PURCHASE_RECEIVE(id), {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+
+  delete: (id: string) => {
+    return fetch(`${API_ENDPOINTS.DRUG_PURCHASES}/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+  },
+};
+
+// Pharmacist API
+export const pharmacistApi = {
+  prescriptions: {
+    list: (params?: { status?: string; patient_id?: number; phone?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.patient_id) queryParams.append('patient_id', params.patient_id.toString());
+      if (params?.phone) queryParams.append('phone', params.phone);
+
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_PRESCRIPTIONS;
+
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    show: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_SHOW(id), {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    checkInteractions: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_INTERACTION_CHECK(id), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    dispense: (id: string, data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PRESCRIPTION_DISPENSE(id), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(handleApiResponse);
+    },
+  },
+
+  inventory: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    update: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_UPDATE, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+
+    lowStock: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_INVENTORY_LOW_STOCK, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+
+  purchaseRequests: {
+    create: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PURCHASE_REQUEST, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  controlledDrugs: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_CONTROLLED_DRUGS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+
+    log: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_CONTROLLED_DRUGS_LOG, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  labels: {
+    generate: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_LABELS_GENERATE, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+
+    print: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_LABELS_PRINT, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+  },
+
+  returns: {
+    create: (data: any) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_RETURNS, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }).then(res => res.json());
+    },
+
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_RETURNS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+
+  reports: {
+    inventory: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_REPORTS_INVENTORY, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    storage: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_REPORTS_STORAGE, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    dispensing: (params?: { from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_REPORTS_DISPENSING}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_REPORTS_DISPENSING;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    sales: (params?: { from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_REPORTS_SALES}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_REPORTS_SALES;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    patientActivity: (params?: { from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_REPORTS_PATIENT_ACTIVITY}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_REPORTS_PATIENT_ACTIVITY;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+  },
+
+  patients: {
+    list: (params?: { search?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.search) queryParams.append('search', params.search);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_PATIENTS}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_PATIENTS;
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    show: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PATIENT_SHOW(id), {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    medicationHistory: (id: string, params?: { status?: string; from_date?: string; to_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.from_date) queryParams.append('from_date', params.from_date);
+      if (params?.to_date) queryParams.append('to_date', params.to_date);
+      
+      const url = queryParams.toString()
+        ? `${API_ENDPOINTS.PHARMACIST_PATIENT_MEDICATION_HISTORY(id)}?${queryParams.toString()}`
+        : API_ENDPOINTS.PHARMACIST_PATIENT_MEDICATION_HISTORY(id);
+      
+      return fetch(url, {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+
+    medicationSummary: (id: string) => {
+      return fetch(API_ENDPOINTS.PHARMACIST_PATIENT_MEDICATION_SUMMARY(id), {
+        headers: getAuthHeaders(),
+      }).then(handleApiResponse);
+    },
+  },
+
+  auditLogs: {
+    list: () => {
+      return fetch(API_ENDPOINTS.PHARMACIST_AUDIT_LOGS, {
+        headers: getAuthHeaders(),
+      }).then(res => res.json());
+    },
+  },
+};
