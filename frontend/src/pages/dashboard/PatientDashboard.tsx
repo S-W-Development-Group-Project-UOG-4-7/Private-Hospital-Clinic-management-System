@@ -441,7 +441,20 @@ const PatientDashboard: React.FC = () => {
         available_only: true,
       })
       .then((resp) => {
-        setAvailableSlots(Array.isArray(resp.data) ? resp.data : []);
+        const rawSlots = Array.isArray(resp.data) ? resp.data : [];
+        const today = new Date().toISOString().slice(0, 10);
+        const filtered = rawSlots.filter((slot) => {
+          if (appointmentForm.appointment_date !== today) return true;
+          const start = slot.start_time || '';
+          if (!start) return true;
+          const parts = start.split(':');
+          const hours = parseInt(parts[0] || '0', 10);
+          const minutes = parseInt(parts[1] || '0', 10);
+          const slotDate = new Date();
+          slotDate.setHours(hours, minutes, 0, 0);
+          return slotDate >= new Date();
+        });
+        setAvailableSlots(filtered);
       })
       .catch((e: any) => {
         setAvailableSlots([]);

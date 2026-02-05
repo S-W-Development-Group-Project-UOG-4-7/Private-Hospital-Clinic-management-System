@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Models\PatientProfile;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class PatientController extends Controller
 {
@@ -17,19 +19,58 @@ class PatientController extends Controller
     public function searchByPhone(Request $request): JsonResponse
     {
         $request->validate([
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:30',
             'name' => 'nullable|string|max:100'
         ]);
 
         $phone = $request->input('phone');
         $name = $request->input('name');
 
-        // Find patient by phone number in patient profiles
-        $patientProfile = PatientProfile::where('phone', $phone)
-            ->orWhere('guardian_phone', $phone)
-            ->first();
+        $normalized = preg_replace('/\D+/', '', (string) $phone);
+        if (strlen($normalized) < 7) {
+            return response()->json([
+                'data' => null,
+                'message' => 'Phone number is too short'
+            ], 422);
+        }
 
-        if (!$patientProfile) {
+        $driver = DB::connection()->getDriverName();
+
+        $patientId = null;
+
+        $profileColumns = [
+            'phone' => Schema::hasColumn('patient_profiles', 'phone'),
+            'guardian_phone' => Schema::hasColumn('patient_profiles', 'guardian_phone'),
+            'emergency_contact_phone' => Schema::hasColumn('patient_profiles', 'emergency_contact_phone'),
+        ];
+
+        if ($driver === 'pgsql') {
+            $patientId = PatientProfile::query()
+                ->when($profileColumns['phone'], fn ($q) => $q->orWhereRaw("regexp_replace(phone, '\\\\D', '', 'g') = ?", [$normalized]))
+                ->when($profileColumns['guardian_phone'], fn ($q) => $q->orWhereRaw("regexp_replace(guardian_phone, '\\\\D', '', 'g') = ?", [$normalized]))
+                ->when($profileColumns['emergency_contact_phone'], fn ($q) => $q->orWhereRaw("regexp_replace(emergency_contact_phone, '\\\\D', '', 'g') = ?", [$normalized]))
+                ->value('user_id');
+        } else {
+            $patientId = PatientProfile::query()
+                ->when($profileColumns['phone'], fn ($q) => $q->orWhere('phone', $phone))
+                ->when($profileColumns['guardian_phone'], fn ($q) => $q->orWhere('guardian_phone', $phone))
+                ->when($profileColumns['emergency_contact_phone'], fn ($q) => $q->orWhere('emergency_contact_phone', $phone))
+                ->value('user_id');
+        }
+
+        if (!$patientId) {
+            if ($driver === 'pgsql') {
+                $patientId = User::query()
+                    ->whereRaw("regexp_replace(phone, '\\\\D', '', 'g') = ?", [$normalized])
+                    ->value('id');
+            } else {
+                $patientId = User::query()
+                    ->where('phone', $phone)
+                    ->value('id');
+            }
+        }
+
+        if (!$patientId) {
             return response()->json([
                 'data' => null,
                 'message' => 'No patient found with this phone number'
@@ -54,7 +95,7 @@ class PatientController extends Controller
                     ->orderBy('appointment_date', 'desc')
                     ->orderBy('appointment_time', 'desc');
             },
-        ])->find($patientProfile->user_id);
+        ])->find($patientId);
 
         if (!$user) {
             return response()->json([
@@ -103,7 +144,9 @@ class PatientController extends Controller
                 'state' => $user->patientProfile->state,
                 'guardian_name' => $user->patientProfile->guardian_name,
                 'guardian_phone' => $user->patientProfile->guardian_phone,
-                'emergency_contact' => $user->patientProfile->emergency_contact,
+                'emergency_contact_name' => $user->patientProfile->emergency_contact_name,
+                'emergency_contact_phone' => $user->patientProfile->emergency_contact_phone,
+                'emergency_contact_relationship' => $user->patientProfile->emergency_contact_relationship,
                 'allergies' => $user->patientProfile->allergies,
                 'medical_conditions' => $user->patientProfile->medical_conditions,
             ] : null,
@@ -231,7 +274,9 @@ class PatientController extends Controller
                 'state' => $user->patientProfile->state,
                 'guardian_name' => $user->patientProfile->guardian_name,
                 'guardian_phone' => $user->patientProfile->guardian_phone,
-                'emergency_contact' => $user->patientProfile->emergency_contact,
+                'emergency_contact_name' => $user->patientProfile->emergency_contact_name,
+                'emergency_contact_phone' => $user->patientProfile->emergency_contact_phone,
+                'emergency_contact_relationship' => $user->patientProfile->emergency_contact_relationship,
                 'allergies' => $user->patientProfile->allergies,
                 'medical_conditions' => $user->patientProfile->medical_conditions,
             ] : null,

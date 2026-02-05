@@ -199,7 +199,7 @@ class ReceptionistQueueController extends Controller
                     ], 422);
                 }
 
-                $appointment = Appointment::create([
+                $appointment = Appointment::createWithNumberForDate($queueDate, [
                     'patient_id' => $patientId,
                     'doctor_id' => $doctorId,
                     'department_id' => $departmentId,

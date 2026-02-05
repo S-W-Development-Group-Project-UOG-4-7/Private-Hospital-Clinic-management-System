@@ -74,6 +74,24 @@ Route::prefix('auth')->group(function () {
     });
 });
 
+// Health endpoint
+Route::get('health', function () {
+    try {
+        \Illuminate\Support\Facades\DB::select('select 1');
+        $db = 'ok';
+    } catch (\Throwable $e) {
+        $db = 'error';
+    }
+
+    return response()->json([
+        'status' => 'ok',
+        'time' => now()->toIso8601String(),
+        'app' => config('app.name'),
+        'env' => config('app.env'),
+        'db' => $db,
+    ]);
+});
+
 // ==========================================
 // ADMIN ROUTES
 // ==========================================
@@ -119,15 +137,15 @@ Route::middleware(['auth:sanctum', 'role:admin', 'permission:admin.access'])->pr
 
     // Billing (Admin)
     Route::get('/billing/invoices', [ReceptionistInvoiceController::class, 'index'])->middleware('permission:admin.billing.manage');
-    Route::post('/billing/invoices', [ReceptionistInvoiceController::class, 'store'])->middleware(['permission:admin.billing.manage', 'audit']);
+    Route::post('/billing/invoices', [ReceptionistInvoiceController::class, 'store'])->middleware(['permission:admin.billing.manage', 'audit', 'throttle:30,1']);
     Route::get('/billing/invoices/{id}', [ReceptionistInvoiceController::class, 'show'])->middleware('permission:admin.billing.manage');
-    Route::put('/billing/invoices/{id}', [ReceptionistInvoiceController::class, 'update'])->middleware(['permission:admin.billing.manage', 'audit']);
-    Route::delete('/billing/invoices/{id}', [ReceptionistInvoiceController::class, 'destroy'])->middleware(['permission:admin.billing.manage', 'audit']);
-    Route::post('/billing/payments', [ReceptionistPaymentController::class, 'store'])->middleware(['permission:admin.billing.manage', 'audit']);
+    Route::put('/billing/invoices/{id}', [ReceptionistInvoiceController::class, 'update'])->middleware(['permission:admin.billing.manage', 'audit', 'throttle:30,1']);
+    Route::delete('/billing/invoices/{id}', [ReceptionistInvoiceController::class, 'destroy'])->middleware(['permission:admin.billing.manage', 'audit', 'throttle:30,1']);
+    Route::post('/billing/payments', [ReceptionistPaymentController::class, 'store'])->middleware(['permission:admin.billing.manage', 'audit', 'throttle:30,1']);
 
     // Settings
     Route::get('/settings', [AdminSettingsController::class, 'index'])->middleware('permission:admin.settings.manage');
-    Route::put('/settings', [AdminSettingsController::class, 'update'])->middleware(['permission:admin.settings.manage', 'audit']);
+    Route::put('/settings', [AdminSettingsController::class, 'update'])->middleware(['permission:admin.settings.manage', 'audit', 'throttle:20,1']);
 });
 
 // ==========================================
@@ -152,7 +170,7 @@ Route::middleware(['auth:sanctum', 'role:pharmacist'])->prefix('pharmacist')->gr
     Route::get('prescriptions', [PrescriptionController::class, 'index']);
     Route::get('prescriptions/{id}', [PrescriptionController::class, 'show']);
     Route::post('prescriptions/{id}/interaction-check', [PrescriptionController::class, 'checkInteractions']);
-    Route::post('prescriptions/{id}/dispense', [PrescriptionController::class, 'dispense']);
+    Route::post('prescriptions/{id}/dispense', [PrescriptionController::class, 'dispense'])->middleware('throttle:20,1');
 
     // Controlled Substances
     Route::get('controlled-drugs', [InventoryController::class, 'controlledDrugs']);
@@ -195,18 +213,18 @@ Route::get('clinics/{id}/slots', [ClinicController::class, 'slots']);
 // ==========================================
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('slots', [SlotController::class, 'index']);
-    Route::post('slots/{slot}/hold', [SlotController::class, 'hold'])->middleware('role:patient');
-    Route::post('slots/{slot}/confirm', [SlotController::class, 'confirm'])->middleware('role:patient');
+    Route::post('slots/{slot}/hold', [SlotController::class, 'hold'])->middleware(['role:patient', 'throttle:20,1']);
+    Route::post('slots/{slot}/confirm', [SlotController::class, 'confirm'])->middleware(['role:patient', 'throttle:20,1']);
 
-    Route::post('appointments', [ReceptionistAppointmentController::class, 'store'])->middleware('role:receptionist|admin');
+    Route::post('appointments', [ReceptionistAppointmentController::class, 'store'])->middleware(['role:receptionist|admin', 'throttle:30,1']);
     Route::get('appointments/my', [AppointmentApiController::class, 'my'])->middleware('role:patient');
-    Route::post('appointments/{id}/cancel', [AppointmentApiController::class, 'cancel'])->middleware('role:patient|receptionist|admin');
+    Route::post('appointments/{id}/cancel', [AppointmentApiController::class, 'cancel'])->middleware(['role:patient|receptionist|admin', 'throttle:30,1']);
 
     Route::get('doctor/schedule', [DoctorScheduleController::class, 'index'])->middleware('role:doctor');
 
     Route::get('telemed/appointments/{id}/session', [TelemedSessionController::class, 'show'])->middleware('role:patient|doctor');
-    Route::post('telemed/appointments/{id}/session/start', [TelemedSessionController::class, 'start'])->middleware('role:doctor');
-    Route::post('telemed/appointments/{id}/session/end', [TelemedSessionController::class, 'end'])->middleware('role:doctor');
+    Route::post('telemed/appointments/{id}/session/start', [TelemedSessionController::class, 'start'])->middleware(['role:doctor', 'throttle:20,1']);
+    Route::post('telemed/appointments/{id}/session/end', [TelemedSessionController::class, 'end'])->middleware(['role:doctor', 'throttle:20,1']);
 });
 
 // ==========================================
@@ -224,27 +242,27 @@ Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(fu
     Route::get('departments', [PatientDepartmentController::class, 'index']);
 
     Route::get('appointments', [PatientAppointmentController::class, 'index']);
-    Route::post('appointments', [PatientAppointmentController::class, 'store']);
+    Route::post('appointments', [PatientAppointmentController::class, 'store'])->middleware('throttle:20,1');
     Route::get('appointments/{id}', [PatientAppointmentController::class, 'show']);
     Route::put('appointments/{id}', [PatientAppointmentController::class, 'update']);
     Route::delete('appointments/{id}', [PatientAppointmentController::class, 'destroy']);
-    Route::post('appointments/{id}/cancel', [PatientAppointmentController::class, 'cancel']);
-    Route::post('appointments/{id}/reschedule', [PatientAppointmentController::class, 'reschedule']);
+    Route::post('appointments/{id}/cancel', [PatientAppointmentController::class, 'cancel'])->middleware('throttle:20,1');
+    Route::post('appointments/{id}/reschedule', [PatientAppointmentController::class, 'reschedule'])->middleware('throttle:20,1');
     Route::get('appointments/{id}/queue-status', [PatientQueueController::class, 'appointmentStatus']);
 
     Route::get('slots', [SlotController::class, 'index']);
-    Route::post('slots/{slot}/hold', [SlotController::class, 'hold']);
-    Route::post('slots/{slot}/confirm', [SlotController::class, 'confirm']);
+    Route::post('slots/{slot}/hold', [SlotController::class, 'hold'])->middleware('throttle:20,1');
+    Route::post('slots/{slot}/confirm', [SlotController::class, 'confirm'])->middleware('throttle:20,1');
 
     Route::get('teleconsultations', [PatientTeleconsultationController::class, 'index']);
     Route::get('ehr', [PatientEhrController::class, 'index']);
 
     Route::get('invoices', [PatientBillingController::class, 'invoices']);
     Route::get('invoices/{id}', [PatientBillingController::class, 'show']);
-    Route::post('payments', [PatientBillingController::class, 'pay']);
+    Route::post('payments', [PatientBillingController::class, 'pay'])->middleware('throttle:10,1');
 
     Route::get('feedback', [PatientFeedbackController::class, 'index']);
-    Route::post('feedback', [PatientFeedbackController::class, 'store']);
+    Route::post('feedback', [PatientFeedbackController::class, 'store'])->middleware('throttle:10,1');
 
     Route::get('notifications', [PatientNotificationController::class, 'index']);
 
@@ -264,34 +282,34 @@ Route::middleware(['auth:sanctum', 'role:receptionist'])->prefix('receptionist')
     Route::get('dashboard/stats', [ReceptionistDashboardController::class, 'stats']);
 
     Route::get('patients', [ReceptionistPatientController::class, 'index']);
-    Route::post('patients', [ReceptionistPatientController::class, 'store']);
+    Route::post('patients', [ReceptionistPatientController::class, 'store'])->middleware('throttle:30,1');
     Route::post('patients/generate-random', [ReceptionistPatientController::class, 'generateRandom']);
     Route::get('patients/{id}', [ReceptionistPatientController::class, 'show']);
     Route::put('patients/{id}', [ReceptionistPatientController::class, 'update']);
     Route::delete('patients/{id}', [ReceptionistPatientController::class, 'destroy']);
 
     Route::get('appointments', [ReceptionistAppointmentController::class, 'index']);
-    Route::post('appointments', [ReceptionistAppointmentController::class, 'store']);
+    Route::post('appointments', [ReceptionistAppointmentController::class, 'store'])->middleware('throttle:30,1');
     Route::get('appointments/{id}', [ReceptionistAppointmentController::class, 'show']);
     Route::put('appointments/{id}', [ReceptionistAppointmentController::class, 'update']);
-    Route::post('appointments/{id}/confirm', [ReceptionistAppointmentController::class, 'confirm']);
+    Route::post('appointments/{id}/confirm', [ReceptionistAppointmentController::class, 'confirm'])->middleware('throttle:30,1');
     Route::delete('appointments/{id}', [ReceptionistAppointmentController::class, 'destroy']);
 
     Route::get('queue', [ReceptionistQueueController::class, 'index']);
-    Route::post('queue/check-in', [ReceptionistQueueController::class, 'checkIn']);
-    Route::post('queue/call-next', [ReceptionistQueueController::class, 'callNext']);
-    Route::post('queue/{id}/skip', [ReceptionistQueueController::class, 'skip']);
-    Route::post('queue/{id}/requeue', [ReceptionistQueueController::class, 'requeue']);
-    Route::post('queue/{id}/no-show', [ReceptionistQueueController::class, 'markNoShow']);
-    Route::post('queue/clear', [ReceptionistQueueController::class, 'clear']);
+    Route::post('queue/check-in', [ReceptionistQueueController::class, 'checkIn'])->middleware('throttle:60,1');
+    Route::post('queue/call-next', [ReceptionistQueueController::class, 'callNext'])->middleware('throttle:60,1');
+    Route::post('queue/{id}/skip', [ReceptionistQueueController::class, 'skip'])->middleware('throttle:60,1');
+    Route::post('queue/{id}/requeue', [ReceptionistQueueController::class, 'requeue'])->middleware('throttle:60,1');
+    Route::post('queue/{id}/no-show', [ReceptionistQueueController::class, 'markNoShow'])->middleware('throttle:60,1');
+    Route::post('queue/clear', [ReceptionistQueueController::class, 'clear'])->middleware('throttle:60,1');
     Route::put('queue/{id}/status', [ReceptionistQueueController::class, 'updateStatus']);
 
     Route::get('invoices', [ReceptionistInvoiceController::class, 'index']);
-    Route::post('invoices', [ReceptionistInvoiceController::class, 'store']);
+    Route::post('invoices', [ReceptionistInvoiceController::class, 'store'])->middleware('throttle:30,1');
     Route::get('invoices/{id}', [ReceptionistInvoiceController::class, 'show']);
-    Route::put('invoices/{id}', [ReceptionistInvoiceController::class, 'update']);
-    Route::delete('invoices/{id}', [ReceptionistInvoiceController::class, 'destroy']);
-    Route::post('payments', [ReceptionistPaymentController::class, 'store']);
+    Route::put('invoices/{id}', [ReceptionistInvoiceController::class, 'update'])->middleware('throttle:30,1');
+    Route::delete('invoices/{id}', [ReceptionistInvoiceController::class, 'destroy'])->middleware('throttle:30,1');
+    Route::post('payments', [ReceptionistPaymentController::class, 'store'])->middleware('throttle:30,1');
 
     Route::get('departments', [ReceptionistDepartmentController::class, 'index']);
     Route::get('doctors', [ReceptionistDoctorController::class, 'index']);
@@ -394,13 +412,13 @@ Route::middleware('auth:sanctum')->group(function () {
 // AI-Powered Routes (GPT-5.2-Codex)
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('ai')->group(function () {
-        Route::post('chat', [AIController::class, 'chat']);
-        Route::post('medical/analysis', [AIController::class, 'medicalAnalysis']);
-        Route::post('medical/drug-interactions', [AIController::class, 'drugInteractions']);
-        Route::post('medical/diagnostics', [AIController::class, 'diagnostics']);
-        Route::post('medical/prescription-review', [AIController::class, 'prescriptionReview']);
-        Route::post('patient/insights', [AIController::class, 'patientInsights']);
-        Route::post('documents/generate', [AIController::class, 'generateDocument']);
+        Route::post('chat', [AIController::class, 'chat'])->middleware('throttle:10,1');
+        Route::post('medical/analysis', [AIController::class, 'medicalAnalysis'])->middleware('throttle:10,1');
+        Route::post('medical/drug-interactions', [AIController::class, 'drugInteractions'])->middleware('throttle:10,1');
+        Route::post('medical/diagnostics', [AIController::class, 'diagnostics'])->middleware('throttle:10,1');
+        Route::post('medical/prescription-review', [AIController::class, 'prescriptionReview'])->middleware('throttle:10,1');
+        Route::post('patient/insights', [AIController::class, 'patientInsights'])->middleware('throttle:10,1');
+        Route::post('documents/generate', [AIController::class, 'generateDocument'])->middleware('throttle:10,1');
         Route::get('status', [AIController::class, 'getStatus']);
         Route::get('features', [AIController::class, 'getFeatures']);
     });

@@ -137,6 +137,7 @@ class DatabaseSeeder extends Seeder
             \Database\Seeders\DepartmentSeeder::class,
             \Database\Seeders\AddSupplierSeeder::class,
             \Database\Seeders\AddMedicineInventorySeeder::class,
+            \Database\Seeders\DemoDataSeeder::class,
         ]);
 
         $departmentMap = Department::query()

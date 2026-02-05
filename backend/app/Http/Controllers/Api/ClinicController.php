@@ -114,6 +114,14 @@ class ClinicController extends Controller
         while ($dt < $end) {
             $time = $dt->format('H:i');
 
+            if (CarbonImmutable::parse($date)->isSameDay(now())) {
+                $slotStart = CarbonImmutable::parse($date . ' ' . $time);
+                if ($slotStart->isPast()) {
+                    $dt = $dt->add($interval);
+                    continue;
+                }
+            }
+
             if ($totalDoctors === 0) {
                 $availableCount = 0;
             } else {

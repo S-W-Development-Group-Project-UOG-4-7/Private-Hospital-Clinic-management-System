@@ -12,17 +12,13 @@ import {
   Pill,
   Share2,
   Users,
-  Video,
   X,
-  Brain,
 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import { doctorApi } from '../../api/doctor';
 import { AppointmentTable } from '../../components/doctor/AppointmentTable';
 import { DiagnosisForm } from '../../components/doctor/DiagnosisForm';
 import { PrescriptionForm } from '../../components/doctor/PrescriptionForm';
-import AIInsightsPanel from '../../components/common/AIInsightsPanel';
-import { isAIEnabled } from '../../config/ai';
 import ClinicReferralForm from '../../components/doctor/ClinicReferralForm';
 import PatientLookup from '../../components/doctor/PatientLookup';
 import type {
@@ -46,7 +42,7 @@ import type {
 } from '../../types/doctor';
 import type { AuthUser } from '../../types/auth';
 
-type SectionKey = 'overview' | 'queue' | 'consultation' | 'prescriptions' | 'labs' | 'referrals' | 'ai_insights' | 'daily_summary';
+type SectionKey = 'overview' | 'queue' | 'consultation' | 'prescriptions' | 'labs' | 'referrals' | 'daily_summary';
 
 const safeParseJson = (value: string | null) => {
   if (!value) return null;
@@ -66,7 +62,6 @@ const DoctorDashboardView: React.FC = () => {
   const [active, setActive] = useState<SectionKey>('overview');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPatientForAI, setSelectedPatientForAI] = useState<string | null>(null);
 
   const initialAppointmentFilters = useMemo(
     () => ({
@@ -82,12 +77,9 @@ const DoctorDashboardView: React.FC = () => {
   const [appointmentFilters] = useState(initialAppointmentFilters);
 
   const [selectedAppointment, setSelectedAppointment] = useState<DoctorAppointment | null>(null);
-  const [consultNotes, setConsultNotes] = useState('');
   const [consultationStarting, setConsultationStarting] = useState(false);
   const [consultationEnding, setConsultationEnding] = useState(false);
   const [currentPatientInConsultation, setCurrentPatientInConsultation] = useState<DoctorAppointment | null>(null);
-  const [teleconsultationMeetingUrl, setTeleconsultationMeetingUrl] = useState<string | null>(null);
-  const [teleconsultationId, setTeleconsultationId] = useState<number | null>(null);
   const [consultationLoading, setConsultationLoading] = useState(false);
   const [consultationSaving, setConsultationSaving] = useState(false);
   const [consultationForm, setConsultationForm] = useState({
@@ -139,22 +131,6 @@ const DoctorDashboardView: React.FC = () => {
     return local.toISOString().slice(0, 10);
   });
   const [queueLoading, setQueueLoading] = useState(false);
-  const [consultationTypeFilter, setConsultationTypeFilter] = useState<'all' | 'online' | 'physical'>('all');
-  const filteredQueueEntries = useMemo(() => {
-    if (consultationTypeFilter === 'online') {
-      return queue.filter((e) => {
-        const t = e?.appointment?.type?.toLowerCase() || '';
-        return t === 'telemedicine' || t === 'online' || t === 'video';
-      });
-    }
-    if (consultationTypeFilter === 'physical') {
-      return queue.filter((e) => {
-        const t = e?.appointment?.type?.toLowerCase() || '';
-        return t !== 'telemedicine' && t !== 'online' && t !== 'video';
-      });
-    }
-    return queue;
-  }, [consultationTypeFilter, queue]);
   const queueEntries = queue;
 
   // UI state
@@ -677,38 +653,6 @@ const DoctorDashboardView: React.FC = () => {
     }
   };
 
-  const startTeleconsultation = async () => {
-    if (!selectedAppointment) return;
-    setConsultationStarting(true);
-    setError(null);
-    try {
-      const data = await doctorApi.teleconsultations.start({ appointment_id: selectedAppointment.id });
-      setTeleconsultationId(data.id);
-      setTeleconsultationMeetingUrl(data.meeting_url);
-      toast.success('Teleconsultation started');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to start teleconsultation');
-    } finally {
-      setConsultationStarting(false);
-    }
-  };
-
-  const endTeleconsultation = async () => {
-    if (!teleconsultationId) return;
-    setConsultationEnding(true);
-    setError(null);
-    try {
-      await doctorApi.teleconsultations.end(teleconsultationId, { notes: consultNotes });
-      setTeleconsultationId(null);
-      setTeleconsultationMeetingUrl(null);
-      toast.success('Teleconsultation ended');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to end teleconsultation');
-    } finally {
-      setConsultationEnding(false);
-    }
-  };
-
   const loadLabResults = async () => {
     const pid = Number(labsPatientId);
     if (!Number.isFinite(pid) || pid <= 0) {
@@ -1049,7 +993,6 @@ const DoctorDashboardView: React.FC = () => {
               ['prescriptions', 'Prescriptions', Pill],
               ['labs', 'Lab Orders', FlaskConical],
               ['referrals', 'Referrals', Share2],
-              ...(isAIEnabled() ? [['ai_insights', 'AI Insights', Brain]] : []),
             ] as Array<[SectionKey, string, any]>
           ).map(([key, label, Icon]) => (
             <button
@@ -1187,7 +1130,7 @@ const DoctorDashboardView: React.FC = () => {
                     className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8"
                   >
                     <div className="mb-6">
-                      <Video className="w-12 h-12 text-teal-500 mb-4" />
+                      <Users className="w-12 h-12 text-teal-500 mb-4" />
                       <h2 className="text-xl font-bold text-gray-800 mb-3">Consultation</h2>
                       <p className="text-gray-600">Start and manage consultations</p>
                     </div>
@@ -1260,30 +1203,6 @@ const DoctorDashboardView: React.FC = () => {
                     </div>
                   </motion.div>
 
-                  {isAIEnabled() && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 50 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.6 }}
-                      className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 p-8 border border-blue-200"
-                    >
-                      <div className="mb-6">
-                        <Brain className="w-12 h-12 text-blue-600 mb-4" />
-                        <h2 className="text-xl font-bold text-gray-800 mb-3">AI Medical Insights</h2>
-                        <p className="text-gray-600">GPT-5.2-Codex powered analysis</p>
-                        <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span>AI Enabled</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setActive('ai_insights')}
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-full transition duration-300 w-full"
-                      >
-                        Explore AI
-                      </button>
-                    </motion.div>
-                  )}
                 </div>
 
                 <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1369,17 +1288,11 @@ const DoctorDashboardView: React.FC = () => {
                     </div>
 
                     {/* Consultation Type Breakdown */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                       <div className="bg-green-50 rounded-lg p-4 border border-green-200">
                         <div className="flex items-center justify-between">
                           <span className="text-green-700 font-medium">In-Person Consultations</span>
                           <span className="text-2xl font-bold text-green-600">{dailySummary.stats.in_person_consultations}</span>
-                        </div>
-                      </div>
-                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                        <div className="flex items-center justify-between">
-                          <span className="text-blue-700 font-medium">Telemedicine Consultations</span>
-                          <span className="text-2xl font-bold text-blue-600">{dailySummary.stats.telemedicine_consultations}</span>
                         </div>
                       </div>
                     </div>
@@ -1565,7 +1478,7 @@ const DoctorDashboardView: React.FC = () => {
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">Consultation</h2>
-                    <p className="text-gray-600 text-sm">Start teleconsultations, record notes, add diagnosis & prescription</p>
+                    <p className="text-gray-600 text-sm">Record notes, add diagnosis & prescription</p>
                   </div>
                 </div>
 
@@ -1590,7 +1503,7 @@ const DoctorDashboardView: React.FC = () => {
                         <div>
                           <div className="text-sm text-gray-600">Type</div>
                           <div className="font-semibold text-gray-900">
-                            {selectedAppointment.type === 'telemedicine' ? 'Telemedicine' : 'In Person'}
+                            In Person
                           </div>
                         </div>
                       </div>
@@ -1629,42 +1542,6 @@ const DoctorDashboardView: React.FC = () => {
                           Add Diagnosis
                         </button>
                       </div>
-
-                      {selectedAppointment.type === 'telemedicine' && (
-                        <div className="mt-6">
-                          <div className="flex items-center justify-between flex-wrap gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-gray-700">Teleconsultation</div>
-                              <div className="text-sm text-gray-600">Start a secure video/audio session</div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={startTeleconsultation}
-                                disabled={consultationStarting}
-                                className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
-                              >
-                                {consultationStarting ? 'Starting...' : 'Start'}
-                              </button>
-                              <button
-                                onClick={endTeleconsultation}
-                                disabled={!teleconsultationId || consultationEnding}
-                                className="bg-gray-600 hover:bg-gray-700 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-full text-xs transition duration-300"
-                              >
-                                {consultationEnding ? 'Ending...' : 'End'}
-                              </button>
-                            </div>
-                          </div>
-
-                          {teleconsultationMeetingUrl && (
-                            <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                              <div className="text-sm text-gray-600">Meeting URL</div>
-                              <a className="text-teal-700 hover:text-teal-800 break-all" href={teleconsultationMeetingUrl} target="_blank" rel="noreferrer">
-                                {teleconsultationMeetingUrl}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
 
                       <div className="mt-6 space-y-4">
                         <div className="flex flex-wrap items-center gap-2">
@@ -2202,7 +2079,7 @@ const DoctorDashboardView: React.FC = () => {
                     />
                     <button
                       onClick={callNextPatient}
-                      disabled={callingNext || filteredQueueEntries.filter((e: any) => e.status === 'waiting').length === 0}
+                      disabled={callingNext || queueEntries.filter((e: any) => e.status === 'waiting').length === 0}
                       className="bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                     >
                       {callingNext ? 'Calling...' : 'Call Next Patient'}
@@ -2217,66 +2094,10 @@ const DoctorDashboardView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Consultation Type Selection */}
-                <div className="bg-white rounded-lg shadow-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Consultation Type</h3>
-                  <div className="flex flex-wrap gap-4">
-                    <button
-                      onClick={() => setConsultationTypeFilter('online')}
-                      className={`flex-1 min-w-[200px] flex items-center gap-3 p-4 rounded-lg border-2 transition ${
-                        consultationTypeFilter === 'online' 
-                          ? 'border-teal-600 bg-teal-100 ring-2 ring-teal-400' 
-                          : 'border-teal-500 bg-teal-50 hover:bg-teal-100'
-                      }`}
-                    >
-                      <Video className="w-8 h-8 text-teal-600" />
-                      <div className="text-left">
-                        <div className="font-semibold text-teal-700">Online Consultation</div>
-                        <div className="text-sm text-teal-600">Telemedicine / Video Call</div>
-                        <div className="text-xs text-teal-500 mt-1">
-                          {queueEntries.filter((e: any) => {
-                            const t = e.appointment?.type?.toLowerCase() || '';
-                            return t === 'telemedicine' || t === 'online' || t === 'video';
-                          }).length} patients
-                        </div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => setConsultationTypeFilter('physical')}
-                      className={`flex-1 min-w-[200px] flex items-center gap-3 p-4 rounded-lg border-2 transition ${
-                        consultationTypeFilter === 'physical' 
-                          ? 'border-blue-600 bg-blue-100 ring-2 ring-blue-400' 
-                          : 'border-blue-500 bg-blue-50 hover:bg-blue-100'
-                      }`}
-                    >
-                      <Users className="w-8 h-8 text-blue-600" />
-                      <div className="text-left">
-                        <div className="font-semibold text-blue-700">Physical Consultation</div>
-                        <div className="text-sm text-blue-600">In-Person Visit</div>
-                        <div className="text-xs text-blue-500 mt-1">
-                          {queueEntries.filter((e: any) => {
-                            const t = e.appointment?.type?.toLowerCase() || '';
-                            return t !== 'telemedicine' && t !== 'online' && t !== 'video';
-                          }).length} patients
-                        </div>
-                      </div>
-                    </button>
-                    {consultationTypeFilter !== 'all' && (
-                      <button
-                        onClick={() => setConsultationTypeFilter('all')}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-300 bg-gray-50 hover:bg-gray-100 transition text-gray-600"
-                      >
-                        <X className="w-4 h-4" />
-                        <span className="text-sm">Show All</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
                 {/* Current Patient Card */}
                 {(() => {
-                  const currentPatient = filteredQueueEntries.find((e: any) => e.status === 'in_consultation' || e.status === 'in_progress');
-                  const nextPatient = filteredQueueEntries.find((e: any) => e.status === 'waiting');
+                  const currentPatient = queueEntries.find((e: any) => e.status === 'in_consultation' || e.status === 'in_progress');
+                  const nextPatient = queueEntries.find((e: any) => e.status === 'waiting');
                   
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2392,15 +2213,15 @@ const DoctorDashboardView: React.FC = () => {
                 {/* Queue Stats */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white p-4 rounded-lg shadow text-center">
-                    <p className="text-3xl font-bold text-yellow-600">{filteredQueueEntries.filter((e: any) => e.status === 'waiting').length}</p>
+                    <p className="text-3xl font-bold text-yellow-600">{queueEntries.filter((e: any) => e.status === 'waiting').length}</p>
                     <p className="text-sm text-gray-600">Waiting</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg shadow text-center">
-                    <p className="text-3xl font-bold text-teal-600">{filteredQueueEntries.filter((e: any) => e.status === 'in_consultation' || e.status === 'in_progress').length}</p>
+                    <p className="text-3xl font-bold text-teal-600">{queueEntries.filter((e: any) => e.status === 'in_consultation' || e.status === 'in_progress').length}</p>
                     <p className="text-sm text-gray-600">In Consultation</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg shadow text-center">
-                    <p className="text-3xl font-bold text-green-600">{filteredQueueEntries.filter((e: any) => e.status === 'completed').length}</p>
+                    <p className="text-3xl font-bold text-green-600">{queueEntries.filter((e: any) => e.status === 'completed').length}</p>
                     <p className="text-sm text-gray-600">Completed Today</p>
                   </div>
                 </div>
@@ -2410,11 +2231,8 @@ const DoctorDashboardView: React.FC = () => {
                 ) : (
                   <div className="bg-white rounded-lg shadow-lg overflow-hidden">
                     <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
-                      <h3 className="font-semibold text-gray-700">
-                        {consultationTypeFilter === 'online' ? 'Online Consultation Queue' : 
-                         consultationTypeFilter === 'physical' ? 'Physical Consultation Queue' : 'All Patients Queue'}
-                      </h3>
-                      <span className="text-sm text-gray-500">{filteredQueueEntries.filter((e: any) => e.status === 'waiting' || e.status === 'in_consultation' || e.status === 'in_progress').length} patients</span>
+                      <h3 className="font-semibold text-gray-700">Consultation Queue</h3>
+                      <span className="text-sm text-gray-500">{queueEntries.filter((e: any) => e.status === 'waiting' || e.status === 'in_consultation' || e.status === 'in_progress').length} patients</span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -2429,16 +2247,14 @@ const DoctorDashboardView: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {filteredQueueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').length === 0 ? (
+                          {queueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').length === 0 ? (
                             <tr>
                               <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
-                                {consultationTypeFilter === 'all' 
-                                  ? 'No patients in queue.' 
-                                  : `No patients for ${consultationTypeFilter === 'online' ? 'online' : 'physical'} consultation.`}
+                                No patients in queue.
                               </td>
                             </tr>
                           ) : (
-                            filteredQueueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').map((entry: any, index: number) => (
+                            queueEntries.filter((e: any) => e.status !== 'completed' && e.status !== 'no_show' && e.status !== 'cancelled').map((entry: any, index: number) => (
                               <tr key={entry.id} className={`hover:bg-gray-50 ${entry.status === 'in_consultation' || entry.status === 'in_progress' ? 'bg-teal-50' : index === 0 && entry.status === 'waiting' ? 'bg-yellow-50' : ''}`}>
                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
                                   {entry.queue_number ?? '-'}
@@ -2449,7 +2265,7 @@ const DoctorDashboardView: React.FC = () => {
                                 <td className="px-6 py-4 text-sm text-gray-600">{getPatientName(entry)}</td>
                                 <td className="px-6 py-4 text-sm text-gray-600">
                                   {entry.appointment ? (
-                                    <span>{entry.appointment.appointment_time} - {entry.appointment.type}</span>
+                                    <span>{entry.appointment.appointment_time}</span>
                                   ) : '-'}
                                 </td>
                                 <td className="px-6 py-4">
@@ -2714,70 +2530,6 @@ const DoctorDashboardView: React.FC = () => {
               </div>
             )}
 
-            {active === 'ai_insights' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">AI Medical Insights</h2>
-                    <p className="text-gray-600 text-sm">GPT-5.2-Codex powered medical analysis and decision support</p>
-                  </div>
-                  <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-2 rounded-full text-sm">
-                    <Brain className="w-4 h-4" />
-                    <span>AI Enabled</span>
-                  </div>
-                </div>
-
-                <AIInsightsPanel 
-                  context="doctor" 
-                  patientId={selectedPatientForAI || undefined} 
-                  data={{ appointments, prescriptions, labData }}
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Patient for AI Analysis</h3>
-                    <select
-                      value={selectedPatientForAI || ''}
-                      onChange={(e) => setSelectedPatientForAI(e.target.value || null)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select a patient...</option>
-                      {appointments.map((appointment) => (
-                        <option key={appointment.id} value={appointment.patient_id.toString()}>
-                          Patient ID: {appointment.patient_id} - {appointment.appointment_date}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">AI Features Available</h3>
-                    <ul className="space-y-2 text-sm text-gray-700">
-                      <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Medical Insights & Analysis</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Drug Interaction Checking</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Clinical Decision Support</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Patient Analytics</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>AI Medical Chat Assistant</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

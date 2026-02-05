@@ -33,7 +33,6 @@ export const AppointmentTable: React.FC<AppointmentTableProps> = ({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
@@ -41,7 +40,7 @@ export const AppointmentTable: React.FC<AppointmentTableProps> = ({
           <tbody className="divide-y divide-gray-200">
             {appointments.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
                   No appointments found.
                 </td>
               </tr>
@@ -58,7 +57,6 @@ export const AppointmentTable: React.FC<AppointmentTableProps> = ({
                     <td className="px-6 py-4 text-sm text-gray-900">{appt.appointment_date}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{(appt.appointment_time || '').slice(0, 5)}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{patientName}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{appt.type === 'telemedicine' ? 'Telemedicine' : 'In Person'}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`px-2 py-1 rounded text-xs ${

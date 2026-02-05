@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class Appointment extends Model
 {
@@ -144,5 +146,74 @@ class Appointment extends Model
             'IN_PROGRESS', 'IN_CONSULTATION' => self::STATUS_IN_PROGRESS,
             default => self::STATUS_CONFIRMED,
         };
+    }
+
+    public static function nextNumberForDate(string $date): int
+    {
+        $connection = DB::connection();
+        if ($connection->getDriverName() === 'pgsql') {
+            $row = $connection->selectOne(
+                "INSERT INTO appointment_counters (appointment_date, last_number, created_at, updated_at)
+                 VALUES (?, 1, NOW(), NOW())
+                 ON CONFLICT (appointment_date)
+                 DO UPDATE SET last_number = appointment_counters.last_number + 1, updated_at = NOW()
+                 RETURNING last_number",
+                [$date]
+            );
+
+            if ($row && isset($row->last_number)) {
+                return (int) $row->last_number;
+            }
+        }
+
+        self::acquireDateLock($date);
+
+        $last = self::query()
+            ->whereDate('appointment_date', $date)
+            ->orderByDesc(DB::raw('appointment_number::int'))
+            ->lockForUpdate()
+            ->value('appointment_number');
+
+        return ((int) ($last ?? 0)) + 1;
+    }
+
+    private static function acquireDateLock(string $date): void
+    {
+        $connection = DB::connection();
+        if ($connection->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        $key = crc32('appointment_number:' . $date);
+        $connection->select('select pg_advisory_xact_lock(?)', [$key]);
+    }
+
+    public static function createWithNumberForDate(string $date, array $attributes, int $attempts = 3): self
+    {
+        $lastError = null;
+        $inTransaction = DB::connection()->getPdo()->inTransaction();
+
+        for ($i = 0; $i < $attempts; $i++) {
+            $attributes['appointment_number'] = self::nextNumberForDate($date);
+
+            if ($inTransaction) {
+                // Savepoint AFTER counter increment so retries don't reuse the same number.
+                DB::statement('SAVEPOINT appointment_number');
+            }
+
+            try {
+                return self::create($attributes);
+            } catch (QueryException $e) {
+                $lastError = $e;
+                if ($inTransaction) {
+                    DB::statement('ROLLBACK TO SAVEPOINT appointment_number');
+                }
+                if (($e->errorInfo[0] ?? null) !== '23505') {
+                    throw $e;
+                }
+            }
+        }
+
+        throw $lastError ?: new \RuntimeException('Failed to generate unique appointment number.');
     }
 }

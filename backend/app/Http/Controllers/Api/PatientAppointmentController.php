@@ -76,6 +76,10 @@ class PatientAppointmentController extends Controller
         $scheduledStart = CarbonImmutable::parse($validated['appointment_date'] . ' ' . $validated['appointment_time']);
         $scheduledEnd = $scheduledStart->addMinutes(30);
 
+        if ($scheduledStart->isPast()) {
+            return response()->json(['message' => 'Cannot book a time slot in the past.'], 422);
+        }
+
         $doctorId = $validated['doctor_id'] ?? null;
         $departmentId = $validated['department_id'] ?? null;
 
@@ -216,7 +220,7 @@ class PatientAppointmentController extends Controller
 
             $type = $visitMode === Appointment::VISIT_MODE_ONLINE ? 'telemedicine' : 'in_person';
 
-            $created = Appointment::create([
+            $created = Appointment::createWithNumberForDate($validated['appointment_date'], [
                 'patient_id' => $user->id,
                 'clinic_id' => $clinicId ?? null,
                 'doctor_id' => $selectedDoctorId,

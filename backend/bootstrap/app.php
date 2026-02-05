@@ -13,7 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->append(HandleCors::class);
+        $middleware->append([
+            \App\Http\Middleware\SanitizeInput::class,
+            \App\Http\Middleware\RequestContext::class,
+            HandleCors::class,
+            \App\Http\Middleware\SecureHeaders::class,
+        ]);
 
         // --- CORRECTED SECTION ---
         $middleware->alias([

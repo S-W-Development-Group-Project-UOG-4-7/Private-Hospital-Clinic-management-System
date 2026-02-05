@@ -28,21 +28,30 @@ class AdminController extends Controller
 
     public function getUsers()
     {
-        // FIX: Use 'roles' (Spatie relationship) instead of 'role' (Scope conflict)
-        $users = User::with(['roles', 'department'])->latest()->get()->map(function ($user) {
+        $query = User::with(['roles', 'department'])->latest();
+        $perPage = request()->integer('per_page');
+        $paginate = request()->boolean('paginate', false) || $perPage;
+
+        $transform = function ($user) {
             return [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
                 'username' => $user->username,
                 'email' => $user->email,
-                // Get the first role name from the collection
                 'role' => $user->roles->first()->name ?? 'patient',
                 'department' => $user->department->name ?? '-',
                 'is_active' => $user->is_active,
                 'created_at' => $user->created_at->format('Y-m-d'),
             ];
-        });
+        };
 
+        if ($paginate) {
+            $users = $query->paginate($perPage ?: 25);
+            $users->getCollection()->transform($transform);
+            return response()->json($users);
+        }
+
+        $users = $query->get()->map($transform);
         return response()->json($users);
     }
 
@@ -343,11 +352,12 @@ class AdminController extends Controller
 
     public function getAppointments()
     {
-        $appointments = Appointment::with(['patient', 'doctor', 'department'])
-            ->orderBy('appointment_date', 'desc')
-            ->get();
+        $query = Appointment::with(['patient', 'doctor', 'department'])
+            ->orderBy('appointment_date', 'desc');
+        $perPage = request()->integer('per_page');
+        $paginate = request()->boolean('paginate', false) || $perPage;
 
-        $formatted = $appointments->map(function($appt) {
+        $transform = function ($appt) {
             return [
                 'id' => $appt->id,
                 'patient_name' => $appt->patient ? ($appt->patient->first_name . ' ' . $appt->patient->last_name) : 'Unknown',
@@ -360,8 +370,15 @@ class AdminController extends Controller
                 'reason' => $appt->reason,
                 'notes' => $appt->notes
             ];
-        });
+        };
 
+        if ($paginate) {
+            $appointments = $query->paginate($perPage ?: 25);
+            $appointments->getCollection()->transform($transform);
+            return response()->json($appointments);
+        }
+
+        $formatted = $query->get()->map($transform);
         return response()->json($formatted);
     }
 

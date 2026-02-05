@@ -20,6 +20,7 @@ export interface RegisterPayload {
   email: string;
   password: string;
   role?: string;
+  claim_existing?: boolean;
 }
 
 // --- ERROR HELPER ---

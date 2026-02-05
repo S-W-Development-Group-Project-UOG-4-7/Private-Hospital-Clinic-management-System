@@ -111,7 +111,7 @@ const RegisterPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const registrationData: any = { ...form, role: 'patient' };
+      const registrationData: any = { ...form, role: 'patient', claim_existing: true };
       
       // Include guardian info if patient is under 18
       if (isUnder18) {

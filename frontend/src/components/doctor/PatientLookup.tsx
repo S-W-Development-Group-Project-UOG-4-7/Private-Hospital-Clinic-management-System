@@ -35,7 +35,9 @@ interface PatientRecord {
     state?: string;
     allergies?: string;
     medical_conditions?: string;
-    emergency_contact?: string;
+    emergency_contact_name?: string;
+    emergency_contact_phone?: string;
+    emergency_contact_relationship?: string;
   } | null;
   last_consultation?: {
     date: string;
@@ -408,13 +410,24 @@ const PatientLookup: React.FC<PatientLookupProps> = ({ open, onClose }) => {
                           <p className="text-yellow-800 text-sm mt-1">{patientRecord.patient_profile.medical_conditions}</p>
                         </div>
                       )}
-                      {patientRecord.patient_profile?.emergency_contact && (
+                      {(patientRecord.patient_profile?.emergency_contact_phone ||
+                        patientRecord.patient_profile?.emergency_contact_name) && (
                         <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                           <span className="text-sm font-semibold text-blue-700 flex items-center gap-1">
                             <Phone className="w-4 h-4" />
                             Emergency Contact:
                           </span>
-                          <p className="text-blue-800 text-sm mt-1">{patientRecord.patient_profile.emergency_contact}</p>
+                          <div className="text-blue-800 text-sm mt-1 space-y-1">
+                            {patientRecord.patient_profile?.emergency_contact_name && (
+                              <p>{patientRecord.patient_profile.emergency_contact_name}</p>
+                            )}
+                            {patientRecord.patient_profile?.emergency_contact_phone && (
+                              <p>{patientRecord.patient_profile.emergency_contact_phone}</p>
+                            )}
+                            {patientRecord.patient_profile?.emergency_contact_relationship && (
+                              <p className="text-blue-700">{patientRecord.patient_profile.emergency_contact_relationship}</p>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

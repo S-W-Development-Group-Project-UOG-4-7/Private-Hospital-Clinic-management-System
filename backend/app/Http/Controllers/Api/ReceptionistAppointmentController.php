@@ -165,6 +165,12 @@ class ReceptionistAppointmentController extends Controller
             $scheduledStart = CarbonImmutable::parse($appointmentDate . ' ' . $appointmentTime);
             $scheduledEnd = $scheduledStart->addMinutes(30);
 
+            if ($scheduledStart->isPast()) {
+                return response()->json([
+                    'message' => 'Cannot book a time slot in the past.',
+                ], 422);
+            }
+
             if (in_array($status, Appointment::blockingStatuses(), true)) {
                 $clinicName = 'OPD';
                 $clinicId = \App\Models\Clinic::query()
@@ -276,21 +282,12 @@ class ReceptionistAppointmentController extends Controller
             }
 
             // --- APPOINTMENT NUMBER LOCKING (Kept as is) ---
-            $lastAppointmentNumber = Appointment::query()
-                ->whereDate('appointment_date', $appointmentDate)
-                ->orderByDesc('appointment_number')
-                ->lockForUpdate()
-                ->value('appointment_number');
-
-            $nextAppointmentNumber = ((int) ($lastAppointmentNumber ?? 0)) + 1;
-
             // --- CREATE APPOINTMENT ---
-            $appointment = Appointment::create([
+            $appointment = Appointment::createWithNumberForDate($appointmentDate, [
                 'patient_id' => $patientId,
                 'doctor_id' => $doctorId,
                 'department_id' => $departmentId,
                 'clinic' => 'OPD',
-                'appointment_number' => $nextAppointmentNumber,
                 'appointment_date' => $appointmentDate,
                 'appointment_time' => $appointmentTime,
                 'scheduled_start' => $scheduledStart,

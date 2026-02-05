@@ -54,13 +54,32 @@ Mr. Janith
 
 for their continuous guidance and support during this project.
 We also thank all lecturers and staff at LNBTI for providing the academic foundation required to complete this work successfully.
-<<<<<<< HEAD
-Finally, we appreciate the encouragement and support from our families, friends, and everyone who contributed to this project.
-=======
 Finally, we appreciate the encouragement and support from our families, friends, and everyone who contributed to this project.
 
-Nilusha's Testing Commitment
->>>>>>> c137ee055ec83074b9ef6e1c8209415579f6e9ce
+## Setup
+1. Backend:
+   - `cd backend`
+   - `composer install`
+   - `php artisan key:generate`
+   - `php artisan migrate`
+   - `php artisan db:seed`
+   - `php artisan permission:cache-reset`
+   - `php artisan serve`
+2. Frontend:
+   - `cd frontend`
+   - `npm install`
+   - `npm start`
+
+## Demo Credentials
+- Admin: `admin@mediclinic.com` / `admin123`
+- Doctor: `doctor@mediclinic.com` / `doctor123`
+- Receptionist: `receptionist@mediclinic.com` / `receptionist123`
+- Pharmacist: `pharmacist@mediclinic.com` / `pharmacist123`
+- Patient: `patient@mediclinic.com` / `patient123`
+
+## Testing
+- Backend: `cd backend && php artisan test`
+- Frontend: `cd frontend && npm test`
 
 **Scheduling Notes**
 - `visit_mode` indicates where the visit happens: `PHYSICAL` (in-person) or `ONLINE` (video).

@@ -511,7 +511,9 @@ export interface PatientRecord {
     state?: string;
     guardian_name?: string;
     guardian_phone?: string;
-    emergency_contact?: string;
+    emergency_contact_name?: string;
+    emergency_contact_phone?: string;
+    emergency_contact_relationship?: string;
     allergies?: string;
     medical_conditions?: string;
   } | null;

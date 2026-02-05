@@ -41,6 +41,11 @@ class SlotController extends Controller
             ->with(['doctor:id,first_name,last_name,department_id'])
             ->whereDate('date', $validated['date']);
 
+        // Prevent showing past slots for today
+        if (CarbonImmutable::parse($validated['date'])->isSameDay(now())) {
+            $query->whereRaw('(slots.date + slots.start_time) > ?', [now()->toDateTimeString()]);
+        }
+
         if (! empty($validated['doctor_id'])) {
             $query->where('doctor_id', (int) $validated['doctor_id']);
         }
@@ -144,6 +149,10 @@ class SlotController extends Controller
             $scheduledStart = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->start_time);
             $scheduledEnd = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->end_time);
 
+            if ($scheduledStart->isPast()) {
+                return response()->json(['message' => 'Selected time has already passed.'], 422);
+            }
+
             if (Appointment::hasOverlap((int) $slot->doctor_id, $scheduledStart, $scheduledEnd)) {
                 return response()->json(['message' => 'Selected doctor is not available at the chosen time.'], 409);
             }
@@ -204,6 +213,10 @@ class SlotController extends Controller
             $scheduledStart = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->start_time);
             $scheduledEnd = CarbonImmutable::parse($slot->date->format('Y-m-d') . ' ' . $slot->end_time);
 
+            if ($scheduledStart->isPast()) {
+                return response()->json(['message' => 'Selected time has already passed.'], 422);
+            }
+
             $alreadyBookedForDay = Appointment::query()
                 ->where('patient_id', $user->id)
                 ->whereDate('appointment_date', $slot->date->format('Y-m-d'))
@@ -220,7 +233,7 @@ class SlotController extends Controller
 
             $bookingChannel = $validated['booking_channel'] ?? Appointment::BOOKING_CHANNEL_PATIENT_PORTAL;
 
-            $appointment = Appointment::create([
+            $appointment = Appointment::createWithNumberForDate($slot->date->format('Y-m-d'), [
                 'patient_id' => $user->id,
                 'doctor_id' => $slot->doctor_id,
                 'department_id' => $doctor->department_id,

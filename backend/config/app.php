@@ -65,7 +65,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------
@@ -83,6 +83,21 @@ return [
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Environment Validation
+    |--------------------------------------------------------------------------
+    */
+
+    'required_env' => [
+        'APP_KEY',
+        'DB_CONNECTION',
+        'DB_DATABASE',
+        'DB_HOST',
+    ],
+
+    'env_validation_strict' => env('APP_ENV_STRICT', false),
 
     /*
     |--------------------------------------------------------------------------

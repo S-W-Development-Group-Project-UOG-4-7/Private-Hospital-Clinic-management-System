@@ -8,6 +8,7 @@ use App\Models\PatientProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -23,7 +24,7 @@ class AuthController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'email', 'max:255'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['nullable', 'string', Rule::in(['patient'])],
             'date_of_birth' => ['nullable', 'date'],
@@ -38,15 +39,109 @@ class AuthController extends Controller
             'guardian_email' => ['nullable', 'email', 'max:255'],
             'guardian_phone' => ['nullable', 'string', 'max:20'],
             'guardian_relationship' => ['nullable', 'string', 'max:100'],
+            'claim_existing' => ['nullable', 'boolean'],
         ]);
 
         // Public signup is patient-only
         $roleName = 'patient';
+        $claimExisting = (bool) $request->boolean('claim_existing');
 
         $fullName = trim($data['name']);
         $parts = preg_split('/\s+/', $fullName) ?: [];
         $firstName = $parts[0] ?? $fullName;
         $lastName = count($parts) > 1 ? trim(implode(' ', array_slice($parts, 1))) : 'Patient';
+
+        $existingPatient = $this->findPatientByPhone($data['phone'] ?? null);
+        if ($existingPatient) {
+            if (! $claimExisting) {
+                throw ValidationException::withMessages([
+                    'phone' => ['An account with this phone already exists. Please log in.'],
+                ]);
+            }
+
+            $existingEmail = (string) ($existingPatient->email ?? '');
+            $existingIsPlaceholder = str_ends_with($existingEmail, '@mediclinic.local');
+            if (! $existingIsPlaceholder && $existingEmail !== $data['email']) {
+                throw ValidationException::withMessages([
+                    'phone' => ['An account with this phone already exists. Please log in.'],
+                ]);
+            }
+
+            $emailTaken = User::where('email', $data['email'])
+                ->where('id', '!=', $existingPatient->id)
+                ->exists();
+            if ($emailTaken) {
+                throw ValidationException::withMessages([
+                    'email' => ['The email has already been taken.'],
+                ]);
+            }
+
+            $existingPatient->load('patientProfile');
+
+            $userUpdates = [
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+            ];
+
+            if (Schema::hasColumn('users', 'name') && empty((string) $existingPatient->name)) {
+                $userUpdates['name'] = $fullName;
+            }
+
+            if (array_key_exists('phone', $data)) {
+                $userUpdates['phone'] = $data['phone'];
+            }
+
+            if (empty((string) $existingPatient->first_name)) {
+                $userUpdates['first_name'] = $firstName;
+            }
+            if (empty((string) $existingPatient->last_name)) {
+                $userUpdates['last_name'] = $lastName ?: 'Patient';
+            }
+
+            $existingPatient->fill($userUpdates);
+            $existingPatient->save();
+
+            SpatieRole::findOrCreate($roleName, 'sanctum');
+            if (! $existingPatient->hasRole($roleName)) {
+                $existingPatient->assignRole($roleName);
+            }
+
+            $profile = $existingPatient->patientProfile;
+            PatientProfile::updateOrCreate(
+                ['user_id' => $existingPatient->id],
+                [
+                    'phone' => $data['phone'] ?? $profile?->phone,
+                    'date_of_birth' => $data['date_of_birth'] ?? $profile?->date_of_birth,
+                    'gender' => $data['gender'] ?? $profile?->gender,
+                    'address' => $data['address'] ?? $profile?->address,
+                    'blood_type' => $data['blood_type'] ?? $profile?->blood_type,
+                    'city' => $data['city'] ?? $profile?->city,
+                    'state' => $data['state'] ?? $profile?->state,
+                    'postal_code' => $data['postal_code'] ?? $profile?->postal_code,
+                    'guardian_name' => $data['guardian_name'] ?? $profile?->guardian_name,
+                    'guardian_email' => $data['guardian_email'] ?? $profile?->guardian_email,
+                    'guardian_phone' => $data['guardian_phone'] ?? $profile?->guardian_phone,
+                    'guardian_relationship' => $data['guardian_relationship'] ?? $profile?->guardian_relationship,
+                ]
+            );
+
+            $existingPatient->tokens()->delete();
+            $token = $existingPatient->createToken('auth_token')->plainTextToken;
+
+            Log::info('Account linked to existing patient record', ['id' => $existingPatient->id, 'email' => $existingPatient->email]);
+
+            return response()->json([
+                'message' => 'Account linked successfully.',
+                'token' => $token,
+                'user' => $this->formatUserData($existingPatient),
+            ], 200);
+        }
+
+        if (User::where('email', $data['email'])->exists()) {
+            throw ValidationException::withMessages([
+                'email' => ['The email has already been taken.'],
+            ]);
+        }
 
         $usernameBase = Str::slug($firstName . ' ' . $lastName, '');
         if ($usernameBase === '') {
@@ -196,5 +291,47 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $roleName, // This now returns a String (e.g., "admin"), not a number
         ];
+    }
+
+    private function findPatientByPhone(?string $phone): ?User
+    {
+        $phone = trim((string) $phone);
+        if ($phone === '') {
+            return null;
+        }
+
+        $normalized = preg_replace('/\D+/', '', $phone);
+        if (! $normalized || strlen($normalized) < 7) {
+            return null;
+        }
+
+        $driver = DB::connection()->getDriverName();
+        $patientId = null;
+
+        if (Schema::hasColumn('patient_profiles', 'phone')) {
+            $query = PatientProfile::query();
+            if ($driver === 'pgsql') {
+                $query->whereRaw("regexp_replace(phone, '\\\\D', '', 'g') = ?", [$normalized]);
+            } else {
+                $query->where('phone', $phone);
+            }
+            $patientId = $query->value('user_id');
+        }
+
+        if (! $patientId && Schema::hasColumn('users', 'phone')) {
+            $userQuery = User::query();
+            if ($driver === 'pgsql') {
+                $userQuery->whereRaw("regexp_replace(phone, '\\\\D', '', 'g') = ?", [$normalized]);
+            } else {
+                $userQuery->where('phone', $phone);
+            }
+            $patientId = $userQuery->value('id');
+        }
+
+        if (! $patientId) {
+            return null;
+        }
+
+        return User::role('patient')->where('id', $patientId)->first();
     }
 }

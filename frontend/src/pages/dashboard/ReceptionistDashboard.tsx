@@ -290,10 +290,25 @@ const ReceptionistDashboard: React.FC = () => {
   }, [appointmentsQueryDate]);
 
   const slotSummaries = useMemo(() => {
+    const date = appointmentForm.appointment_date;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const isPastSlot = (slot: ReceptionistSlot) => {
+      if (!date || date !== today) return false;
+      if (!slot.start_time) return false;
+      const parts = slot.start_time.split(':');
+      const hours = parseInt(parts[0] || '0', 10);
+      const minutes = parseInt(parts[1] || '0', 10);
+      const slotDate = new Date();
+      slotDate.setHours(hours, minutes, 0, 0);
+      return slotDate < new Date();
+    };
+
     return slotCalendar
+      .filter((slot) => !isPastSlot(slot))
       .slice()
       .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
-  }, [slotCalendar]);
+  }, [slotCalendar, appointmentForm.appointment_date]);
 
   const selectedSlot = useMemo(() => {
     if (!appointmentForm.slot_id) return null;

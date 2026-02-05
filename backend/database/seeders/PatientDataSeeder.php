@@ -42,7 +42,9 @@ class PatientDataSeeder extends Seeder
             'blood_type' => 'O+',
             'guardian_name' => 'Jane Doe',
             'guardian_phone' => '+1234567891',
-            'emergency_contact' => '+1234567891',
+            'emergency_contact_name' => 'Jane Doe',
+            'emergency_contact_phone' => '+1234567891',
+            'emergency_contact_relationship' => 'Spouse',
             'allergies' => 'Penicillin, Nuts',
             'medical_conditions' => 'Hypertension, Diabetes Type 2',
         ]);
@@ -226,7 +228,9 @@ class PatientDataSeeder extends Seeder
             'blood_type' => 'A+',
             'guardian_name' => null,
             'guardian_phone' => null,
-            'emergency_contact' => '+9876543211',
+            'emergency_contact_name' => 'Sam Johnson',
+            'emergency_contact_phone' => '+9876543211',
+            'emergency_contact_relationship' => 'Sibling',
             'allergies' => 'Shellfish',
             'medical_conditions' => 'Asthma',
         ]);
