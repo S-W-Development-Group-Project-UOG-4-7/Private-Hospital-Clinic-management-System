@@ -5,11 +5,23 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Services\ConsultationFeeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class PatientBillingController extends Controller
 {
+    public function consultationFee()
+    {
+        $service = new ConsultationFeeService();
+        $fee = $service->getFee();
+
+        return response()->json([
+            'amount' => $fee,
+            'required' => $fee > 0,
+        ]);
+    }
+
     public function invoices(Request $request)
     {
         $user = $request->user();

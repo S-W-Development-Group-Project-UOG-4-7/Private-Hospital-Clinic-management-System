@@ -4,6 +4,7 @@ import type {
   CreateFeedbackPayload,
   CreatePaymentPayload,
   CreatePaymentResponse,
+  ConsultationFeeResponse,
   PatientAppointmentsResponse,
   PatientAppointment,
   PatientInvoice,
@@ -236,6 +237,13 @@ export const patientApi = {
         headers: getAuthHeaders(),
       });
       return handleJson<PatientInvoicesResponse>(response);
+    },
+
+    consultationFee: async (): Promise<ConsultationFeeResponse> => {
+      const response = await fetch(API_ENDPOINTS.PATIENT_CONSULTATION_FEE, {
+        headers: getAuthHeaders(),
+      });
+      return handleJson<ConsultationFeeResponse>(response);
     },
 
     show: async (id: number): Promise<PatientInvoice> => {

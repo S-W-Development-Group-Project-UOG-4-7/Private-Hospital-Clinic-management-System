@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\QueueEntry;
+use App\Services\ConsultationFeeService;
 use App\Services\TelemedSessionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -42,6 +43,7 @@ class PatientAppointmentController extends Controller
             'visit_mode' => ['nullable', Rule::in([Appointment::VISIT_MODE_PHYSICAL, Appointment::VISIT_MODE_ONLINE])],
             'type' => ['nullable', Rule::in(['in_person', 'telemedicine'])],
             'reason' => ['nullable', 'string', 'max:500'],
+            'payment_method' => ['nullable', 'string', 'max:50'],
         ]);
 
         // Determine effective clinic
@@ -219,6 +221,15 @@ class PatientAppointmentController extends Controller
             }
 
             $type = $visitMode === Appointment::VISIT_MODE_ONLINE ? 'telemedicine' : 'in_person';
+
+            $doctorName = trim(($selectedDoctor->first_name ?? '') . ' ' . ($selectedDoctor->last_name ?? ''));
+            $doctorName = $doctorName === '' ? null : $doctorName;
+
+            (new ConsultationFeeService())->charge($user, [
+                'doctor_name' => $doctorName,
+                'date' => $validated['appointment_date'],
+                'time' => $validated['appointment_time'],
+            ], $validated['payment_method'] ?? null);
 
             $created = Appointment::createWithNumberForDate($validated['appointment_date'], [
                 'patient_id' => $user->id,

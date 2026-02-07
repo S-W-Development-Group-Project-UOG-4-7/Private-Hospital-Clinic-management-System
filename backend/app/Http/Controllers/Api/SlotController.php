@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\QueueEntry;
 use App\Models\Slot;
 use App\Models\User;
+use App\Services\ConsultationFeeService;
 use App\Services\TelemedSessionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -197,6 +198,7 @@ class SlotController extends Controller
             ])],
             'reason' => ['nullable', 'string', 'max:500'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'payment_method' => ['nullable', 'string', 'max:50'],
         ]);
 
         return DB::transaction(function () use ($slotId, $user, $validated) {
@@ -244,6 +246,15 @@ class SlotController extends Controller
             if (Appointment::hasOverlap((int) $slot->doctor_id, $scheduledStart, $scheduledEnd)) {
                 return response()->json(['message' => 'Selected doctor is not available at the chosen time.'], 422);
             }
+
+            $doctorName = trim(($doctor->first_name ?? '') . ' ' . ($doctor->last_name ?? ''));
+            $doctorName = $doctorName === '' ? null : $doctorName;
+
+            (new ConsultationFeeService())->charge($user, [
+                'doctor_name' => $doctorName,
+                'date' => $slot->date->format('Y-m-d'),
+                'time' => $slot->start_time,
+            ], $validated['payment_method'] ?? null);
 
             $bookingChannel = $validated['booking_channel'] ?? Appointment::BOOKING_CHANNEL_PATIENT_PORTAL;
 

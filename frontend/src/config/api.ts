@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
   PATIENT_TELECONSULTATIONS: `${API_BASE_URL}/api/patient/teleconsultations`,
   PATIENT_EHR: `${API_BASE_URL}/api/patient/ehr`,
   PATIENT_INVOICES: `${API_BASE_URL}/api/patient/invoices`,
+  PATIENT_CONSULTATION_FEE: `${API_BASE_URL}/api/patient/fees/consultation`,
   PATIENT_PAYMENTS: `${API_BASE_URL}/api/patient/payments`,
   PATIENT_FEEDBACK: `${API_BASE_URL}/api/patient/feedback`,
   PATIENT_NOTIFICATIONS: `${API_BASE_URL}/api/patient/notifications`,

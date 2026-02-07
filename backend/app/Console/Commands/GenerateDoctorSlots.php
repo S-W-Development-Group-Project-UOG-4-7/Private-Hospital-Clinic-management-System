@@ -15,7 +15,7 @@ class GenerateDoctorSlots extends Command
         {--days=7 : Number of days to generate}
         {--interval=30 : Slot length in minutes}
         {--default-start=08:00 : Default start time if no schedule exists}
-        {--default-end=17:00 : Default end time if no schedule exists}';
+        {--default-end=22:00 : Default end time if no schedule exists}';
 
     protected $description = 'Generate appointment slots for doctors based on schedules or default hours.';
 

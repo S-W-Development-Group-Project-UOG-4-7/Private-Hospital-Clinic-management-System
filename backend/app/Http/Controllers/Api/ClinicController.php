@@ -64,9 +64,9 @@ class ClinicController extends Controller
         $doctorId = $validated['doctor_id'] ?? null;
         $departmentId = $validated['department_id'] ?? null;
 
-        // Build a set of timeslots (30 minute increments between 08:00 and 17:00)
+        // Build a set of timeslots (30 minute increments between 08:00 and 22:00)
         $start = new \DateTimeImmutable("08:00");
-        $end = new \DateTimeImmutable("17:00");
+        $end = new \DateTimeImmutable("22:00");
         $interval = new \DateInterval('PT30M');
 
         // Get list of doctors in this clinic

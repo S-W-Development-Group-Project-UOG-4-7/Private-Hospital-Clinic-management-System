@@ -138,6 +138,9 @@ const PatientDashboard: React.FC = () => {
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
   const [appointmentSaving, setAppointmentSaving] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<PatientAppointment | null>(null);
+  const [consultationFee, setConsultationFee] = useState<number | null>(null);
+  const [consultationFeeLoading, setConsultationFeeLoading] = useState(false);
+  const [consultationFeeError, setConsultationFeeError] = useState<string | null>(null);
   const [appointmentForm, setAppointmentForm] = useState({
     clinic_id: '',
     department_id: '',
@@ -552,7 +555,28 @@ const PatientDashboard: React.FC = () => {
     if (appointmentSaving) return;
     setAppointmentModalOpen(false);
     setEditingAppointment(null);
+    setConsultationFeeError(null);
   };
+
+  const loadConsultationFee = useCallback(async () => {
+    setConsultationFeeLoading(true);
+    setConsultationFeeError(null);
+    try {
+      const resp = await patientApi.billing.consultationFee();
+      const amount = Number(resp.amount);
+      setConsultationFee(Number.isFinite(amount) ? amount : 0);
+    } catch (e: any) {
+      setConsultationFee(null);
+      setConsultationFeeError(e?.message || 'Failed to load consultation fee');
+    } finally {
+      setConsultationFeeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!appointmentModalOpen || editingAppointment) return;
+    loadConsultationFee();
+  }, [appointmentModalOpen, editingAppointment, loadConsultationFee]);
 
   const holdSlot = async (slot: PatientSlot) => {
     if (slotHoldLoading) return;
@@ -2172,13 +2196,40 @@ const PatientDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {!editingAppointment && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="flex items-center justify-between text-sm text-gray-700">
+                    <span className="font-medium">Consultation fee</span>
+                    <span>
+                      {consultationFeeLoading
+                        ? 'Loading...'
+                        : consultationFee != null
+                          ? formatMoney(consultationFee)
+                          : '-'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Paid online before booking and recorded in your billing history.
+                  </div>
+                  {consultationFeeError ? (
+                    <div className="text-xs text-red-600 mt-1">{consultationFeeError}</div>
+                  ) : null}
+                </div>
+              )}
+
               <div className="flex gap-4">
                 <button
                   type="submit"
                   disabled={appointmentSaving || !heldSlotId}
                   className="flex-1 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white font-bold py-3 px-6 rounded-full transition duration-300"
                 >
-                  {appointmentSaving ? 'Saving...' : editingAppointment ? 'Reschedule' : 'Create'}
+                  {appointmentSaving
+                    ? 'Saving...'
+                    : editingAppointment
+                      ? 'Reschedule'
+                      : consultationFee != null && consultationFee > 0
+                        ? `Pay ${formatMoney(consultationFee)} & Book`
+                        : 'Create'}
                 </button>
                 <button
                   type="button"

@@ -204,6 +204,11 @@ export interface PatientInvoicesResponse {
   data: PatientInvoice[];
 }
 
+export interface ConsultationFeeResponse {
+  amount: number;
+  required: boolean;
+}
+
 export interface CreatePaymentPayload {
   invoice_id: number;
   amount: number;

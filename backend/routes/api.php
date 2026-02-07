@@ -261,6 +261,7 @@ Route::middleware(['auth:sanctum', 'role:patient'])->prefix('patient')->group(fu
 
     Route::get('invoices', [PatientBillingController::class, 'invoices']);
     Route::get('invoices/{id}', [PatientBillingController::class, 'show']);
+    Route::get('fees/consultation', [PatientBillingController::class, 'consultationFee']);
     Route::post('payments', [PatientBillingController::class, 'pay'])->middleware('throttle:10,1');
 
     Route::get('feedback', [PatientFeedbackController::class, 'index']);
